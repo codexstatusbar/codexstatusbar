@@ -14,6 +14,7 @@ concurrency:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+  TOKLOOM_CACHE_FIXTURES: '1'
 
 defaults:
   run:
@@ -27,6 +28,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/swift-cache
+        with:
+          mode: debug
       - name: Core and collector tests
         run: |
           swift --version
@@ -50,6 +54,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/swift-cache
+        with:
+          mode: verify
       - name: Synthetic UI and isolated process checks
         run: ./scripts/capture-fixtures.sh .build/ui-evidence 2>&1 | tee verify.log
       - name: Preserve verification evidence
@@ -74,6 +81,9 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - uses: ./.github/actions/swift-cache
+        with:
+          mode: release
       - name: Build and package arm64 app
         run: ./scripts/package-app.sh 2>&1 | tee bundle.log
       - name: Upload app bundle
@@ -109,3 +119,28 @@ jobs:
           path: bundle.log
           if-no-files-found: warn
           retention-days: 14
+
+  cleanup:
+    needs: [bundle]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete this run's artifacts after release publication
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          uploaded="$(gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '[.assets[] | select(.state == "uploaded") | .name] | contains(["Tokloom-macos-arm64.dmg", "Tokloom-macos-arm64.dmg.sha256"])')"
+          test "$uploaded" = true
+          ids="$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" --paginate --jq '.artifacts[].id')"
+          while IFS= read -r id; do
+            test -n "$id" || continue
+            gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$id"
+            printf 'Removed Actions artifact %s; release assets and caches retained.\n' "$id"
+          done <<< "$ids"

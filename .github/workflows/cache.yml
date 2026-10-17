@@ -1,0 +1,51 @@
+name: Warm Swift caches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Resources/**'
+      - 'scripts/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-cache-main
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+  TOKLOOM_CACHE_FIXTURES: '1'
+
+jobs:
+  warm:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [debug, release, verify]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/swift-cache
+        with:
+          mode: ${{ matrix.mode }}
+      - name: Populate cache
+        shell: bash
+        env:
+          CACHE_MODE: ${{ matrix.mode }}
+        run: |
+          case "$CACHE_MODE" in
+            debug) swift test --build-system native --disable-xctest -Xcxx -isystem -Xcxx "$(xcrun --show-sdk-path)/usr/include/c++/v1" ;;
+            release) ./scripts/build-app.sh release ;;
+            verify) ./scripts/capture-fixtures.sh .build/ui-evidence ;;
+          esac

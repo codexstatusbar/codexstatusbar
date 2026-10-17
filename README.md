@@ -85,9 +85,13 @@ The [macOS bundle workflow](.github/workflows/bundle.yml) runs only when a tag m
 2. `verify`: synthetic UI and isolated process checks, with rendered evidence.
 3. `bundle`: after both checks pass, build the arm64 app, validate signatures/resources, and create a DMG.
 
-Download `Tokloom-macos-arm64-<commit>` from **Actions → macOS bundle → run → Artifacts**. It contains `Tokloom-macos-arm64.dmg` and its SHA-256 file. The app includes its icon, helper, and tokenizer resources.
+Download `Tokloom-macos-arm64.dmg` and its SHA-256 file from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases). The app includes its icon, helper, and tokenizer resources.
 
-Artifacts and logs are retained for 14 days. After all checks and packaging succeed, the workflow creates a GitHub Release named after the tag and uploads the DMG and checksum. Release notes include every commit since the previous ancestor version tag and a full comparison link. Rerunning the same tag updates its assets and notes. Creating a local tag alone does not trigger the workflow; push it to GitHub.
+After publication succeeds and both release assets are confirmed, `cleanup` deletes that run's Actions artifacts (bundle copies, rendered evidence and uploaded log files). Release assets, workflow run logs and build caches are retained. Artifacts from failed runs remain available for up to 14 days.
+
+Release notes include every commit since the previous ancestor version tag and a full comparison link. Rerunning the same tag updates its assets and notes. Creating a local tag alone does not trigger a release; push it to GitHub.
+
+A separate [Warm Swift caches workflow](.github/workflows/cache.yml) runs on relevant `main` changes to seed caches accessible to version tags. Debug, Release and UI compiler caches are separated by compiler/SDK, architecture, dependency lockfile and commit. Tag builds can fall back to compatible main-branch caches. UI binaries are reused only when their source/toolchain fingerprint matches; all checks still execute every time. Final apps, DMGs, screenshots and user data are not cached. The first build or a changed toolchain can still be cold.
 
 The same packaging path is available locally:
 
