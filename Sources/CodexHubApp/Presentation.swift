@@ -173,6 +173,15 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     private var usageAnchors: [ThreadKey: UsageAnchor] = [:]
     private(set) var usageHistory: [ThreadKey: [UsageHistoryPoint]] = [:]
 
+    var overviewUsageHistory: [UsageHistoryPoint] {
+        guard error == nil else { return [] }
+        return sessions.filter {
+            $0.rootObserved && $0.monitor.connectivity == .connected &&
+            ($0.measurement == .reported || $0.measurement == .warmingUp) &&
+            !$0.sourceReconciliationPending && !$0.observationStopped
+        }.flatMap { usageHistory[$0.id] ?? [] }
+    }
+
     func suspendUsageHistory() { usageAnchors.removeAll() }
 
     func recordUsageHistory(_ rows: [SessionPresentation], at time: Double) {

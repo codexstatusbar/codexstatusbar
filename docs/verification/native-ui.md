@@ -371,3 +371,26 @@ UI01–UI60/P01–P06 passed; dark/light populated-detail and small-height rende
 inspected. Native blur compositing, keyboard interaction and extended runtime
 history have not been independently verified. No provider request was made for
 this UI task. Full-product QA remains incomplete.
+
+
+## Wide detail layout and root usage chart
+
+The user's wide-detail and root-chart references now drive a 680pt layout, clamped
+to the current screen width; height is 720pt or the available screen height. The
+hosting view receives the same explicit dimensions as the native popover. A
+380pt fixture verifies stacked fallback for narrow layouts.
+
+Details now presents summary metrics, context ring/cumulative counters, an actual
+observed-output chart, quota, two-column process/connection metadata, an always
+visible advanced section, and the latest exact counters. Advanced IDs/path use
+compact copy buttons and middle truncation with full-value help; clipboard failure
+handling is shared with the existing copy controls. Server diagnostics and source
+warnings remain available. No new usage or timing calculation was introduced.
+
+The root chart reuses the same bounded ten-second bins. Only currently verified,
+connected, unreconciled-free sources contribute, and a collection error suppresses
+the root chart. UI61–63 verify these scope/error boundaries. All UI01–UI63/P01–P06
+passed; wide dark/light, full-detail, root-chart and narrow fixtures were inspected.
+Charts contain synthetic fixture observations, not provider performance evidence.
+Actual desktop placement, copy clicks and native resizing on small screens remain
+unverified. Full QA is not claimed.

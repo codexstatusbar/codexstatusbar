@@ -69,9 +69,10 @@ import ServiceManagement
     private func showPopover() {
         guard !popover.isShown, let button = item.button else { return }
         let screen = button.window?.screen ?? NSScreen.main
-        let height = min(520, max(1, (screen?.visibleFrame.height ?? 700) - 24))
-        let size = NSSize(width: 380, height: height)
-        let host = NSHostingController(rootView: HubView(model: model, height: height))
+        let height = min(720, max(1, (screen?.visibleFrame.height ?? 700) - 24))
+        let width = min(680, max(1, (screen?.visibleFrame.width ?? 800) - 24))
+        let size = NSSize(width: width, height: height)
+        let host = NSHostingController(rootView: HubView(model: model, width: width, height: height))
         // AppKit owns the viewport; scrolling and refreshed rows must not resize the popover.
         host.sizingOptions = []
         host.preferredContentSize = size

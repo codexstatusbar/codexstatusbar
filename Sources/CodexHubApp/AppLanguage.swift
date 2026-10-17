@@ -16,6 +16,16 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Reported output · 5m": "보고 출력 · 5분",
+        "Waiting for reports": "새 로그 대기",
+        "Summary": "요약",
+        "Token usage": "토큰 사용량",
+        "Observed output history": "관측 출력 추이",
+        "Process / connection information": "프로세스 / 연결 정보",
+        "Execution mode": "실행 방식",
+        "Latest cumulative usage": "최근 보고된 누적 사용량",
+        "Cumulative input tokens": "누적 입력 토큰",
+        "Cumulative output tokens": "누적 출력 토큰",
         "Expanded": "펼쳐짐",
         "Collapsed": "접힘",
         "Current speed": "현재 속도",

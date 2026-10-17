@@ -5,7 +5,8 @@ import CodexHubCore
 struct HubView: View {
     @Bindable var model: HubPresentation
     @Environment(\.colorScheme) private var colorScheme
-    var height: CGFloat = 520
+    var width: CGFloat = 680
+    var height: CGFloat = 720
     private var dark: Bool { colorScheme == .dark }
     private var inset: Color { dark ? Color.white.opacity(0.045) : Color.black.opacity(0.035) }
     private var secondary: Color { dark ? Color(white: 0.72) : Color(white: 0.36) }
@@ -33,7 +34,7 @@ struct HubView: View {
             Divider().padding(.horizontal, 14)
             footer
         }
-        .font(.system(size: 13)).frame(width: 380, height: height)
+        .font(.system(size: 13)).frame(width: width, height: height)
         .background {
             Rectangle().fill(.regularMaterial)
                 .overlay(LinearGradient(colors: [.blue.opacity(dark ? 0.045 : 0.02), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -114,11 +115,16 @@ struct HubView: View {
                         .font(.system(size: 10)).foregroundStyle(secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                VStack(spacing: 6) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(model.text("보고 출력 · 5분")).font(.system(size: 10)).foregroundStyle(secondary)
+                    ObservedTokenChart(points: model.overviewUsageHistory, now: model.frame?.time ?? 0, emptyText: model.text("새 로그 대기"), compact: true)
+                }.frame(width: width >= 600 ? 240 : 110)
+                    .accessibilityLabel(model.text("관측 출력 토큰"))
+                if width >= 600 { VStack(spacing: 6) {
                     Text(String(model.processCount)).font(.system(size: 20, weight: .semibold)).monospacedDigit()
                     Text(model.text("프로세스")).font(.system(size: 10)).foregroundStyle(secondary)
                 }.frame(width: 60, height: 72).background(inset, in: RoundedRectangle(cornerRadius: 8))
-                    .accessibilityElement(children: .combine)
+                    .accessibilityElement(children: .combine) }
             }.frame(minHeight: 92)
             if model.sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .approvalWait }) {
                 Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."), systemImage: "hand.raised")
@@ -189,77 +195,9 @@ struct HubView: View {
         }.padding(.horizontal, 12).frame(minHeight: 64).contentShape(Rectangle())
     }
     private func detail(_ session: SessionPresentation) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SessionGraphics(model: model, session: session)
-            Divider()
-            DisclosureGroup(model.text("고급 측정 정보")) {
-                VStack(alignment: .leading, spacing: 14) { detailMetadata(session) }.padding(.top, 12)
-            }.font(.system(size: 12))
-                .disclosureGroupStyle(FullRowDisclosureStyle(expandedLabel: model.text("Expanded"), collapsedLabel: model.text("Collapsed")))
-        }
+        SessionGraphics(model: model, session: session, wide: width >= 600)
     }
 
-    private func detailMetadata(_ session: SessionPresentation) -> some View {
-        let monitor = session.monitor
-        let baseline = monitor.counter.baseline
-        let last = monitor.turns.values.filter { $0.outcome != nil }.max { ($0.endedAt ?? 0) < ($1.endedAt ?? 0) }
-        return Group {
-            Text(session.title).font(.headline)
-            value("작업 상태 / 수집 방식", "\(model.status(for: session)) · \(session.source)")
-            value(model.measurementMode.label, model.rate(for: session) + " " + model.rateUnit.suffix)
-            if let last, model.measurementMode != .server {
-                value(last.isObservedAveragePartial ? "직전 관측 구간 평균 · 도구 포함" : "직전 작업 평균 · 도구 포함", last.workAverage.map { model.displayRate($0) + " " + model.rateUnit.suffix } ?? "미확인")
-            }
-            if model.measurementMode == .reported {
-                value(model.text("계산 기준"), model.text("사용량 증가량 ÷ 도구 시간을 뺀 보고 구간"))
-            }
-            if model.measurementMode == .server {
-                Text(model.text("서버 타이밍은 관리형 실행에서 수집합니다. TBT 집계 범위와 요청별 토큰 대응이 검증되기 전에는 tok/s로 변환하지 않습니다.")).font(.system(size: 11))
-                if let timing = session.serverTiming {
-                    value("서버 추론 시간", timing.inferenceMilliseconds.map { "\($0) ms" } ?? "—")
-                    value("서버 첫 토큰 시간", timing.firstTokenMilliseconds.map { "\($0) ms" } ?? "—")
-                    value("서버 TBT 원본", timing.betweenTokenMilliseconds.map { "\($0) ms" } ?? "—")
-                    value("서버 출력 토큰", timing.sampledTokens.map(String.init) ?? "—")
-                    value("출력 이벤트 수", timing.outputDeltaCount.map(String.init) ?? "—")
-                    value("출력 이벤트 평균 간격", timing.outputDeltaMeanMilliseconds.map { "\($0.formatted(.number.precision(.fractionLength(0...2)))) ms" } ?? "—")
-                    value("서버 관측 범위", timing.coverage ?? "—")
-                    Text(model.text("출력 이벤트 수는 토큰 수와 다릅니다. 이벤트 간격의 역수를 tok/s로 표시하지 않습니다.")).font(.system(size: 11))
-                }
-            }
-            if model.measurementMode == .live, let reason = session.liveUnavailableReason {
-                Text(model.text("Live: " + reason)).font(.system(size: 11)).textSelection(.enabled)
-            }
-            if session.hookCompletionCandidate { Text(model.text("작업 종료 신호를 받았습니다. 최종 상태를 확인하고 있습니다.")) }
-            if session.sourceReconciliationPending { Text(model.text("수집 원본의 사용량을 대조하는 중입니다.")) }
-            if session.observationStopped { Text(model.text("수집이 중단되어 새로운 사용량 기준이 필요합니다.")) }
-            value("모델 / 추론 강도", session.modelDescription.isEmpty ? "미확인" : session.modelDescription)
-            value("요청 속도 모드", session.usageDetails?.serviceTier?.displayName ?? "미확인")
-            value("기본 속도 설정", model.configuredServiceTier?.displayName ?? "미확인")
-            Text(model.text("기본 설정과 프로세스별 설정은 다를 수 있습니다. 실제 처리 모드는 요청과 다를 수 있습니다.")).font(.system(size: 11))
-            value("컨텍스트 사용", session.contextDescription)
-            value("누적 입력·출력 토큰", session.tokenDescription)
-            value("캐시 입력 토큰", baseline.map { SessionPresentation.tokens($0.cachedInputTokens) } ?? "미확인")
-            ForEach(session.limitDescriptions(language: model.language), id: \.self) { value("남은 사용 한도", $0) }
-            Text(model.text("누적 토큰에는 이전 이력이 포함될 수 있습니다. 컨텍스트와 사용 한도는 마지막 보고값입니다.")).font(.system(size: 11))
-            value("Controller PID", session.process.map { String($0.pid) } ?? "Session only")
-            value("Server PID", session.server.map { String($0.pid) } ?? "Unavailable")
-            if let process = session.process { value("Controller start identity", process.osStartTime) }
-            if let server = session.server { value("Server start identity", server.osStartTime) }
-            copyValue("Working directory", session.cwd)
-            copyValue("Thread ID", session.id.threadID)
-            copyValue("Run ID", session.id.runID)
-            copyValue("Current turn ID", monitor.activeTurnID)
-            Divider()
-            value("Current turn reported output", session.measurement == .reported ? (monitor.activeTurnID.flatMap { monitor.turns[$0] }.map { "\($0.outputTokens) tokens" } ?? "Unavailable") : "Unavailable")
-            Text(model.text("Last reported cumulative snapshot")).font(.headline)
-            value("Output · includes reasoning", baseline.map { String($0.outputTokens) } ?? "Unavailable")
-            value("Reasoning · included above", baseline?.reasoningOutputTokens.map(String.init) ?? "Unavailable")
-            value("Non-reasoning output", baseline?.nonReasoningOutputTokens.map(String.init) ?? "Unavailable")
-            value("Last observation", session.lastObserved?.formatted() ?? "Unavailable")
-            Text(model.text(session.rootObserved ? "측정과 중복 여부가 확인된 세션만 합계에 포함합니다." : "중복 여부가 확인되지 않아 합계에서 제외된 세션입니다."))
-            value("속도 계산 범위", model.coverage)
-        }
-    }
     private var preferences: some View {
         Group {
             Picker(model.text("Language"), selection: $model.language) {
@@ -346,9 +284,7 @@ struct HubView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack { Text(model.text(label)); Spacer(); Button(model.text("Copy")) {
                 guard let text else { return }
-                NSPasteboard.general.clearContents()
-                if NSPasteboard.general.setString(text, forType: .string) { model.notice = model.text("Copied") + ": " + model.text(label) }
-                else { model.notice = "Clipboard write failed." }
+                model.copyMetadata(text, label: label)
             }.disabled(text == nil).accessibilityLabel(model.text("Copy") + " " + model.text(label)) }
             Text(text ?? model.text("Unavailable")).font(.system(size: 11)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }
@@ -356,25 +292,10 @@ struct HubView: View {
 }
 
 
-private struct FullRowDisclosureStyle: DisclosureGroupStyle {
-    let expandedLabel: String
-    let collapsedLabel: String
-
-    func makeBody(configuration: Configuration) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button { configuration.isExpanded.toggle() } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
-                    configuration.label
-                    Spacer(minLength: 0)
-                }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
-            }.buttonStyle(.plain)
-                .accessibilityValue(configuration.isExpanded ? expandedLabel : collapsedLabel)
-                .onKeyPress(.rightArrow) { configuration.isExpanded = true; return .handled }
-                .onKeyPress(.leftArrow) { configuration.isExpanded = false; return .handled }
-            if configuration.isExpanded { configuration.content }
-        }.frame(maxWidth: .infinity, alignment: .leading)
+@MainActor extension HubPresentation {
+    func copyMetadata(_ text: String, label: String) {
+        NSPasteboard.general.clearContents()
+        notice = NSPasteboard.general.setString(text, forType: .string)
+            ? self.text("Copied") + ": " + self.text(label) : self.text("Clipboard write failed.")
     }
 }

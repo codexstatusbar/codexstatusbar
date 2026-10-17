@@ -237,8 +237,22 @@ import CodexHubCollector
         historyModel.rateUnit = .minute
         historyModel.language = .english
         try capture(historyModel, "graphics-detail-light-minute", output, dark: false, height: 900)
-        try capture(historyModel, "graphics-detail-small", output, dark: true, height: 380)
-        print("PASS UI01–UI60 and P01–P06; fixture PNGs: \(output)")
+        try capture(historyModel, "graphics-detail-small", output, dark: true, height: 380, width: 380)
+        historyModel.sessions[0].rootObserved = false
+        precondition(historyModel.overviewUsageHistory.isEmpty, "UI61 unverified scopes never enter the main chart")
+        historyModel.sessions[0].rootObserved = true
+        precondition(historyModel.overviewUsageHistory.count == historyModel.usageHistory[newTurn.key]?.count, "UI62 main chart reuses verified observed samples")
+        historyModel.language = .korean
+        historyModel.page = .overview
+        try capture(historyModel, "wide-overview-chart", output, dark: true)
+        historyModel.page = .detail(historyModel.sessions[0].id)
+        try capture(historyModel, "wide-detail-full-dark", output, dark: true, height: 1600)
+        historyModel.language = .english
+        try capture(historyModel, "wide-detail-full-light", output, dark: false, height: 1600)
+        historyModel.error = "Synthetic collection error"
+        precondition(historyModel.overviewUsageHistory.isEmpty, "UI63 failed collection cannot present a stale current-window overview chart")
+        historyModel.error = nil
+        print("PASS UI01–UI63 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -287,10 +301,10 @@ import CodexHubCollector
         child.terminate(); child.waitUntilExit()
         precondition(RunningCodexProcess.inspect(child.processIdentifier) == nil, "P06 exited process disappears")
     }
-    @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 520) throws {
-        let view = NSHostingView(rootView: HubView(model: model, height: height).environment(\.colorScheme, dark ? .dark : .light))
+    @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 720, width: CGFloat = 680) throws {
+        let view = NSHostingView(rootView: HubView(model: model, width: width, height: height).environment(\.colorScheme, dark ? .dark : .light))
         view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 380,height: height), styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: width,height: height), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = view
         window.orderFront(nil)
         view.layoutSubtreeIfNeeded()
