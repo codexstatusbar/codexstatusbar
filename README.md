@@ -28,7 +28,7 @@ open '.build/Codex Hub.app'
 
 ## GitHub Actions 번들
 
-[macOS bundle](.github/workflows/bundle.yml)은 `main` push, pull request와 수동 실행(`workflow_dispatch`)에서 동작합니다. GitHub의 Xcode 27 arm64 프리뷰 러너(`xcode-27`)와 Xcode 27.0을 사용합니다. 러너 제공 범위는 [GitHub runner images](https://github.com/actions/runner-images#available-images)를 참고하세요.
+[macOS bundle](.github/workflows/bundle.yml)은 `*.*.*` 패턴의 태그를 push할 때만 동작합니다(예: `1.2.3`). 브랜치 push·PR·수동 실행에서는 시작하지 않습니다. GitHub의 Xcode 27 arm64 프리뷰 러너(`xcode-27`)와 Xcode 27.0을 사용합니다. 러너 제공 범위는 [GitHub runner images](https://github.com/actions/runner-images#available-images)를 참고하세요.
 
 1. `test`: Core/Collector 자동 테스트.
 2. `verify`: 기존 합성 UI·격리된 프로세스 검증과 화면 증거 수집.
@@ -38,7 +38,7 @@ open '.build/Codex Hub.app'
 `Codex-Hub-macos-arm64-<commit>`을 받으세요. 안에는 `Codex-Hub-macos-arm64.zip`과
 SHA-256 파일이 있습니다. 앱 ZIP에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
 아티팩트와 실행 로그는 14일간 보관하며, GitHub Release를 자동 공개하지 않습니다.
-코드를 GitHub에 push하기 전에는 워크플로가 실행되지 않습니다.
+태그를 로컬에 생성한 것만으로는 실행되지 않으며, 해당 태그를 GitHub에 push해야 합니다.
 
 로컬에서도 같은 번들을 만들 수 있습니다.
 
