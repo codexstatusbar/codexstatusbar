@@ -344,3 +344,30 @@ post-replacement visual acceptance remain unverified; full QA is not claimed.
 
 Applied workflow: minimal-code, systematic-ui-ux-design, logic-driven-ui-design,
 and design-md-frontend screenshot implementation guidance.
+
+
+## Native materials, real usage graphics, and rate units
+
+The latest user screenshot and explicit macOS guidance are the reference: system
+SF typography, system popover shadow/corners, regular material with a restrained
+blue tint, lightweight grouped rows, and blue/indigo data graphics. Details adds
+a real five-minute observed-output chart and context-use ring. Technical fields
+remain available in a disclosure section rather than being deleted. Unsupported
+one-hour/day history, a fabricated one-minute average, process termination and
+share controls were not added. The secondary metric is observed five-minute
+output, not an invented rolling speed.
+
+UI50–56 verify no initial cumulative replay, fresh deltas only, no catch-up bars
+after gaps, bounded recency, removal of exited processes, icon-only unavailable
+menu text, and the first fresh report after a known warmup baseline. History is
+in-memory, source/epoch scoped, limited to five minutes and 600 points per current
+session. The chart bins actual observations into ten-second columns.
+
+UI57–59 verify second/minute conversion and missing/zero preservation. Rate unit
+is saved in the existing defaults and applied to menu, aggregate, rows, and detail
+rates. `tok/m` is a display conversion (60x), not a different averaging window.
+UI60 verifies the observed generating state and a 57.9% context fixture. All
+UI01–UI60/P01–P06 passed; dark/light populated-detail and small-height renders were
+inspected. Native blur compositing, keyboard interaction and extended runtime
+history have not been independently verified. No provider request was made for
+this UI task. Full-product QA remains incomplete.

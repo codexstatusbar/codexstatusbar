@@ -16,6 +16,22 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Current speed": "현재 속도",
+        "Observed output · 5m": "관측 출력 · 5분",
+        "Last report": "마지막 보고",
+        "Process information": "프로세스 정보",
+        "Collection source": "수집 방식",
+        "Usage summary": "사용량 요약",
+        "Observed output tokens": "관측 출력 토큰",
+        "Last 5 minutes · 10s bins": "최근 5분 · 10초 단위",
+        "Waiting for new usage reports": "새 사용량 로그를 기다리는 중입니다",
+        "5 min ago": "5분 전",
+        "Now": "지금",
+        "Observed since the app started. Historical cumulative usage is excluded.": "앱 실행 이후 관측값입니다. 과거 누적 사용량은 차트에 넣지 않습니다.",
+        "Advanced measurement details": "고급 측정 정보",
+        "Input": "입력",
+        "Output": "출력",
+        "Cached": "캐시",
         "Rate unit": "속도 단위",
         "Per second · tok/s": "초당 · tok/s",
         "Per minute · tok/m": "분당 · tok/m",

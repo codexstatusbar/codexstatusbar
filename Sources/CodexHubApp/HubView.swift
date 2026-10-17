@@ -7,8 +7,7 @@ struct HubView: View {
     @Environment(\.colorScheme) private var colorScheme
     var height: CGFloat = 520
     private var dark: Bool { colorScheme == .dark }
-    private var panel: Color { dark ? Color(white: 0.19) : Color(nsColor: .windowBackgroundColor) }
-    private var inset: Color { dark ? Color(white: 0.055) : Color(white: 0.94) }
+    private var inset: Color { dark ? Color.white.opacity(0.045) : Color.black.opacity(0.035) }
     private var secondary: Color { dark ? Color(white: 0.72) : Color(white: 0.36) }
     private var active: Color { dark ? Color(red: 0.26, green: 0.87, blue: 0.55) : Color(red: 0.04, green: 0.45, blue: 0.23) }
     private var attention: Color { dark ? Color(red: 1, green: 0.65, blue: 0.25) : Color(red: 0.65, green: 0.33, blue: 0.03) }
@@ -35,7 +34,10 @@ struct HubView: View {
             footer
         }
         .font(.system(size: 13)).frame(width: 380, height: height)
-        .background(panel)
+        .background {
+            Rectangle().fill(.regularMaterial)
+                .overlay(LinearGradient(colors: [.blue.opacity(dark ? 0.045 : 0.02), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
+        }
         .alert(model.text("Clear collected metadata?"), isPresented: $model.confirmClear) {
             Button(model.text("Cancel"), role: .cancel) {}
             Button(model.text("Clear metadata"), role: .destructive) { model.clearMetadata?() }
@@ -46,7 +48,7 @@ struct HubView: View {
         HStack(spacing: 10) {
             if model.page == .overview {
                 Image(systemName: "waveform.path.ecg.rectangle").font(.system(size: 15)).accessibilityHidden(true)
-                Text("Codex Hub").font(.system(size: 16, weight: .medium))
+                Text("Codex Hub").font(.system(size: 15, weight: .medium))
             } else {
                 Button { model.page = .overview } label: {
                     Image(systemName: "chevron.left").frame(width: 24, height: 28)
@@ -58,7 +60,7 @@ struct HubView: View {
                 HStack(spacing: 6) {
                     if model.page == .overview {
                         Image(systemName: model.activeProcessCount > 0 ? "circle.inset.filled" : "pause.circle")
-                            .foregroundStyle(model.activeProcessCount > 0 ? active : secondary)
+                            .foregroundStyle(model.generatingProcessCount > 0 ? active : model.activeProcessCount > 0 ? Color.primary : secondary)
                         Text(model.activitySummary).foregroundStyle(secondary)
                     }
                     Image(systemName: model.page == .overview ? "chevron.down" : "xmark").foregroundStyle(secondary)
@@ -120,7 +122,7 @@ struct HubView: View {
             }.frame(minHeight: 92)
             if model.sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .approvalWait }) {
                 Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."), systemImage: "hand.raised")
-                    .font(.system(size: 11)).foregroundStyle(attention)
+                    .font(.system(size: 11)).foregroundStyle(Color.primary)
             }
             Divider()
             VStack(spacing: 14) {
@@ -169,10 +171,10 @@ struct HubView: View {
 
     private func processRow(_ session: SessionPresentation) -> some View {
         let waiting = session.activity == .idle && session.monitor.connectivity == .connected
-        let needsAttention = model.error != nil || session.monitor.connectivity != .connected || session.activity == .unknown || session.activity == .approvalWait
+        let needsAttention = model.error != nil || session.monitor.connectivity != .connected || session.activity == .unknown
         return HStack(spacing: 10) {
             Image(systemName: needsAttention ? "exclamationmark.circle" : waiting ? "pause.circle" : "circle.inset.filled")
-                .foregroundStyle(needsAttention ? attention : waiting ? secondary : active).accessibilityHidden(true)
+                .foregroundStyle(needsAttention ? attention : waiting ? secondary : session.activity == .generating ? active : Color.primary).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 Text(session.modelDescription.isEmpty ? model.text("모델 미확인") : session.modelDescription)
@@ -187,6 +189,16 @@ struct HubView: View {
         }.padding(.horizontal, 12).frame(minHeight: 64).contentShape(Rectangle())
     }
     private func detail(_ session: SessionPresentation) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SessionGraphics(model: model, session: session)
+            Divider()
+            DisclosureGroup(model.text("고급 측정 정보")) {
+                VStack(alignment: .leading, spacing: 14) { detailMetadata(session) }.padding(.top, 12)
+            }.font(.system(size: 12))
+        }
+    }
+
+    private func detailMetadata(_ session: SessionPresentation) -> some View {
         let monitor = session.monitor
         let baseline = monitor.counter.baseline
         let last = monitor.turns.values.filter { $0.outcome != nil }.max { ($0.endedAt ?? 0) < ($1.endedAt ?? 0) }

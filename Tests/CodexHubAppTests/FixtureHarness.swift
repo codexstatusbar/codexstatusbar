@@ -218,7 +218,27 @@ import CodexHubCollector
         precondition(historyModel.displayRate(nil) == "—" && historyModel.displayRate(0) == "0", "UI58 unit conversion preserves missing versus zero")
         historyModel.rateUnit = .second
         precondition(historyModel.menuTitle == "25 tok/s", "UI59 second unit restores the same underlying rate")
-        print("PASS UI01–UI59 and P01–P06; fixture PNGs: \(output)")
+        var chartTotal = 50
+        for tick in 3...302 {
+            chartTotal += [12, 24, 8, 40, 18, 4][tick % 6]
+            try newTurn.observeUsage(TokenUsage(outputTokens: chartTotal, inputTokens: 10000 + tick * 100, cachedInputTokens: 5000 + tick * 40), turnID: "fresh", source: .rolloutLog, epoch: "new", at: Double(tick))
+            historyModel.recordUsageHistory([SessionPresentation(monitor: newTurn)], at: Double(tick))
+        }
+        try newTurn.setGenerating(true, turnID: "fresh", at: 303)
+        var chartSession = SessionPresentation(monitor: newTurn, cwd: "/Synthetic/graphics-preview", model: "gpt-6-astra", lastObserved: Date(timeIntervalSince1970: 1_700_000_000))
+        chartSession.usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data("{\"reasoningEffort\":\"medium\",\"contextTokens\":579,\"contextWindow\":1000}".utf8))
+        historyModel.sessions = [chartSession]
+        historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 303)
+        historyModel.language = .korean
+        historyModel.page = .detail(chartSession.id)
+        historyModel.notice = "Synthetic usage history · not live telemetry"
+        precondition(historyModel.generatingProcessCount == 1 && chartSession.contextDescription == "57.9%", "UI60 generation status and context ring use observed values")
+        try capture(historyModel, "graphics-detail-dark", output, dark: true, height: 900)
+        historyModel.rateUnit = .minute
+        historyModel.language = .english
+        try capture(historyModel, "graphics-detail-light-minute", output, dark: false, height: 900)
+        try capture(historyModel, "graphics-detail-small", output, dark: true, height: 380)
+        print("PASS UI01–UI60 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

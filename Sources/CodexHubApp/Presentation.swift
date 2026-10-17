@@ -214,6 +214,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         }
     }
     var processCount: Int { sessions.count + unattachedProcesses.count }
+    var generatingProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && $0.activity == .generating }.count }
     var activeProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && [.working, .generating, .toolRunning, .approvalWait].contains($0.activity) }.count }
     var idleProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && $0.activity == .idle }.count }
     var activitySummary: String {
@@ -235,7 +236,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         return "상태 미확인"
     }
     var menuTitle: String {
-        guard aggregateRate != nil, error == nil else { return "" }
+        guard aggregateRate != nil, error == nil, summary != "—" else { return "" }
         return summary + " " + rateUnit.suffix
     }
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
