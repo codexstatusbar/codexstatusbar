@@ -192,3 +192,11 @@ synthetic reported throughput, never actual Live/provider evidence.
 All 51 Core/Collector tests, UI01–UI25, P01–P06 and final arm64 build passed in
 scope. Actual metadata was inspected for the running session; fake/fixture speeds
 are not promoted to actual measurement evidence. Full QA remains incomplete.
+
+## Compact numeric formatting
+
+Context is shown as used/window percent. Input/output use decimal K/M/G suffixes
+with at most one decimal; source integers are preserved. UI26–UI28 cover small
+counts, K/M and G formatting, including explicit half-up rounding. UI01–UI28 and
+P01–P06 passed; final app build passed. Actual Live rates remain unavailable for
+Logs and are not inferred from these cumulative counters.

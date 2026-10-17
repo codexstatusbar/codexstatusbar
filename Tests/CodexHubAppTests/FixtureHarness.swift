@@ -34,9 +34,12 @@ import CodexHubCollector
         try capture(model, "reported-dark", output, dark: true)
         model.sessions[0].usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data("{\"reasoningEffort\":\"high\",\"contextTokens\":600,\"contextWindow\":1000,\"limits\":[{\"name\":\"primary\",\"usedPercent\":21,\"windowMinutes\":10080}]}".utf8))
         precondition(model.sessions[0].modelDescription == "Fixture model · high", "UI21 observed model and reasoning")
-        precondition(model.sessions[0].contextDescription == "600 / 1,000 tokens", "UI22 context is last prompt usage, not cumulative usage")
+        precondition(model.sessions[0].contextDescription == "60% used", "UI22 context is last prompt usage, not cumulative usage")
         precondition(model.sessions[0].tokenDescription == "In 0 · Out 600", "UI23 input/output counters retain their own meaning")
         precondition(model.sessions[0].limitDescriptions == ["7d left 79%"], "UI24 actual rate window determines remaining usage label")
+        precondition(SessionPresentation.tokens(999) == "999" && SessionPresentation.tokens(1_000) == "1K", "UI26 small token count boundary")
+        precondition(SessionPresentation.tokens(115_911) == "115.9K" && SessionPresentation.tokens(39_568_473) == "39.6M", "UI27 K/M token formatting")
+        precondition(SessionPresentation.tokens(1_250_000_000) == "1.3G", "UI28 G token formatting")
         try capture(model, "process-metadata", output, dark: false)
         model.page = .detail(a.key)
         try capture(model, "detail", output, dark: false)
@@ -115,7 +118,7 @@ import CodexHubCollector
         precondition(model.summary == "Codex running", "UI20 running process without a session is not historical data")
         try capture(model, "running-without-session", output, dark: false)
         model.unattachedProcesses = []
-        print("PASS UI01–UI25 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI28 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

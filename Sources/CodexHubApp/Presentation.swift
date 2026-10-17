@@ -36,12 +36,19 @@ struct SessionPresentation: Identifiable {
         [model, usageDetails?.reasoningEffort].compactMap { $0 }.joined(separator: " · ")
     }
     var contextDescription: String {
-        guard let details = usageDetails, let used = details.contextTokens, let window = details.contextWindow else { return "Unavailable" }
-        return "\(used.formatted()) / \(window.formatted()) tokens"
+        guard let details = usageDetails, let used = details.contextTokens, let window = details.contextWindow, window > 0 else { return "Unavailable" }
+        return (100 * Double(used) / Double(window)).formatted(.number.precision(.fractionLength(0...1))) + "% used"
     }
     var tokenDescription: String {
         guard let total = monitor.counter.baseline else { return "In — · Out —" }
-        return "In \(total.inputTokens.formatted()) · Out \(total.outputTokens.formatted())"
+        return "In \(Self.tokens(total.inputTokens)) · Out \(Self.tokens(total.outputTokens))"
+    }
+    static func tokens(_ count: Int) -> String {
+        for (scale, suffix) in [(1_000_000_000, "G"), (1_000_000, "M"), (1_000, "K")] where count >= scale {
+            let rounded = (10 * Double(count) / Double(scale)).rounded() / 10
+            return rounded.formatted(.number.precision(.fractionLength(0...1))) + suffix
+        }
+        return count.formatted()
     }
     var limitDescriptions: [String] {
         (usageDetails?.limits ?? []).map { limit in

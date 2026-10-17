@@ -41,7 +41,7 @@ env CODEX_HOME="$HOME/.codex" '/path/to/Codex Hub.app/Contents/Helpers/codex-hub
 
 ## 프로세스별 표시
 
-살아 있는 프로세스 행은 개별 tok/s와 모델·추론 강도를 간단히 표시하며 작업 중인 항목이 먼저 나옵니다. Summary 버튼을 누르면 컨텍스트 사용 토큰/한도, 보고된 누적 입력·출력 토큰과 제한 창별 남은 사용률을 확인합니다. 컨텍스트는 `last_token_usage.total_tokens / model_context_window`, 입력·출력은 선택된 권위의 누적 스냅샷입니다. 남은 사용량은 각 창의 `100 - used_percent`이며 실제 창 길이와 reset 시각을 사용합니다. 계정 한도를 합산하거나 서버에 별도 조회하지 않습니다. 누적량에는 상속한 이력이 포함될 수 있고 모든 정보는 마지막 보고값입니다.
+살아 있는 프로세스 행은 개별 tok/s와 모델·추론 강도를 간단히 표시하며 작업 중인 항목이 먼저 나옵니다. Summary 버튼을 누르면 컨텍스트 사용률(%), K/M/G로 줄인 누적 입력·출력 토큰과 제한 창별 남은 사용률을 확인합니다. 컨텍스트는 `last_token_usage.total_tokens / model_context_window`, 입력·출력은 선택된 권위의 누적 스냅샷입니다. 남은 사용량은 각 창의 `100 - used_percent`이며 실제 창 길이와 reset 시각을 사용합니다. 계정 한도를 합산하거나 서버에 별도 조회하지 않습니다. 누적량에는 상속한 이력이 포함될 수 있고 모든 정보는 마지막 보고값입니다.
 
 모드 선택은 Settings에 있으며 `Reported · 10s`와 `Live · 5s`로 표시합니다. 메뉴바·상단 대표 값은 같은 모드의 살아 있는 측정 항목 합계이며, 행마다 개별 속도를 보여 줍니다. 현재 모델이나 소스가 Live 추정을 지원하지 않으면 값은 미측정으로 남고 임의로 0을 만들지 않습니다.
 
@@ -59,7 +59,7 @@ Hook은 상태 보조 자료일 뿐 사용량 소스가 아닙니다. 선택한 
 
 전체 PRD의 출시 완료 상태가 아닙니다. 부모/자식 합산 범위는 확인되지 않으면 Partial로 남깁니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다.
 
-**2026-10-17 사용자 요청으로 QA를 재개했습니다.** Core/Collector 자동 테스트 51개가 통과했고 합성 UI fixture UI01–UI25가 통과했습니다. 실제 메뉴바 앱에서 발견한 읽기 전용 하드링크 로그 거부를 수정했으며, private 메타데이터의 단일 링크 제한은 유지합니다. 전체 QA 완료 상태는 아니며 TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기, Live tokenizer 동등성과 실제 Hook 설치/신뢰·provider 동작은 미검증입니다. 최신 범위는 [QA 기록](docs/verification/collector.md)을 참고하세요.
+**2026-10-17 사용자 요청으로 QA를 재개했습니다.** Core/Collector 자동 테스트 51개가 통과했고 합성 UI fixture UI01–UI28가 통과했습니다. 실제 메뉴바 앱에서 발견한 읽기 전용 하드링크 로그 거부를 수정했으며, private 메타데이터의 단일 링크 제한은 유지합니다. 전체 QA 완료 상태는 아니며 TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기, Live tokenizer 동등성과 실제 Hook 설치/신뢰·provider 동작은 미검증입니다. 최신 범위는 [QA 기록](docs/verification/collector.md)을 참고하세요.
 
 자세한 내용: [PRD](docs/Codex_Hub_PRD.md), [관리형 helper 계약](docs/managed-helper.md), [네이티브 구현 기록](docs/verification/native-ui.md).
 
