@@ -534,3 +534,12 @@ Auxiliary sessions use a two-column LazyVGrid with separate state, speed, compac
 five children in an odd-sized fixture; 460pt dark and 380pt English/light renders
 were inspected for the 2+2+1 layout. UI01–UI94/P01–P06 passed. No usage aggregation
 or parent matching rules changed.
+
+## Chart navigation without extra controls
+
+Auxiliary grid cells no longer have a Details button or bottom divider. Their
+chart caption and entire chart rectangle form a plain native Button opening the
+child's Details page, including the empty-chart state. Accessibility uses the
+same explicit Details/session label, and the chart does not intercept pointer
+hits. The auxiliary section's bottom separator is also omitted; other section
+separators remain unchanged. No measurement or hierarchy logic changed.

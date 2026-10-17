@@ -150,7 +150,7 @@ struct SessionGraphics: View {
     }
 
     private var auxiliarySessions: some View {
-        section("Auxiliary sessions", icon: "point.3.connected.trianglepath.dotted") {
+        section("Auxiliary sessions", icon: "point.3.connected.trianglepath.dotted", showsDivider: false) {
             note("Each session keeps its own speed and chart. Inherited counters are not added together.")
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)], alignment: .leading, spacing: 16) {
                 ForEach(model.auxiliarySessions(for: session)) { child in
@@ -166,14 +166,17 @@ struct SessionGraphics: View {
                             Text(model.rate(for: child) + " " + model.rateUnit.suffix)
                                 .font(.system(size: 11, weight: .medium)).monospacedDigit().lineLimit(1)
                         }
-                        Text(model.text("보고 출력 · 30분")).font(.system(size: 10)).foregroundStyle(.secondary)
-                        ObservedTokenChart(points: model.usageHistory[child.id] ?? [], now: model.frame?.time ?? 0,
-                                           emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset)
                         Button { model.page = .detail(child.id) } label: {
-                            Text(model.text("상세정보")).frame(maxWidth: .infinity, minHeight: 28)
-                        }.buttonStyle(.bordered)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(model.text("보고 출력 · 30분")).font(.system(size: 10)).foregroundStyle(.secondary)
+                                ObservedTokenChart(points: model.usageHistory[child.id] ?? [], now: model.frame?.time ?? 0,
+                                                   emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset)
+                                    .allowsHitTesting(false)
+                            }.frame(maxWidth: .infinity, minHeight: 56).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                            .accessibilityElement(children: .ignore)
                             .accessibilityLabel(model.text("상세정보") + " " + String(child.id.threadID.suffix(8)))
-                        Divider()
+                            .help(model.text("상세정보"))
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -198,11 +201,11 @@ struct SessionGraphics: View {
         }
     }
 
-    private func section<Content: View>(_ title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: String, icon: String, showsDivider: Bool = true, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(model.text(title), systemImage: icon).font(.system(size: 13, weight: .semibold))
             content()
-            Divider().padding(.top, 4)
+            if showsDivider { Divider().padding(.top, 4) }
         }.padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
     }
 

@@ -113,7 +113,7 @@ The menu bar and overview sum only observed CLI roots with verified independent 
 
 ## Session groups
 
-Explicitly linked auxiliary sessions share one overview row with their main session, marked with an auxiliary count. Details lays out auxiliary sessions in a two-column grid, keeping each child's state, speed and 30-minute output chart separate, with a link to its full details. An active child keeps its group visible even when the parent is idle. The main row's numeric speed remains the main session's own rate; inherited parent/child counters are not blindly added. Same project names or PIDs alone never establish parentage. Missing, ambiguous or cyclic parent links remain separate.
+Explicitly linked auxiliary sessions share one overview row with their main session, marked with an auxiliary count. Details lays out auxiliary sessions in a two-column grid, keeping each child's state, speed and 30-minute output chart separate, with each chart opening its full details when clicked. An active child keeps its group visible even when the parent is idle. The main row's numeric speed remains the main session's own rate; inherited parent/child counters are not blindly added. Same project names or PIDs alone never establish parentage. Missing, ambiguous or cyclic parent links remain separate.
 
 ## Per-process information
 
