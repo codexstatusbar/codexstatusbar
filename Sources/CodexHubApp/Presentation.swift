@@ -23,13 +23,14 @@ struct SessionPresentation: Identifiable {
     var liveUnavailableReason: String?
     var usageDetails: SessionUsageDetails?
     var serverTiming: ServerTiming?
+    var provider = SessionProvider.codex
     var activity: Activity { observedActivity ?? monitor.activity }
     var measurement: CodexHubCore.Measurement { sourceMeasurement ?? monitor.measurement }
     var id: ThreadKey { monitor.key }
     var title: String { cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Session \(id.threadID.prefix(8))" }
     var source: String {
         switch observedSource ?? monitor.counter.source {
-        case .rolloutLog: "Logs"
+        case .rolloutLog: provider == .claude ? "Claude logs" : "Logs"
         case .directRelay: "Direct · experimental"
         case .sharedServer: "Shared server"
         }
@@ -148,6 +149,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
     var hideIdle = false
+    var hideUnattached = false
     var retentionDays = 7
     var startAtLogin = false
     var loginStatus = "Not registered"
@@ -288,7 +290,9 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
             return $0.id.threadID < $1.id.threadID
         }
     }
-    var processCount: Int { sessionGroups.count + unattachedProcesses.count }
+    /// Processes that could not be matched to a session; the user may hide them.
+    var visibleUnattached: [ProcessIdentity] { hideUnattached ? [] : unattachedProcesses }
+    var processCount: Int { sessionGroups.count + visibleUnattached.count }
     var generatingProcessCount: Int { error == nil ? sessionGroups.values.filter { $0.contains { $0.monitor.connectivity == .connected && $0.activity == .generating } }.count : 0 }
     var activeProcessCount: Int { error == nil ? sessionGroups.values.filter { $0.contains { $0.monitor.connectivity == .connected && [.working, .generating, .toolRunning, .approvalWait].contains($0.activity) } }.count : 0 }
     var idleProcessCount: Int { error == nil ? sessionGroups.values.filter { $0.allSatisfy { $0.monitor.connectivity == .connected && $0.activity == .idle } }.count : 0 }
@@ -302,7 +306,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
 
     var summary: String {
         if error != nil { return "측정 불가" }
-        guard !sessions.isEmpty else { return unattachedProcesses.isEmpty ? "실행 없음" : "정보 미확인" }
+        guard !sessions.isEmpty else { return visibleUnattached.isEmpty ? "실행 없음" : "정보 미확인" }
         if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "연결 끊김" }
         if let speed = aggregateRate { return displayRate(speed, symbol: measurementMode.symbol) }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "계산 준비 중" }
@@ -350,6 +354,19 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     }
     var aggregateRate: Double? {
         return measurementMode == .reported ? frame?.tokensPerSecond : liveAggregate.rate
+    }
+    /// Per-provider share of the combined rate; only shown when more than one provider is observed.
+    var providerBreakdown: String? {
+        guard measurementMode == .reported, error == nil, let time = frame?.time,
+              Set(sessions.map(\.provider)).count > 1 else { return nil }
+        let parts = SessionProvider.allCases.compactMap { provider -> String? in
+            let rows = sessions.filter { $0.provider == provider }
+            guard !rows.isEmpty else { return nil }
+            let rates = rows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }
+                .compactMap { try? $0.monitor.workAverageRate(at: time) }
+            return provider.displayName + " " + displayRate(rates.isEmpty ? nil : rates.reduce(0, +))
+        }
+        return parts.joined(separator: " · ") + " " + rateUnit.suffix
     }
     var coverage: String {
         guard error == nil, let frame else { return "측정 불가" }

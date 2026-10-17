@@ -376,7 +376,12 @@ import CodexHubCollector
         try capture(groupedModel, "auxiliary-grid-five-dark", output, dark: true, height: 1800)
         groupedModel.language = .english
         try capture(groupedModel, "auxiliary-grid-five-narrow", output, dark: false, height: 1800, width: 380)
-        print("PASS UI01–UI94 and P01–P06; fixture PNGs: \(output)")
+        let hiddenModel = HubPresentation()
+        hiddenModel.unattachedProcesses = [ProcessIdentity(pid: 1, osStartTime: "fixture")]
+        precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
+        hiddenModel.hideUnattached = true
+        precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
+        print("PASS UI01–UI95 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -384,7 +389,7 @@ import CodexHubCollector
         defer { try? FileManager.default.removeItem(at: root) }
         let executable = root.appendingPathComponent("codex")
         let source = root.appendingPathComponent("writer.c")
-        try Data("#include <fcntl.h>\n#include <unistd.h>\nint main(int n, char **v) { if (n != 2 || open(v[1], O_WRONLY | O_APPEND) < 0) return 2; char c; return read(0, &c, 1) < 0; }\n".utf8).write(to: source)
+        try Data("#include <fcntl.h>\n#include <unistd.h>\nint main(int n, char **v) { if (n < 2 || open(v[1], O_WRONLY | O_APPEND) < 0) return 2; char c; return read(0, &c, 1) < 0; }\n".utf8).write(to: source)
         let compiler = Process()
         compiler.executableURL = URL(fileURLWithPath: "/usr/bin/cc")
         compiler.arguments = [source.path, "-o", executable.path]
@@ -424,6 +429,23 @@ import CodexHubCollector
         precondition(RunningCodexProcess.owner(of: fileID, controller: nil, in: [process, conflicting]) == nil, "P05 ambiguous owners remain unattached")
         child.terminate(); child.waitUntilExit()
         precondition(RunningCodexProcess.inspect(child.processIdentifier) == nil, "P06 exited process disappears")
+        let host = Process()
+        let hostInput = Pipe()
+        host.executableURL = executable
+        host.arguments = [log.path, "app-server", "--listen", "stdio://"]
+        host.standardInput = hostInput
+        host.standardOutput = FileHandle.nullDevice
+        host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { hostInput.fileHandleForWriting.closeFile(); if host.isRunning { host.terminate() }; host.waitUntilExit() }
+        var hostObserved: RunningCodexProcess?
+        let hostDeadline = Date().addingTimeInterval(3)
+        repeat {
+            hostObserved = RunningCodexProcess.inspect(host.processIdentifier)
+            if hostObserved?.isAppServer == true { break }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        } while Date() < hostDeadline
+        precondition(hostObserved?.isAppServer == true && observed?.isAppServer == false, "P07 app-server hosts are told apart from terminal sessions")
     }
     @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 720, width: CGFloat = 460) throws {
         let view = NSHostingView(rootView: HubView(model: model, width: width, height: height).environment(\.colorScheme, dark ? .dark : .light))

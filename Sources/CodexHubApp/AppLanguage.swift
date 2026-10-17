@@ -174,6 +174,7 @@ enum AppLanguage: String, CaseIterable {
         "Approval is waiting in Codex. Respond in the original terminal; Tokloom never approves commands.": "Codex에서 승인을 기다리고 있습니다. 원래 터미널에서 응답하세요. Hub는 명령을 승인하지 않습니다.",
         "Live requires complete managed visible text and a supported model. Warm-up and unavailable measurements remain —.": "실시간 추정은 지원 모델과 온전한 관리형 출력 관측이 필요합니다. 준비 중이거나 측정할 수 없으면 —로 표시합니다.",
         "Hide idle sessions": "대기 중인 세션 숨기기",
+        "Hide unidentified processes": "확인되지 않은 프로세스 숨기기",
         "Compact menu bar": "간결한 메뉴바",
         "Start at login": "로그인 시 실행",
         "Metadata retention": "메타데이터 보관 기간",

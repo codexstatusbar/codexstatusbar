@@ -100,8 +100,7 @@ struct SessionGraphics: View {
 
     private var hero: some View {
         HStack(spacing: 12) {
-            Image(systemName: "folder.fill").font(.system(size: 22)).foregroundStyle(.blue)
-                .frame(width: 46, height: 46).background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
+            ProviderBadge(provider: session.provider, size: 46)
             VStack(alignment: .leading, spacing: 5) {
                 Text(session.title).font(.system(size: 18, weight: .semibold)).lineLimit(1)
                 Text(session.cwd ?? model.text("미확인")).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -314,10 +313,5 @@ enum ProcessTint {
         case .toolRunning, .approvalWait: return .purple
         default: return .secondary
         }
-    }
-
-    static func project(_ title: String) -> Color {
-        let index = title.utf8.reduce(0) { ($0 + Int($1)) % 3 }
-        return [Color.blue, .indigo, .cyan][index]
     }
 }

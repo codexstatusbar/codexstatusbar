@@ -116,6 +116,9 @@ struct HubView: View {
                     }.accessibilityElement(children: .combine)
                     Label(measurementCaption, systemImage: "info.circle")
                         .font(.system(size: 10)).foregroundStyle(secondary).fixedSize(horizontal: false, vertical: true)
+                    if let breakdown = model.providerBreakdown {
+                        Text(breakdown).font(.system(size: 10)).monospacedDigit().foregroundStyle(secondary)
+                    }
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 4) {
@@ -144,7 +147,7 @@ struct HubView: View {
                     ForEach(model.visibleSessions) { session in
                         sessionButton(session)
                     }
-                    ForEach(model.unattachedProcesses, id: \.self) { process in
+                    ForEach(model.visibleUnattached, id: \.self) { process in
                         HStack(spacing: 10) {
                             Image(systemName: "questionmark.circle").foregroundStyle(attention)
                             VStack(alignment: .leading, spacing: 4) {
@@ -162,7 +165,7 @@ struct HubView: View {
                 if model.processCount == 0 {
                     Text(model.text(model.error == nil ? "실행 중인 Codex가 없습니다" : "수집 오류로 프로세스 목록을 불러오지 못했습니다")).foregroundStyle(secondary)
                     Button(model.text("연결 확인")) { model.page = .connection; model.refresh?() }.disabled(model.busy || model.refresh == nil)
-                } else if model.visibleSessions.isEmpty && model.unattachedProcesses.isEmpty {
+                } else if model.visibleSessions.isEmpty && model.visibleUnattached.isEmpty {
                     Text(model.text("대기 중인 항목은 설정에 따라 숨겨져 있습니다.")).font(.system(size: 11)).foregroundStyle(secondary)
                 }
             }
@@ -170,7 +173,7 @@ struct HubView: View {
     }
 
     private func sessionButton(_ session: SessionPresentation) -> some View {
-        let accessibility = session.title + ", " + model.status(for: model.overviewState(for: session)) + ", " + model.rate(for: session) + " " + model.rateUnit.suffix + ", " + model.text("상세정보")
+        let accessibility = session.provider.displayName + " " + session.title + ", " + model.status(for: model.overviewState(for: session)) + ", " + model.rate(for: session) + " " + model.rateUnit.suffix + ", " + model.text("상세정보")
         return Button { model.page = .detail(session.id) } label: { processRow(session) }
             .buttonStyle(.plain)
             .background(inset, in: RoundedRectangle(cornerRadius: 8))
@@ -182,12 +185,8 @@ struct HubView: View {
         let state = model.overviewState(for: session)
         let children = model.auxiliarySessions(for: session)
         let tint = ProcessTint.status(state, failed: model.error != nil, dark: dark)
-        let projectTint = ProcessTint.project(session.title)
         return HStack(spacing: 10) {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(projectTint).frame(width: 32, height: 32)
-                .background(projectTint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
-                .accessibilityHidden(true)
+            ProviderBadge(provider: session.provider).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
@@ -240,6 +239,12 @@ struct HubView: View {
                 Toggle(isOn: $model.hideIdle) {
                     Label(model.text("Hide idle sessions"), systemImage: "eye.slash")
                 }.onChange(of: model.hideIdle) { model.saveDisplayPreferences?() }
+                }
+                Divider()
+                settingsRow("Hide unidentified processes", icon: "questionmark.circle") {
+                Toggle(isOn: $model.hideUnattached) {
+                    Label(model.text("Hide unidentified processes"), systemImage: "questionmark.circle")
+                }.onChange(of: model.hideUnattached) { model.saveDisplayPreferences?() }
                 }
                 Divider()
                 settingsRow("Start at login", icon: "power") {

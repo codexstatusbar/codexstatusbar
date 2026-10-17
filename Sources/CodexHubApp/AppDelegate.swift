@@ -8,6 +8,7 @@ import CodexHubCollector
     private let model = HubPresentation()
     private var menu: NativeMenuController?
     private var collector: LogCollector?
+    private var claudeCollector: ClaudeCollector?
     private var polling: Task<Void, Never>?
     private var backgroundRefresh: Task<Void, Never>?
     private var generation = 0
@@ -36,6 +37,7 @@ import CodexHubCollector
         }
         model.hookAction = { [weak self] action in self?.runHooks(action) }
         model.hideIdle = defaults.bool(forKey: "hideIdle")
+        model.hideUnattached = defaults.bool(forKey: "hideUnattached")
         model.retentionDays = [1, 7, 30, 90].contains(defaults.integer(forKey: "retentionDays")) ? defaults.integer(forKey: "retentionDays") : 7
         menu = NativeMenuController(model: model)
         menu?.refreshLoginStatus()
@@ -43,6 +45,7 @@ import CodexHubCollector
         model.saveDisplayPreferences = { [weak self] in
             guard let self else { return }
             defaults.set(model.hideIdle, forKey: "hideIdle")
+            defaults.set(model.hideUnattached, forKey: "hideUnattached")
         }
         let helper = HelperConnection.bundledURL.path
         model.helperPath = HelperConnection.executable(helper) ? helper : nil
@@ -132,6 +135,7 @@ import CodexHubCollector
         let current = generation
         var previous = collector
         collector = nil
+        claudeCollector = ClaudeCollector(claudeHome: ClaudeCollector.defaultHome())
         model.canManageMetadata = false
         model.sessions = []
         model.restoreUsageHistory([:])
@@ -231,10 +235,8 @@ import CodexHubCollector
         })
         let connected = try await collector?.bindRunningSessions(owned) ?? snapshot
         guard generation == current else { return }
-        let rows = connected.sessions.compactMap { session -> SessionPresentation? in
-            let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil
-            guard let process = RunningCodexProcess.owner(of: session.id, controller: controller, in: running) else { return nil }
-            return SessionPresentation(monitor: session.monitor, cwd: session.cwd, model: session.model,
+        func presentation(_ session: SessionSnapshot, process: ProcessIdentity) -> SessionPresentation {
+            SessionPresentation(monitor: session.monitor, cwd: session.cwd, model: session.model,
                                 lastObserved: Date(timeIntervalSince1970: session.lastObserved),
                                 process: process,
                                 server: session.processes.first(where: { $0.role == .appServer })?.identity,
@@ -244,21 +246,33 @@ import CodexHubCollector
                                 observationStopped: session.observationStopped,
                                 observedActivity: session.activity, hookCompletionCandidate: session.hookCompletionCandidate,
                                 liveRate: session.liveRate, liveMeasurement: session.liveMeasurement,
-                                liveUnavailableReason: session.liveUnavailableReason, usageDetails: session.usageDetails, serverTiming: session.serverTiming)
+                                liveUnavailableReason: session.liveUnavailableReason, usageDetails: session.usageDetails,
+                                serverTiming: session.serverTiming, provider: session.provider)
         }
+        let rows = connected.sessions.compactMap { session -> SessionPresentation? in
+            let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil
+            guard let process = RunningCodexProcess.owner(of: session.id, controller: controller, in: running) else { return nil }
+            return presentation(session, process: process)
+        }
+        // Claude shares the Codex frame time so one clock orders every monitor.
+        let claude = await claudeCollector?.refresh(at: snapshot.observedAt)
+        let claudeRows = (claude?.sessions ?? []).compactMap { session in session.process.map { presentation(session, process: $0) } }
+        let allRows = rows + claudeRows
         let represented = Set(rows.flatMap { [$0.process, $0.server].compactMap { $0 } })
-        model.unattachedProcesses = running.map(\.identity).filter { !represented.contains($0) }
-        let frame = try ReportedFrame(monitors: rows.map(\.monitor), verifiedIndependentThreads: Set(rows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
-        model.recordUsageHistory(rows, at: snapshot.observedAt)
-        model.sessions = rows
+        model.unattachedProcesses = running.filter { !represented.contains($0.identity) && !$0.isAppServer }.map(\.identity)
+        let frame = try ReportedFrame(monitors: allRows.map(\.monitor), verifiedIndependentThreads: Set(allRows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
+        model.recordUsageHistory(allRows, at: snapshot.observedAt)
+        model.sessions = allRows
         model.frame = frame
-        model.diagnostics = Dictionary(grouping: snapshot.diagnostics, by: \.message).map { message, occurrences in
+        model.diagnostics = Dictionary(grouping: snapshot.diagnostics + (claude?.diagnostics ?? []), by: \.message).map { message, occurrences in
             occurrences.count == 1 ? message : "\(message) (\(occurrences.count) occurrences)"
         }.sorted()
         model.refreshedAt = Date()
         model.error = nil
-        if savedChartHistory != model.usageHistory, let collector {
-            let history = model.usageHistory
+        // The archive is scoped to the Codex home; Claude rows are not persisted across restarts yet.
+        let persisted = model.usageHistory.filter { $0.key.homeID == chartHomePath }
+        if savedChartHistory != persisted, let collector {
+            let history = persisted
             do {
                 let data = try UsageHistoryArchive.encode(history, home: chartHomePath, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970)
                 try await collector.saveChartHistory(data)

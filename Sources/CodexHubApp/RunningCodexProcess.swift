@@ -5,6 +5,9 @@ import CodexHubCore
 struct RunningCodexProcess: Sendable {
     let identity: ProcessIdentity
     let writableFileIDs: Set<String>
+    /// `codex app-server` hosts (for example inside the ChatGPT app) are backends, not terminal sessions.
+    /// One that owns no transcript has no session to attach, so it must not be listed as a missing one.
+    var isAppServer = false
 
     static func capture() -> [Self]? {
         let count = proc_listallpids(nil, 0)
@@ -25,6 +28,7 @@ struct RunningCodexProcess: Sendable {
         var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         let length = path.withUnsafeMutableBytes { proc_pidpath(pid, $0.baseAddress, UInt32($0.count)) }
         guard length > 0, URL(fileURLWithPath: String(cString: path)).lastPathComponent == "codex" else { return nil }
+        let appServer = arguments(of: pid)?.dropFirst().contains("app-server") == true
         var files: Set<String> = []
         let needed = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
         let stride = MemoryLayout<proc_fdinfo>.stride
@@ -49,7 +53,27 @@ struct RunningCodexProcess: Sendable {
               after.pbi_uid == before.pbi_uid, after.pbi_status != SZOMB,
               after.pbi_start_tvsec == before.pbi_start_tvsec,
               after.pbi_start_tvusec == before.pbi_start_tvusec else { return nil }
-        return Self(identity: ProcessIdentity(pid: pid, osStartTime: "\(before.pbi_start_tvsec).\(String(format: "%06llu", before.pbi_start_tvusec))"), writableFileIDs: files)
+        return Self(identity: ProcessIdentity(pid: pid, osStartTime: "\(before.pbi_start_tvsec).\(String(format: "%06llu", before.pbi_start_tvusec))"), writableFileIDs: files, isAppServer: appServer)
+    }
+
+    static func arguments(of pid: pid_t) -> [String]? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0, size > 4, size <= 1 << 20 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, UInt32(mib.count), &buffer, &size, nil, 0) == 0, size > 4 else { return nil }
+        let count = Int(buffer.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
+        var index = 4
+        while index < size, buffer[index] != 0 { index += 1 }   // executable path
+        while index < size, buffer[index] == 0 { index += 1 }   // padding
+        var result: [String] = []
+        while result.count < count, index < size {
+            var end = index
+            while end < size, buffer[end] != 0 { end += 1 }
+            result.append(String(decoding: buffer[index..<end], as: UTF8.self))
+            index = end + 1
+        }
+        return result
     }
 
     static func owner(of fileID: String, controller: ProcessIdentity?, in processes: [Self]) -> ProcessIdentity? {
