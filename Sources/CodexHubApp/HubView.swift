@@ -195,6 +195,7 @@ struct HubView: View {
             DisclosureGroup(model.text("고급 측정 정보")) {
                 VStack(alignment: .leading, spacing: 14) { detailMetadata(session) }.padding(.top, 12)
             }.font(.system(size: 12))
+                .disclosureGroupStyle(FullRowDisclosureStyle(expandedLabel: model.text("Expanded"), collapsedLabel: model.text("Collapsed")))
         }
     }
 
@@ -351,5 +352,29 @@ struct HubView: View {
             }.disabled(text == nil).accessibilityLabel(model.text("Copy") + " " + model.text(label)) }
             Text(text ?? model.text("Unavailable")).font(.system(size: 11)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+
+private struct FullRowDisclosureStyle: DisclosureGroupStyle {
+    let expandedLabel: String
+    let collapsedLabel: String
+
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { configuration.isExpanded.toggle() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
+                    configuration.label
+                    Spacer(minLength: 0)
+                }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityValue(configuration.isExpanded ? expandedLabel : collapsedLabel)
+                .onKeyPress(.rightArrow) { configuration.isExpanded = true; return .handled }
+                .onKeyPress(.leftArrow) { configuration.isExpanded = false; return .handled }
+            if configuration.isExpanded { configuration.content }
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
