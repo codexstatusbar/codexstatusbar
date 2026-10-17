@@ -163,7 +163,28 @@ import CodexHubCollector
         precondition(model.sessions[0].serverTiming?.sampledTokens == 163 && model.aggregateRate == nil, "UI46 output events do not become fabricated token throughput")
         model.page = .detail(model.sessions[0].id)
         try capture(model, "server-real-schema-details", output, dark: false)
-        print("PASS UI01–UI46 and P01–P06; fixture PNGs: \(output)")
+        var previewWorking = ThreadMonitor(key: .init(homeID: "fixture", runID: nil, threadID: "working"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
+        try previewWorking.setConnectivity(.connected, at: 0)
+        try previewWorking.startTurn("turn", at: 1)
+        var previewIdle = ThreadMonitor(key: .init(homeID: "fixture", runID: nil, threadID: "idle"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
+        try previewIdle.setConnectivity(.connected, at: 0)
+        try previewIdle.startTurn("turn", at: 1)
+        try previewIdle.finishTurn("turn", outcome: .completed, at: 2)
+        model.sessions = [SessionPresentation(monitor: previewWorking, cwd: "/Synthetic/codexstatusbar", model: "GPT-6 Astra · Medium"), SessionPresentation(monitor: previewIdle, cwd: "/Synthetic/ocrfolio", model: "GPT-6 Astra · Medium")]
+        model.unattachedProcesses = [ProcessIdentity(pid: 12345, osStartTime: "fixture")]
+        model.frame = try ReportedFrame(monitors: [previewWorking, previewIdle], verifiedIndependentThreads: [], at: 3)
+        model.measurementMode = .reported
+        model.page = .overview
+        model.notice = "Synthetic design preview"
+        precondition(model.processCount == 3 && model.activeProcessCount == 1 && model.idleProcessCount == 1, "UI47 process counts come from observed states")
+        precondition(model.processBreakdown == "1 작업 · 1 대기 · 1 확인", "UI48 unresolved processes remain separate")
+        try capture(model, "compact-reference-dark", output, dark: true)
+        try capture(model, "compact-reference-light", output, dark: false)
+        model.error = "Synthetic collection failure"
+        precondition(model.activeProcessCount == 0 && model.idleProcessCount == 0 && model.processBreakdown == "0 작업 · 0 대기 · 3 확인", "UI49 collection errors do not claim current activity")
+        try capture(model, "compact-collection-error", output, dark: true)
+        model.error = nil
+        print("PASS UI01–UI49 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -212,10 +233,10 @@ import CodexHubCollector
         child.terminate(); child.waitUntilExit()
         precondition(RunningCodexProcess.inspect(child.processIdentifier) == nil, "P06 exited process disappears")
     }
-    @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 620) throws {
+    @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 520) throws {
         let view = NSHostingView(rootView: HubView(model: model, height: height).environment(\.colorScheme, dark ? .dark : .light))
         view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 400,height: height), styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 380,height: height), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = view
         window.orderFront(nil)
         view.layoutSubtreeIfNeeded()

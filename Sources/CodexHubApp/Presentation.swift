@@ -165,6 +165,17 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
             return $0.id.threadID < $1.id.threadID
         }
     }
+    var processCount: Int { sessions.count + unattachedProcesses.count }
+    var activeProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && [.working, .generating, .toolRunning, .approvalWait].contains($0.activity) }.count }
+    var idleProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && $0.activity == .idle }.count }
+    var activitySummary: String {
+        language.resolved == .korean ? "\(activeProcessCount)개 작업 중" : "\(activeProcessCount) working"
+    }
+    var processBreakdown: String {
+        let unknown = processCount - activeProcessCount - idleProcessCount
+        return language.resolved == .korean ? "\(activeProcessCount) 작업 · \(idleProcessCount) 대기 · \(unknown) 확인" : "\(activeProcessCount) active · \(idleProcessCount) idle · \(unknown) unknown"
+    }
+
     var summary: String {
         if error != nil { return "측정 불가" }
         guard !sessions.isEmpty else { return unattachedProcesses.isEmpty ? "실행 없음" : "정보 미확인" }

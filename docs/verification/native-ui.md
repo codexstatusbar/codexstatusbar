@@ -318,3 +318,29 @@ Completed whole-turn averages in Details are labeled as including tools. Last
 values remain held between reports and through Idle. UI01–UI42/P01–P06 fixtures
 passed. Actual runtime comparison against a provider's generation clock is not
 available from these logs and is not claimed.
+
+
+## Native compact screenshot adaptation
+
+The user's supplied macOS Native Compact image is the custom visual reference.
+The overview is now 380 by 520 points: compact title/activity header, aggregate
+speed and process count, observed working/idle/unknown counts, full-row detail
+buttons with status icons, and connection/settings footer controls. Unidentified
+process rows remain noninteractive rather than pretending to have session details.
+The inset row treatment follows the supplied screenshot; there are no nested
+content card shells or decorative shadows. The native popover still owns screen
+placement, scrolling, keyboard dismissal, and system appearance.
+
+System typography and flat native controls were retained. Dark panel/row colors
+are 0.19/0.055 white; the light counterpart uses the system panel and 0.94 rows.
+Measured secondary contrast is 6.58:1 on the dark panel and 5.87:1 on light rows;
+light active/attention icons are 5.23:1/4.72:1. Status is also written as text.
+Synthetic dark/light reference renders were inspected; fixture watermarks are
+additional evidence labels and do not appear in the actual app. Measurement
+semantics are unchanged, and the heading uses Combined throughput rather than
+claiming pure server generation speed. All UI01–UI49/P01–P06 assertions passed.
+UI47/48 cover observed process counts; UI49 keeps activity counters unknown during collection errors. Native keyboard/focus interaction and
+post-replacement visual acceptance remain unverified; full QA is not claimed.
+
+Applied workflow: minimal-code, systematic-ui-ux-design, logic-driven-ui-design,
+and design-md-frontend screenshot implementation guidance.

@@ -4,24 +4,23 @@ import CodexHubCore
 
 struct HubView: View {
     @Bindable var model: HubPresentation
-    var height: CGFloat = 620
+    @Environment(\.colorScheme) private var colorScheme
+    var height: CGFloat = 520
+    private var dark: Bool { colorScheme == .dark }
+    private var panel: Color { dark ? Color(white: 0.19) : Color(nsColor: .windowBackgroundColor) }
+    private var inset: Color { dark ? Color(white: 0.055) : Color(white: 0.94) }
+    private var secondary: Color { dark ? Color(white: 0.72) : Color(white: 0.36) }
+    private var active: Color { dark ? Color(red: 0.26, green: 0.87, blue: 0.55) : Color(red: 0.04, green: 0.45, blue: 0.23) }
+    private var attention: Color { dark ? Color(red: 1, green: 0.65, blue: 0.25) : Color(red: 0.65, green: 0.33, blue: 0.03) }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                if model.page != .overview {
-                    Button(model.text("뒤로")) { model.page = .overview }.keyboardShortcut("[", modifiers: .command)
-                }
-                Text(model.text(model.page == .overview ? (model.measurementMode == .server ? "서버 타이밍 진단" : model.measurementMode == .reported ? "도구 제외 추정 합계" : "실시간 추정 합계") : title))
-                    .font(.system(size: model.page == .overview ? 13 : 17, weight: .semibold)).lineLimit(1)
-                Spacer()
-                Button { model.close?() } label: {
-                    Image(systemName: "xmark").frame(width: 24, height: 24).contentShape(Rectangle())
-                }.buttonStyle(.borderless).accessibilityLabel(model.text("닫기")).help(model.text("닫기")).keyboardShortcut(.cancelAction)
-            }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 4)
+            header
+            Divider().padding(.horizontal, 14)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let error = model.error { Text(model.text("Collection error") + ": " + error).textSelection(.enabled) }
-                    if let notice = model.notice { Text(model.text(notice)).textSelection(.enabled) }
+                    if let notice = model.notice { Text(model.text(notice)).font(.system(size: 11)).foregroundStyle(secondary).textSelection(.enabled) }
                     switch model.page {
                     case .overview: overview
                     case .detail(let key):
@@ -30,81 +29,162 @@ struct HubView: View {
                     case .preferences: preferences
                     case .connection: connection
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 18)
             }.id(model.page)
-            Divider()
-            HStack {
-                Text(model.text(model.freshness)).font(.system(size: 11))
-                Spacer()
-                Button(model.text("연결")) { model.page = .connection }
-                Button(model.text("설정")) { model.page = .preferences }.keyboardShortcut(",", modifiers: .command)
-            }.padding(16)
+            Divider().padding(.horizontal, 14)
+            footer
         }
-        .font(.system(size: 13)).frame(width: 400, height: height)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .font(.system(size: 13)).frame(width: 380, height: height)
+        .background(panel)
         .alert(model.text("Clear collected metadata?"), isPresented: $model.confirmClear) {
             Button(model.text("Cancel"), role: .cancel) {}
             Button(model.text("Clear metadata"), role: .destructive) { model.clearMetadata?() }
         } message: { Text(model.text("Deletes Hub metadata only. Original Codex logs and sessions are kept.")) }
     }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            if model.page == .overview {
+                Image(systemName: "waveform.path.ecg.rectangle").font(.system(size: 15)).accessibilityHidden(true)
+                Text("Codex Hub").font(.system(size: 16, weight: .medium))
+            } else {
+                Button { model.page = .overview } label: {
+                    Image(systemName: "chevron.left").frame(width: 24, height: 28)
+                }.buttonStyle(.plain).accessibilityLabel(model.text("뒤로")).keyboardShortcut("[", modifiers: .command)
+                Text(title).font(.system(size: 15, weight: .semibold))
+            }
+            Spacer(minLength: 8)
+            Button { model.close?() } label: {
+                HStack(spacing: 6) {
+                    if model.page == .overview {
+                        Image(systemName: model.activeProcessCount > 0 ? "circle.inset.filled" : "pause.circle")
+                            .foregroundStyle(model.activeProcessCount > 0 ? active : secondary)
+                        Text(model.activitySummary).foregroundStyle(secondary)
+                    }
+                    Image(systemName: model.page == .overview ? "chevron.down" : "xmark").foregroundStyle(secondary)
+                }.font(.system(size: 11)).frame(minHeight: 28).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityLabel(model.text("닫기") + ", " + model.activitySummary).help(model.text("닫기")).keyboardShortcut(.cancelAction)
+        }.padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.clockwise").accessibilityHidden(true)
+            Text(model.freshness).lineLimit(1)
+            Spacer(minLength: 8)
+            Button { model.page = .connection } label: {
+                Label(model.text("연결"), systemImage: "cable.connector").frame(minHeight: 28)
+            }.buttonStyle(.plain)
+            Button { model.page = .preferences } label: {
+                Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityLabel(model.text("설정")).help(model.text("설정")).keyboardShortcut(",", modifiers: .command)
+        }.font(.system(size: 11)).foregroundStyle(secondary).padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
     private var title: String {
         switch model.page {
         case .overview: "Codex Hub"
-        case .detail: "상세정보"
-        case .preferences: "설정"
-        case .connection: "연결"
+        case .detail: model.text("상세정보")
+        case .preferences: model.text("설정")
+        case .connection: model.text("연결")
         }
     }
+
+    private var measurementCaption: String {
+        if model.measurementMode == .live, !model.sessions.isEmpty,
+           model.sessions.allSatisfy({ ($0.observedSource ?? $0.monitor.counter.source) != .directRelay }) {
+            return model.text("실시간 추정은 관리형 직접 연결이 필요합니다")
+        }
+        return model.aggregateRate != nil && model.error == nil ? model.text(model.measurementMode.label) : model.text(model.summary)
+    }
+
     private var overview: some View {
-        Group {
-            if model.measurementMode == .live, !model.sessions.isEmpty,
-               model.sessions.allSatisfy({ ($0.observedSource ?? $0.monitor.counter.source) != .directRelay }) {
-                Text(model.text("실시간 추정은 관리형 직접 연결이 필요합니다")).font(.system(size: 11))
-            }
-            HStack(alignment: .firstTextBaseline) {
-                Text(model.text(model.summary)).font(.system(size: model.summary.count > 12 ? 28 : 42, weight: .semibold)).monospacedDigit()
-                if model.aggregateRate != nil && model.error == nil { Text(model.text("tok/s")) }
-            }.accessibilityElement(children: .combine)
-            Text(model.text(model.measurementMode == .server ? "순수 생성 시간이 확인되지 않으면 추정값으로 대체하지 않습니다" : model.measurementMode == .reported ? "도구 실행·대기 제외 · 서버 응답 대기는 포함될 수 있음" : "최근 5초 동안 관측한 화면 출력의 추정 속도")).font(.system(size: 11))
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(model.text("전체 속도")).font(.system(size: 12)).foregroundStyle(secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(model.error == nil && model.aggregateRate != nil ? model.summary : "—")
+                            .font(.system(size: 28, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                        Text("tok/s").font(.system(size: 13)).foregroundStyle(secondary)
+                    }.accessibilityElement(children: .combine)
+                    Label(measurementCaption, systemImage: "info.circle")
+                        .font(.system(size: 10)).foregroundStyle(secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                VStack(spacing: 6) {
+                    Text(String(model.processCount)).font(.system(size: 20, weight: .semibold)).monospacedDigit()
+                    Text(model.text("프로세스")).font(.system(size: 10)).foregroundStyle(secondary)
+                }.frame(width: 60, height: 72).background(inset, in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityElement(children: .combine)
+            }.frame(minHeight: 92)
             if model.sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .approvalWait }) {
-                Text(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."))
+                Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."), systemImage: "hand.raised")
+                    .font(.system(size: 11)).foregroundStyle(attention)
             }
             Divider()
-            if model.sessions.isEmpty && model.unattachedProcesses.isEmpty {
-                Text(model.text("실행 중인 Codex가 없습니다")).font(.headline)
-                Text(model.text("Codex를 실행하거나 연결 경로를 확인하세요."))
-                Button(model.text("연결 확인")) { model.page = .connection; model.refresh?() }.disabled(model.busy || model.refresh == nil)
-            } else if !model.sessions.isEmpty && model.visibleSessions.isEmpty { Text(model.text("대기 중인 항목은 설정에 따라 숨겨져 있습니다.")) }
-            ForEach(model.visibleSessions) { session in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(session.title).fontWeight(.medium).lineLimit(1)
-                            Text(model.text(session.identity)).font(.system(size: 11))
-                            Text(model.text(session.modelDescription.isEmpty ? "모델 미확인" : session.modelDescription)).font(.system(size: 11))
-                            if model.measurementMode == .reported && session.monitor.workAverageIsPartial {
-                                Text(model.text("관측 이후 평균")).font(.system(size: 11))
-                            }
-                        }
-                        Spacer(minLength: 8)
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(model.text(model.rate(for: session) + (model.rate(for: session) == "—" ? "" : " tok/s"))).monospacedDigit()
-                            Text(model.text(model.status(for: session))).font(.system(size: 11))
-                            Button(model.text("상세정보")) { model.page = .detail(session.id) }
-                                .accessibilityLabel("\(session.title), \(session.identity) " + model.text("상세정보"))
-                        }
+            VStack(spacing: 14) {
+                HStack {
+                    Text("CODEX PROCESSES").font(.system(size: 10, weight: .medium)).tracking(0.5)
+                    Spacer(minLength: 8)
+                    Text(model.processBreakdown).font(.system(size: 10))
+                }.foregroundStyle(secondary)
+                VStack(spacing: 4) {
+                    ForEach(model.visibleSessions) { session in
+                        sessionButton(session)
                     }
-                }.padding(.vertical, 6)
-                Divider()
-            }
-            ForEach(model.unattachedProcesses, id: \.self) { process in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.text("Codex · PID " + String(process.pid))).fontWeight(.medium)
-                    Text(model.text("실행 중 · 세션 정보 미확인")).font(.system(size: 11))
+                    ForEach(model.unattachedProcesses, id: \.self) { process in
+                        HStack(spacing: 10) {
+                            Image(systemName: "questionmark.circle").foregroundStyle(attention)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Codex · PID " + String(process.pid)).font(.system(size: 13, weight: .medium))
+                                Text(model.text("세션 정보 미확인")).font(.system(size: 10)).foregroundStyle(secondary)
+                            }
+                            Spacer(minLength: 8)
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text(model.text("확인 중")).font(.system(size: 11)).foregroundStyle(secondary)
+                                Text("— tok/s").font(.system(size: 12, weight: .medium))
+                            }
+                        }.padding(.horizontal, 12).frame(minHeight: 64).background(inset, in: RoundedRectangle(cornerRadius: 8))
+                    }
                 }
-                Divider()
+                if model.processCount == 0 {
+                    Text(model.text("실행 중인 Codex가 없습니다")).foregroundStyle(secondary)
+                    Button(model.text("연결 확인")) { model.page = .connection; model.refresh?() }.disabled(model.busy || model.refresh == nil)
+                } else if model.visibleSessions.isEmpty && model.unattachedProcesses.isEmpty {
+                    Text(model.text("대기 중인 항목은 설정에 따라 숨겨져 있습니다.")).font(.system(size: 11)).foregroundStyle(secondary)
+                }
             }
         }
+    }
+
+    private func sessionButton(_ session: SessionPresentation) -> some View {
+        let accessibility = session.title + ", " + model.status(for: session) + ", " + model.rate(for: session) + " tok/s, " + model.text("상세정보")
+        return Button { model.page = .detail(session.id) } label: { processRow(session) }
+            .buttonStyle(.plain)
+            .background(inset, in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel(accessibility)
+            .help(session.identity + " · " + model.text("상세정보"))
+    }
+
+    private func processRow(_ session: SessionPresentation) -> some View {
+        let waiting = session.activity == .idle && session.monitor.connectivity == .connected
+        let needsAttention = model.error != nil || session.monitor.connectivity != .connected || session.activity == .unknown || session.activity == .approvalWait
+        return HStack(spacing: 10) {
+            Image(systemName: needsAttention ? "exclamationmark.circle" : waiting ? "pause.circle" : "circle.inset.filled")
+                .foregroundStyle(needsAttention ? attention : waiting ? secondary : active).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Text(session.modelDescription.isEmpty ? model.text("모델 미확인") : session.modelDescription)
+                    .font(.system(size: 10)).foregroundStyle(secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(model.status(for: session)).font(.system(size: 11)).foregroundStyle(secondary).lineLimit(1)
+                Text(model.rate(for: session) + " tok/s").font(.system(size: 12, weight: .medium)).monospacedDigit().lineLimit(1)
+            }
+            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)
+        }.padding(.horizontal, 12).frame(minHeight: 64).contentShape(Rectangle())
     }
     private func detail(_ session: SessionPresentation) -> some View {
         let monitor = session.monitor
