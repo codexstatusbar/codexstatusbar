@@ -128,6 +128,7 @@ struct UsageHistoryPoint: Identifiable, Equatable {
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
 @MainActor @Observable final class HubPresentation {
+    var appName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Tokloom" }
     var sessions: [SessionPresentation] = []
     var unattachedProcesses: [ProcessIdentity] = []
     var frame: ReportedFrame?

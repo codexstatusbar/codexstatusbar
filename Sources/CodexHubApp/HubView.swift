@@ -48,7 +48,7 @@ struct HubView: View {
         HStack(spacing: 10) {
             if model.page == .overview {
                 Image(systemName: "waveform.path.ecg.rectangle").font(.system(size: 15)).accessibilityHidden(true)
-                Text("Tokloom").font(.system(size: 15, weight: .medium))
+                Text(model.appName).font(.system(size: 15, weight: .medium))
                 Spacer(minLength: 8)
             } else {
                 Button { model.page = .overview } label: {
@@ -89,7 +89,7 @@ struct HubView: View {
 
     private var title: String {
         switch model.page {
-        case .overview: "Tokloom"
+        case .overview: model.appName
         case .detail: model.text("상세정보")
         case .preferences: model.text("설정")
         case .connection: model.text("연결")
@@ -263,7 +263,7 @@ struct HubView: View {
                     .disabled(!model.canManageMetadata || model.clearMetadata == nil || model.busy)
             }
             settingsSection("Quit app", subtitle: "Quitting Tokloom stops monitoring, not your Codex sessions.") {
-                Button(model.text("Quit Tokloom"), role: .destructive) { model.quit?() }
+                Button(model.language.resolved == .korean ? model.appName + " 종료" : "Quit " + model.appName, role: .destructive) { model.quit?() }
                     .buttonStyle(.bordered).tint(.red).disabled(model.quit == nil)
             }
         }.toggleStyle(.switch).controlSize(.regular)

@@ -61,11 +61,13 @@ macOS 14+ 대상이며, 빌드에는 Swift 6.4 Command Line Tools가 필요합�
 ```sh
 ./scripts/build-app.sh
 open '.build/Tokloom.app'
-# 또는 빌드와 실행을 함께 수행
+# 개발용 Tokloom Debug 빌드와 실행
 ./scripts/run-app.sh
 ```
 
-번들은 arm64 release이며 로컬 ad-hoc 서명을 사용합니다. 배포 서명·공증은 되어 있지 않습니다. 첫 SwiftPM 빌드는 고정된 테스트 의존성을 내려받을 수 있습니다.
+`build-app.sh`의 기본값과 `package-app.sh`는 Release이며 `Tokloom.app`을 생성합니다. 개발용은 `./scripts/build-app.sh debug` 또는 `./scripts/run-app.sh`로 만들며 이름과 창 제목이 `Tokloom Debug`인 별도 번들을 생성합니다. 기존 설정과 관측 기록은 공유합니다.
+
+배포 번들은 arm64 release이며 로컬 ad-hoc 서명을 사용합니다. 배포 서명·공증은 되어 있지 않습니다. 첫 SwiftPM 빌드는 고정된 테스트 의존성을 내려받을 수 있습니다.
 
 앱의 **연결**에서 Codex 홈을 선택하세요. 기본값은 `CODEX_HOME` 또는 `~/.codex`입니다. 기존 Codex를 재시작할 필요 없이 원본 로그를 읽기 전용으로 관측합니다. 로그 수집 주기는 1초입니다.
 

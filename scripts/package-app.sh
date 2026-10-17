@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-./scripts/build-app.sh
+./scripts/build-app.sh release
 APP="$ROOT/.build/Tokloom.app"
 OUT="$ROOT/.build/dist"
 mkdir -p "$OUT"
