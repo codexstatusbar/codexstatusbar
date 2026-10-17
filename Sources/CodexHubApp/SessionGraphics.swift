@@ -152,29 +152,30 @@ struct SessionGraphics: View {
     private var auxiliarySessions: some View {
         section("Auxiliary sessions", icon: "point.3.connected.trianglepath.dotted") {
             note("Each session keeps its own speed and chart. Inherited counters are not added together.")
-            ForEach(model.auxiliarySessions(for: session)) { child in
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(model.text("Auxiliary") + " · " + String(child.id.threadID.suffix(8)))
-                                .font(.system(size: 12, weight: .semibold))
-                            Text(child.modelDescription).font(.system(size: 10)).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 8)
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(model.status(for: child)).font(.system(size: 10))
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)], alignment: .leading, spacing: 16) {
+                ForEach(model.auxiliarySessions(for: session)) { child in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.text("Auxiliary") + " · " + String(child.id.threadID.suffix(8)))
+                            .font(.system(size: 12, weight: .semibold)).lineLimit(1).help(child.id.threadID)
+                        Text(child.modelDescription).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                            .help(child.modelDescription)
+                        HStack {
+                            Text(model.status(for: child)).font(.system(size: 10)).lineLimit(1)
                                 .foregroundStyle(ProcessTint.status(child, failed: model.error != nil, dark: colorScheme == .dark))
+                            Spacer(minLength: 4)
                             Text(model.rate(for: child) + " " + model.rateUnit.suffix)
-                                .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                                .font(.system(size: 11, weight: .medium)).monospacedDigit().lineLimit(1)
                         }
-                    }
-                    Text(model.text("보고 출력 · 30분")).font(.system(size: 10)).foregroundStyle(.secondary)
-                    ObservedTokenChart(points: model.usageHistory[child.id] ?? [], now: model.frame?.time ?? 0,
-                                       emptyText: model.text("새 사용량 로그를 기다리는 중입니다"), wallClockOffset: model.chartWallClockOffset)
-                    Button(model.text("상세정보")) { model.page = .detail(child.id) }.buttonStyle(.bordered)
-                        .accessibilityLabel(model.text("상세정보") + " " + String(child.id.threadID.suffix(8)))
-                    Divider()
-                }.padding(.vertical, 4)
+                        Text(model.text("보고 출력 · 30분")).font(.system(size: 10)).foregroundStyle(.secondary)
+                        ObservedTokenChart(points: model.usageHistory[child.id] ?? [], now: model.frame?.time ?? 0,
+                                           emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset)
+                        Button { model.page = .detail(child.id) } label: {
+                            Text(model.text("상세정보")).frame(maxWidth: .infinity, minHeight: 28)
+                        }.buttonStyle(.bordered)
+                            .accessibilityLabel(model.text("상세정보") + " " + String(child.id.threadID.suffix(8)))
+                        Divider()
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }

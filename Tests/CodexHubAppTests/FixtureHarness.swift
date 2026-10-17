@@ -360,7 +360,23 @@ import CodexHubCollector
         let unknownChild = SessionPresentation(monitor: grandchildMonitor, parentThreadID: parentRow.id.threadID)
         groupedModel.sessions = [parentRow, unknownChild]
         precondition(groupedModel.overviewState(for: parentRow).activity == .unknown && groupedModel.idleProcessCount == 0 && groupedModel.activeProcessCount == 0, "UI93 unknown child state agrees with overview group counts")
-        print("PASS UI01–UI93 and P01–P06; fixture PNGs: \(output)")
+        let gridChildren = try (1...5).map { index -> SessionPresentation in
+            var monitor = ThreadMonitor(key: .init(homeID: "fixture", runID: nil, threadID: "auxiliary-\(index)"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
+            try monitor.setConnectivity(.connected, at: 0)
+            try monitor.startTurn("turn", at: 1)
+            try monitor.observeUsage(TokenUsage(outputTokens: index * 30), turnID: "turn", source: .rolloutLog, epoch: "fixture", at: 6)
+            return SessionPresentation(monitor: monitor, cwd: "/Synthetic/project", model: "Fixture model", parentThreadID: parentRow.id.threadID)
+        }
+        groupedModel.sessions = [parentRow] + gridChildren
+        groupedModel.restoreUsageHistory(Dictionary(uniqueKeysWithValues: gridChildren.enumerated().map { index, row in
+            (row.id, [UsageHistoryPoint(time: 3, outputTokens: (index + 1) * 20), UsageHistoryPoint(time: 7, outputTokens: (index + 1) * 10)])
+        }))
+        groupedModel.page = .detail(parentRow.id)
+        precondition(groupedModel.auxiliarySessions(for: parentRow).count == 5, "UI94 all auxiliary sessions remain available for an odd-sized grid")
+        try capture(groupedModel, "auxiliary-grid-five-dark", output, dark: true, height: 1800)
+        groupedModel.language = .english
+        try capture(groupedModel, "auxiliary-grid-five-narrow", output, dark: false, height: 1800, width: 380)
+        print("PASS UI01–UI94 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

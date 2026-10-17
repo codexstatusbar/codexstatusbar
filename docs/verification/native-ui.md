@@ -526,3 +526,11 @@ remain independent. UI85–93 cover grouping, counts, scope, hierarchy, cycles,
 unknown state and history separation. Dark overview and full Details fixtures
 were inspected. Children can open their full details and navigate back to the
 main session. Historical cumulative values are not converted into new chart data.
+
+## Auxiliary session grid
+
+Auxiliary sessions use a two-column LazyVGrid with separate state, speed, compact
+30-minute output chart and full-width Details control per child. UI94 retains all
+five children in an odd-sized fixture; 460pt dark and 380pt English/light renders
+were inspected for the 2+2+1 layout. UI01–UI94/P01–P06 passed. No usage aggregation
+or parent matching rules changed.
