@@ -629,3 +629,22 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(try await restored.loadChartHistory() == nil)
     #expect(try Data(contentsOf: s.log) == original)
 }
+
+@Test func S238LargeRolloutStillIdentifiesSessionWithoutInventingThroughput() async throws {
+    let s = try Sandbox()
+    try s.write(meta + usage(100))
+    let handle = try FileHandle(forWritingTo: s.log)
+    try handle.truncate(atOffset: 300 * 1024 * 1024)
+    try handle.close()
+    let collector = try s.collector()
+    let snapshot = try await collector.refresh()
+    #expect(snapshot.sessions.count == 1)
+    #expect(snapshot.sessions.first?.cwd == "/project")
+    #expect(snapshot.sessions.first?.monitor.key.threadID == "session-a")
+    #expect(snapshot.sessions.first?.monitor.activity == .unknown)
+    if let session = snapshot.sessions.first {
+        #expect(try session.monitor.workAverageRate(at: 100) == nil)
+    }
+    let size = try FileManager.default.attributesOfItem(atPath: s.log.path)[.size] as? NSNumber
+    #expect(size?.int64Value == Int64(314_572_800))
+}

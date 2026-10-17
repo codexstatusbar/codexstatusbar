@@ -308,3 +308,15 @@ batched reads, ordinary/overlapping tool waits, held values and late final usage
 S234 covers missing timestamps. C28 covers explicit durations and holding the last
 valid estimate. All 63 Core/Collector tests passed. These are synthetic contract
 checks, not proof of pure server decode timing or full-product QA.
+
+## Large rollout identity recovery
+
+A live CLI process had a 391MB rollout, above the previous 256MiB whole-file
+cap, so no session identity reached the app despite a valid session_meta header.
+Ordinary rollouts now use the existing 1MiB read and bounded-line limits without
+a whole-file size cap. Managed/hook limits remain unchanged. Large existing logs
+are caught up incrementally; historical usage never becomes current throughput.
+S238 reproduced the missing session with a 300MiB sparse fixture, then verified
+project/thread discovery, no fabricated rate and unchanged original file size.
+All 69 Core/Collector tests passed. A separate app-server process with no open
+rollout cannot safely be assigned to a session merely from its working directory.

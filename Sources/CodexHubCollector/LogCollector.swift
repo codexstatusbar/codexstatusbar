@@ -298,7 +298,10 @@ public actor LogCollector {
                 let id = "\(input.hook ? "hook:" : (input.managed ? "direct:" : ""))\(info.st_dev):\(info.st_ino)"
                 identity = id
                 seen.insert(id)
-                guard info.st_size <= (input.hook ? 4_194_304 : maximumFile) else { throw CollectorError.oversizedRecord }
+                // Rollouts can grow indefinitely; maximumRead and maximumLine bound each pass.
+                if input.hook || input.managed {
+                    guard info.st_size <= (input.hook ? 4_194_304 : maximumFile) else { throw CollectorError.oversizedRecord }
+                }
                 let modified = min(wall, Double(info.st_mtimespec.tv_sec))
                 guard modified >= wall - Double(policy.days) * 86400 else {
                     if input.managed, nextStates[id]?.managedValidated != true { diagnose(CollectorDiagnostic(fileIdentity: id, error: .cleanupDeferred)) }
