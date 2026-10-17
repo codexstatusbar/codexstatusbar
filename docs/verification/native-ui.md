@@ -265,3 +265,16 @@ to Checking on every pass. The page explains the automatic collection interval.
 Initial connection and user-requested refresh still show progress and preserve
 errors. UI01–UI36/P01–P06 and the arm64 app/helper build passed for this follow-up;
 actual replacement UI remains to be checked with the user's opened popover.
+
+
+## Settings lock follow-up
+
+The user's screenshot exposed a remaining bug: background polling still toggled
+`model.busy`, disabling retention, metadata, and connection controls every cycle.
+Polling now owns a separate task handle and does not write the foreground UI lock.
+Refresh, retention changes, and clear operations acquire that lock immediately,
+await any in-flight poll, then execute; home changes cancel the old poll and retain
+generation checks. UI01–UI36/P01–P06 and the arm64 build passed. These fixture
+checks do not exercise the native polling scheduler; actual multi-cycle settings
+interaction after replacement remains unverified. No retention value or metadata
+was changed during verification.

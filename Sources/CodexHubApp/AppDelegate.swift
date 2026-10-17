@@ -9,6 +9,7 @@ import CodexHubCollector
     private var menu: NativeMenuController?
     private var collector: LogCollector?
     private var polling: Task<Void, Never>?
+    private var backgroundRefresh: Task<Void, Never>?
     private var generation = 0
     private let defaults = UserDefaults.standard
 
@@ -114,6 +115,7 @@ import CodexHubCollector
 
     private func connect(home: URL) {
         polling?.cancel()
+        backgroundRefresh?.cancel()
         generation += 1
         let current = generation
         var previous = collector
@@ -146,16 +148,20 @@ import CodexHubCollector
                 model.checkingConnection = false
                 while !Task.isCancelled && generation == current {
                     if !model.busy {
-                        model.busy = true
-                        do {
-                            let snapshot = try await service.refresh()
-                            guard generation == current, !Task.isCancelled else { return }
-                            try await apply(snapshot)
-                        } catch {
-                            guard generation == current else { return }
-                            collectionFailed(error)
+                        let refresh = Task {
+                            do {
+                                let snapshot = try await service.refresh()
+                                guard generation == current, !Task.isCancelled else { return }
+                                try await apply(snapshot)
+                            } catch {
+                                guard generation == current else { return }
+                                collectionFailed(error)
+                            }
                         }
-                        model.busy = false
+                        backgroundRefresh = refresh
+                        await refresh.value
+                        guard generation == current else { return }
+                        backgroundRefresh = nil
                     }
                     do { try await Task.sleep(for: .seconds(1)) } catch { return }
                 }
@@ -238,6 +244,8 @@ import CodexHubCollector
         model.checkingConnection = true
         let current = generation
         Task {
+            await backgroundRefresh?.value
+            guard generation == current else { return }
             defer { if generation == current { model.busy = false; model.checkingConnection = false } }
             do {
                 let snapshot = try await collector.refresh()
@@ -252,6 +260,8 @@ import CodexHubCollector
         model.busy = true
         let current = generation
         Task {
+            await backgroundRefresh?.value
+            guard generation == current else { return }
             defer { if generation == current { model.busy = false } }
             do {
                 try await collector.clearMetadata()
@@ -268,6 +278,8 @@ import CodexHubCollector
         model.busy = true
         let current = generation
         Task {
+            await backgroundRefresh?.value
+            guard generation == current else { return }
             defer { if generation == current { model.busy = false } }
             do {
                 try await collector.updateRetention(RetentionPolicy(days: days, maximumSessions: 1000))
@@ -295,6 +307,7 @@ import CodexHubCollector
 
     func applicationWillTerminate(_ notification: Notification) {
         polling?.cancel()
+        backgroundRefresh?.cancel()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 }
