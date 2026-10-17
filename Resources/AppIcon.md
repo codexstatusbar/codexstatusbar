@@ -6,6 +6,8 @@ at 1x and 2x resolution. Native `sips` resized the source and `iconutil` package
 the representations. `scripts/build-app.sh` copies the ICNS into the app bundle;
 `Info.plist` selects it through `CFBundleIconFile`.
 
-## Generation prompt
+## Flat revision prompt
 
-Use case: logo-brand. Create one production macOS app icon for Codex Hub, a developer tool monitoring token throughput. Square 1024 by 1024 canvas, transparent outside a generously rounded-square blue glass tile occupying 88 percent of canvas, centered straight-on. A single bold luminous white abstract C-shaped ring wrapping three ascending cyan token bars, simple recognizable silhouette at 32px, generous internal spacing. Polished restrained macOS liquid-glass material, deep cobalt and soft indigo, subtle upper-left rim highlight, gentle depth, crisp edges. No words, letters rendered as text, numbers, watermark, mockup, scene, extra icons, or OpenAI knot logo. Final standalone icon asset.
+Edited the existing icon using the built-in imagegen tool:
+
+Edit this app icon into a truly flat minimal vector-style icon. Preserve the centered rounded-square tile, white C-shaped ring and three ascending token bars, same recognizable composition and transparent outer margin. Replace every glossy material, gradient, bevel, rim, highlight, texture and shadow with completely uniform solid fills. Tile solid restrained cobalt blue #3157D5; C solid white; three bars one uniform light cyan #73DDEB. Crisp clean antialiased edges, smooth geometrically simple curves, no speckles or glow outside the tile. No 3D, lighting, shadows, gradients, text or additional objects. Standalone production macOS icon.
