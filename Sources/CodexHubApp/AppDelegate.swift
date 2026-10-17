@@ -12,7 +12,7 @@ import CodexHubCollector
     private var backgroundRefresh: Task<Void, Never>?
     private var generation = 0
     private var savedChartHistory: [ThreadKey: [UsageHistoryPoint]]?
-    private var chartHomeID = ""
+    private var chartHomePath = ""
     private let defaults = UserDefaults.standard
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -157,11 +157,11 @@ import CodexHubCollector
                 try await service.updateRetention(RetentionPolicy(days: model.retentionDays, maximumSessions: 1000))
                 guard generation == current, !Task.isCancelled else { return }
                 collector = service
-                chartHomeID = homeID
+                chartHomePath = canonicalHome.path
                 do {
                     let data = try await service.loadChartHistory()
                     guard generation == current else { return }
-                    model.restoreUsageHistory(try UsageHistoryArchive.decode(data, home: homeID, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970))
+                    model.restoreUsageHistory(try UsageHistoryArchive.decode(data, home: canonicalHome.path, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970))
                     savedChartHistory = nil
                 } catch {
                     guard generation == current else { return }
@@ -259,7 +259,7 @@ import CodexHubCollector
         if savedChartHistory != model.usageHistory, let collector {
             let history = model.usageHistory
             do {
-                let data = try UsageHistoryArchive.encode(history, home: chartHomeID, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970)
+                let data = try UsageHistoryArchive.encode(history, home: chartHomePath, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970)
                 try await collector.saveChartHistory(data)
                 guard generation == current else { return }
                 savedChartHistory = history

@@ -455,3 +455,14 @@ Speed units now display as `t/s` and `t/m` across the menu, overview, session ro
 details and settings. Stored unit preferences and the 60x minute conversion are
 unchanged. The menu uses 12pt monospaced digits; the overview number is 24pt and
 row rates are 11pt. UI07/36/57/59 retain explicit unit and conversion assertions.
+
+## Restart persistence scope regression
+
+The application passed the hashed metadata-directory identifier to the chart
+archive while Collector ThreadKey.homeID contains the canonical Codex home path.
+Encoding silently filtered every real sample out. Read-only inspection confirmed
+an existing archive with zero entries and samples. UI73 reproduced the silent
+empty-write bug before the fix; UI74 checks the real path-shaped identity round
+trip. AppDelegate now supplies the canonical home path for both encode and decode;
+encoding rejects mismatched scopes instead of silently discarding samples.
+Previously empty archives cannot reconstruct the lost observations.

@@ -11,7 +11,8 @@ enum UsageHistoryArchive {
 
     static func encode(_ history: [ThreadKey: [UsageHistoryPoint]], home: String, monotonic: Double, wall: Double) throws -> Data {
         guard monotonic.isFinite, monotonic >= 0, wall.isFinite else { throw Failure.invalid }
-        let entries = history.filter { $0.key.homeID == home }.map { key, points in
+        guard history.keys.allSatisfy({ $0.homeID == home }) else { throw Failure.invalid }
+        let entries = history.map { key, points in
             Entry(thread: key.threadID, run: key.runID, points: points.filter {
                 $0.time.isFinite && $0.time > monotonic - UsageHistoryPoint.windowSeconds && $0.time <= monotonic && $0.outputTokens > 0
             }.suffix(UsageHistoryPoint.maximumPoints).map { Point(timestamp: wall - (monotonic - $0.time), output: $0.outputTokens) })

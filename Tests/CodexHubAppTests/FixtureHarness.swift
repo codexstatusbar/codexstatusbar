@@ -275,7 +275,13 @@ import CodexHubCollector
         precondition(!restartedModel.overviewUsageHistory.isEmpty, "UI71 valid restored charts remain visible while live speed establishes its new baseline")
         let futureHistory = try UsageHistoryArchive.decode(archive, home: "fixture", monotonic: 3, wall: 9000)
         precondition(futureHistory.isEmpty, "UI72 clock rollback does not display future samples")
-        print("PASS UI01–UI72 and P01–P06; fixture PNGs: \(output)")
+        let pathKey = ThreadKey(homeID: "/tmp/chart-home", runID: nil, threadID: "root")
+        let pathHistory = [pathKey: [UsageHistoryPoint(time: 10, outputTokens: 42)]]
+        precondition((try? UsageHistoryArchive.encode(pathHistory, home: "hashed-directory-id", monotonic: 11, wall: 100)) == nil, "UI73 wrong persistence scope must fail rather than silently save empty history")
+        let pathArchive = try UsageHistoryArchive.encode(pathHistory, home: pathKey.homeID, monotonic: 11, wall: 100)
+        let pathRestored = try UsageHistoryArchive.decode(pathArchive, home: pathKey.homeID, monotonic: 20, wall: 102)
+        precondition(pathRestored[pathKey]?.first?.outputTokens == 42, "UI74 collector path identity survives chart persistence")
+        print("PASS UI01–UI74 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
