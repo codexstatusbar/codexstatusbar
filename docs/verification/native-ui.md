@@ -200,3 +200,19 @@ with at most one decimal; source integers are preserved. UI26–UI28 cover small
 counts, K/M and G formatting, including explicit half-up rounding. UI01–UI28 and
 P01–P06 passed; final app build passed. Actual Live rates remain unavailable for
 Logs and are not inferred from these cumulative counters.
+
+## Fast and Ultrafast provenance
+
+Summary separates the recorded/requested session tier from the selected home's
+configured default. Current inspected sessions did not report a speed tier, while
+the home default was fast; the UI therefore does not claim those sessions actually
+used Fast. Optional future turn_context.service_tier records are allowlisted by
+the shared ServiceTier enum. No API call, trust change or config write occurs.
+Home config reads are owner/regular-file/no-follow/size/change checked. Its parser
+accepts only a simple root default and refuses ambiguity/multiline content rather
+than guessing profile or CLI configuration. UI29–UI34 cover those boundaries and
+Fast/priority/Ultrafast mapping. All 51 Core/Collector tests, UI01–UI34, P01–P06 and
+final arm64 build passed in scope. Full QA remains unapproved/uncompleted.
+
+Sources: https://developers.openai.com/api/docs/guides/fast-mode and
+https://developers.openai.com/api/docs/guides/ultrafast-mode (retrieved 2026-10-17).

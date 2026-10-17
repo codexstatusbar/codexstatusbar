@@ -345,7 +345,7 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
 @Test func S224ReportedProcessDetailsPersistAndQuotaOnlyEventsUpdate() async throws {
     let s = try Sandbox()
     try s.write(meta.replacingOccurrences(of: "\"cwd\"", with: "\"source\":\"cli\",\"cwd\"") + """
-    {"type":"turn_context","payload":{"turn_id":"t","model":"gpt-6.1-sol","effort":"high"}}
+    {"type":"turn_context","payload":{"turn_id":"t","model":"gpt-6.1-sol","effort":"high","service_tier":"ultrafast"}}
     {"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":500,"output_tokens":100},"last_token_usage":{"total_tokens":600},"model_context_window":1000},"rate_limits":{"primary":{"used_percent":21.0,"window_minutes":10080,"resets_at":1800000000},"secondary":null}}}
 
     """)
@@ -353,6 +353,7 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     let first = try #require(try await c?.refresh().sessions.first)
     #expect(first.model == "gpt-6.1-sol")
     #expect(first.usageDetails?.reasoningEffort == "high")
+    #expect(first.usageDetails?.serviceTier == .ultrafast)
     #expect(first.usageDetails?.contextTokens == 600)
     #expect(first.usageDetails?.contextWindow == 1000)
     #expect(first.usageDetails?.limits?.first?.remainingPercent == 79)
@@ -382,6 +383,7 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     let snapshot = try await c.refresh()
     let details = try #require(snapshot.sessions.first?.usageDetails)
     #expect(details.reasoningEffort == nil)
+    #expect(details.serviceTier == nil)
     #expect(details.contextTokens == nil)
     #expect(details.contextWindow == nil)
     #expect(details.limits?.isEmpty == true)

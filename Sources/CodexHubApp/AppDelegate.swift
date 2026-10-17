@@ -179,9 +179,13 @@ import CodexHubCollector
 
     private func apply(_ snapshot: CollectorSnapshot) async throws {
         let current = generation
-        let running = await Task.detached(priority: .utility) { RunningCodexProcess.capture() }.value
+        let home = model.codexHome
+        let observed = await Task.detached(priority: .utility) {
+            (RunningCodexProcess.capture(), HelperConnection.configuredServiceTier(home: home))
+        }.value
         guard generation == current else { return }
-        guard let running else {
+        model.configuredServiceTier = observed.1
+        guard let running = observed.0 else {
             model.sessions = []; model.unattachedProcesses = []; model.frame = nil
             model.error = "Running Codex processes could not be inspected."
             return

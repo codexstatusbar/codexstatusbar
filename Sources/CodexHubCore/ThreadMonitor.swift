@@ -18,6 +18,20 @@ public struct ProcessIdentity: Hashable, Sendable {
     }
 }
 
+public enum ServiceTier: String, Codable, Sendable {
+    case automatic = "auto", standard = "default", flex, scale, priority, fast, ultrafast
+    public var displayName: String {
+        switch self {
+        case .fast, .priority: "Fast"
+        case .ultrafast: "Ultrafast"
+        case .automatic: "Auto"
+        case .standard: "Standard"
+        case .flex: "Flex"
+        case .scale: "Scale"
+        }
+    }
+}
+
 public enum Connectivity: String, Sendable { case connected, degraded, disconnected, unknown }
 public enum Activity: String, Sendable { case idle, working, generating, toolRunning, approvalWait, unknown }
 public enum Measurement: String, Sendable { case warmingUp, estimated, reported, partial, unavailable }

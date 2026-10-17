@@ -33,7 +33,7 @@ struct SessionPresentation: Identifiable {
         }
     }
     var modelDescription: String {
-        [model, usageDetails?.reasoningEffort].compactMap { $0 }.joined(separator: " · ")
+        [model, usageDetails?.reasoningEffort, usageDetails?.serviceTier?.displayName].compactMap { $0 }.joined(separator: " · ")
     }
     var contextDescription: String {
         guard let details = usageDetails, let used = details.contextTokens, let window = details.contextWindow, window > 0 else { return "Unavailable" }
@@ -106,6 +106,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var frame: ReportedFrame?
     var measurementMode: MeasurementMode = .reported
     var updateMeasurementMode: ((MeasurementMode) -> Void)?
+    var configuredServiceTier: ServiceTier?
     var hooksBusy = false
     var hooksResult = "Not checked. Hook trust and runtime compatibility are unverified."
     var hookAction: ((HelperConnection.HookAction) -> Void)?

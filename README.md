@@ -45,6 +45,8 @@ env CODEX_HOME="$HOME/.codex" '/path/to/Codex Hub.app/Contents/Helpers/codex-hub
 
 모드 선택은 Settings에 있으며 `Reported · 10s`와 `Live · 5s`로 표시합니다. 메뉴바·상단 대표 값은 같은 모드의 살아 있는 측정 항목 합계이며, 행마다 개별 속도를 보여 줍니다. 현재 모델이나 소스가 Live 추정을 지원하지 않으면 값은 미측정으로 남고 임의로 0을 만들지 않습니다.
 
+Fast/Ultrafast는 Summary에서 프로세스가 기록한 요청 티어와 Codex home의 기본 설정을 따로 표시합니다. `priority`와 `fast`는 Fast로 표시합니다. 프로필·CLI override와 서버의 실제 응답 티어는 기본 설정과 다를 수 있으므로, 세션 기록이 없으면 활성 여부를 미확인으로 둡니다. home 설정은 작고 소유권이 확인된 일반 파일의 단순 root-level `service_tier`만 읽으며 변경하지 않습니다.
+
 ## 현재 범위
 
 Live `≈`는 관리형 direct relay에서 처음부터 완전하게 관측한 가시 응답 텍스트만 공식 `o200k_base` 자산으로 계산합니다. 자산과 MIT 라이선스는 SwiftPM 리소스 번들로 helper 옆에 포함되며 실행 중 내려받지 않습니다. 관측된 provider 식별자가 정확히 `openai`이고 모델이 `o1`, `o3`, `o4-mini`, `gpt-5`, `gpt-4.1`, `gpt-4o` 중 하나인 경우만 지원합니다. 다른 모델·provider, 누락된 모델 정보, 완전하지 않은 시작, 갭, 오래된 관측과 워밍업은 unavailable/partial로 남습니다. provider 식별자는 원격 서버 신원의 보증이 아닙니다.
@@ -59,7 +61,7 @@ Hook은 상태 보조 자료일 뿐 사용량 소스가 아닙니다. 선택한 
 
 전체 PRD의 출시 완료 상태가 아닙니다. 부모/자식 합산 범위는 확인되지 않으면 Partial로 남깁니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다.
 
-**2026-10-17 사용자 요청으로 QA를 재개했습니다.** Core/Collector 자동 테스트 51개가 통과했고 합성 UI fixture UI01–UI28가 통과했습니다. 실제 메뉴바 앱에서 발견한 읽기 전용 하드링크 로그 거부를 수정했으며, private 메타데이터의 단일 링크 제한은 유지합니다. 전체 QA 완료 상태는 아니며 TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기, Live tokenizer 동등성과 실제 Hook 설치/신뢰·provider 동작은 미검증입니다. 최신 범위는 [QA 기록](docs/verification/collector.md)을 참고하세요.
+**2026-10-17 사용자 요청으로 QA를 재개했습니다.** Core/Collector 자동 테스트 51개가 통과했고 합성 UI fixture UI01–UI34가 통과했습니다. 실제 메뉴바 앱에서 발견한 읽기 전용 하드링크 로그 거부를 수정했으며, private 메타데이터의 단일 링크 제한은 유지합니다. 전체 QA 완료 상태는 아니며 TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기, Live tokenizer 동등성과 실제 Hook 설치/신뢰·provider 동작은 미검증입니다. 최신 범위는 [QA 기록](docs/verification/collector.md)을 참고하세요.
 
 자세한 내용: [PRD](docs/Codex_Hub_PRD.md), [관리형 helper 계약](docs/managed-helper.md), [네이티브 구현 기록](docs/verification/native-ui.md).
 

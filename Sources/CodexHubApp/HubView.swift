@@ -123,6 +123,9 @@ struct HubView: View {
             if session.sourceReconciliationPending { Text("Partial · source reconciliation pending") }
             if session.observationStopped { Text("Observation stopped · a fresh measurement baseline is required.") }
             value("Model / reasoning", session.modelDescription.isEmpty ? "Unavailable" : session.modelDescription)
+            value("Requested speed tier", session.usageDetails?.serviceTier?.displayName ?? "Not reported")
+            value("Home default tier", model.configuredServiceTier?.displayName ?? "Not reported")
+            Text("The home default can be overridden. The server's actual tier may differ from the requested setting.").font(.system(size: 11))
             value("Context", session.contextDescription)
             value("Reported cumulative tokens", session.tokenDescription)
             value("Cached input", baseline.map { $0.cachedInputTokens.formatted() } ?? "Unavailable")

@@ -26,3 +26,6 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 - **Process input/output**: the selected authority's last reported cumulative input/output counter snapshot. Inherited/fork history can be included; these are not current-turn generation counters.
 
 - **Activity reattachment**: the app proves the current process owns the exact source file identity before the collector restores its recorded latest turn state. A fresh validated Hook can recover a matching turn whose start is unavailable. Reattachment clears the rate window and preserves an incomplete turn average; historical token deltas never become current throughput.
+
+- **Requested speed tier**: the session's recorded service_tier selection (Fast includes fast/priority, Ultrafast is ultrafast). It is not proof of the provider's actual served tier.
+- **Home default tier**: the read-only root service_tier in the selected Codex home's config.toml. Profile/CLI/project overrides may differ; this value never substitutes for missing per-session evidence.

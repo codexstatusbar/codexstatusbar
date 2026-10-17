@@ -15,6 +15,7 @@ public struct RetentionPolicy: Sendable, Equatable {
 
 public struct SessionUsageDetails: Codable, Sendable {
     public var reasoningEffort: String?
+    public var serviceTier: ServiceTier?
     public var contextTokens: Int?
     public var contextWindow: Int?
     public var limits: [UsageLimit]?
@@ -928,6 +929,7 @@ public actor LogCollector {
         if state.usageDetails == nil { state.usageDetails = SessionUsageDetails() }
         if type == "turn_context" {
             state.usageDetails?.reasoningEffort = identifier(payload["effort"]).flatMap { $0.utf8.count <= 32 ? $0 : nil }
+            state.usageDetails?.serviceTier = (payload["service_tier"] as? String).flatMap(ServiceTier.init(rawValue:))
             return
         }
         if let rawLimits = payload["rate_limits"] as? [String: Any] {
