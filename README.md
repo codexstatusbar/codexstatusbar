@@ -3,7 +3,7 @@
 <div align="center">
   <img src="Resources/AppIcon.png" alt="Tokloom app icon" width="112" />
   <h1>Tokloom</h1>
-  <p><strong>Your Codex workflow, at a glance.</strong></p>
+  <p><strong>Your Codex and Claude Code workflow, at a glance.</strong></p>
   <p>See what's running, how much it has generated,<br />and how much of your usage allowance remains—all from the menu bar.</p>
   <p><sub>macOS 14+ · Apple Silicon · SwiftUI + AppKit · English / 한국어</sub></p>
   <p>
@@ -16,8 +16,9 @@
 
 ---
 
-Tokloom is a native menu bar monitor for developers using Codex. Keep your existing terminal and track running processes, output speed, and token usage in one place.
+Tokloom is a native menu bar monitor for developers using Codex or Claude Code. Keep your existing terminal and track running processes, output speed, and token usage for both tools in one place.
 
+- **Codex and Claude Code together** — running Claude Code sessions appear beside Codex ones, each marked with its own icon, and their speeds add up to one combined number (see [Claude Code sessions](#claude-code-sessions)).
 - **Follow your work** — menu bar `t/s` or `t/m`, per-process speed, and working/idle states.
 - **Keep 30 minutes of history** — minute-by-minute output charts that survive app restarts.
 - **Inspect each session** — model, reasoning effort, context utilization, input/output tokens, and remaining usage allowance.
@@ -31,8 +32,8 @@ Tokloom is a native menu bar monitor for developers using Codex. Keep your exist
   <tr>
     <td width="50%" align="center" valign="top">
       <h3>01 · Work at a glance</h3>
-      <p>Combined speed, active processes,<br />and observed output over the last 30 minutes.</p>
-      <a href="docs/images/overview-en.png"><img src="docs/images/overview-en.png" alt="Tokloom overview showing speed, output history and process status" width="340" /></a>
+      <p>Combined Codex and Claude speed, active sessions,<br />and observed output over the last 30 minutes.</p>
+      <a href="docs/images/overview-en.png"><img src="docs/images/overview-en.png" alt="Tokloom overview showing combined Codex and Claude Code speed, output history and session status" width="340" /></a>
     </td>
     <td width="50%" align="center" valign="top">
       <h3>02 · Inside each session</h3>
@@ -207,7 +208,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 79 Core/Collector tests, 102 synthetic UI/process checks (UI01–UI95 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 79 Core/Collector tests, 103 synthetic UI/process checks (UI01–UI96 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 

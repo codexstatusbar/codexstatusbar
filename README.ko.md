@@ -3,7 +3,7 @@
 <div align="center">
   <img src="Resources/AppIcon.png" alt="Tokloom 앱 아이콘" width="112" />
   <h1>Tokloom</h1>
-  <p><strong>Codex 작업의 흐름을 메뉴바에서.</strong></p>
+  <p><strong>Codex와 Claude Code 작업의 흐름을 메뉴바에서.</strong></p>
   <p>지금 어떤 작업이 진행 중인지, 얼마나 출력했는지,<br />사용 한도가 얼마나 남았는지 한눈에 확인하세요.</p>
   <p><sub>macOS 14+ · Apple Silicon · SwiftUI + AppKit · 한국어 / English</sub></p>
   <p>
@@ -16,8 +16,9 @@
 
 ---
 
-Tokloom은 Codex를 사용하는 개발자를 위한 네이티브 메뉴바 모니터입니다. 기존 터미널을 그대로 사용하면서, 실행 중인 프로세스의 활동 상태·출력 속도·토큰 사용량을 확인할 수 있습니다.
+Tokloom은 Codex 또는 Claude Code를 사용하는 개발자를 위한 네이티브 메뉴바 모니터입니다. 기존 터미널을 그대로 사용하면서, 두 도구의 실행 중인 프로세스의 활동 상태·출력 속도·토큰 사용량을 한곳에서 확인할 수 있습니다.
 
+- **Codex와 Claude Code를 함께** — 실행 중인 Claude Code 세션이 Codex 세션 옆에 각자의 아이콘으로 표시되고, 속도는 하나의 통합 숫자로 합산됩니다([Claude Code 세션](#claude-code-세션) 참고).
 - **작업 흐름 확인** — 메뉴바의 `t/s`·`t/m`, 프로세스별 작업·대기 상태와 개별 속도.
 - **30분 출력 기록** — 분 단위 관측 차트와 앱 재시작 후 기록 복원.
 - **세션 상세정보** — 모델·추론 강도, 컨텍스트 사용률, 입력·출력 토큰과 남은 사용 한도.
@@ -31,8 +32,8 @@ Tokloom은 Codex를 사용하는 개발자를 위한 네이티브 메뉴바 모�
   <tr>
     <td width="50%" align="center" valign="top">
       <h3>01 · 작업 한눈에 보기</h3>
-      <p>전체 속도, 실행 중인 프로세스,<br />최근 30분의 관측 출력량.</p>
-      <a href="docs/images/overview.png"><img src="docs/images/overview.png" alt="Tokloom 메인 화면: 전체 속도, 출력 차트와 프로세스별 상태" width="340" /></a>
+      <p>Codex와 Claude를 합친 전체 속도, 실행 중인 세션,<br />최근 30분의 관측 출력량.</p>
+      <a href="docs/images/overview.png"><img src="docs/images/overview.png" alt="Tokloom 메인 화면: Codex와 Claude Code를 합친 전체 속도, 출력 차트와 세션별 상태" width="340" /></a>
     </td>
     <td width="50%" align="center" valign="top">
       <h3>02 · 세션 깊이 살펴보기</h3>
@@ -209,7 +210,7 @@ Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 �
 
 ## 검증 상태와 문서
 
-최근 완료한 범위는 Core/Collector 테스트 79개, UI01–UI95·P01–P07의 합성 UI/프로세스 검증 102개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
+최근 완료한 범위는 Core/Collector 테스트 79개, UI01–UI96·P01–P07의 합성 UI/프로세스 검증 103개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
 
 전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기, Live tokenizer 동등성과 전체 훅·provider 실행 경로는 검증이 남아 있습니다. 사용자가 실제 설치한 훅의 존재와 자동화된 실행·신뢰 검증은 별개입니다.
 

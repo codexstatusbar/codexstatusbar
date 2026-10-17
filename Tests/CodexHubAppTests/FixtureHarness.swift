@@ -254,8 +254,28 @@ import CodexHubCollector
         historyModel.language = .korean
         historyModel.page = .overview
         try capture(historyModel, "wide-overview-chart", output, dark: true)
-        historyModel.language = .english
-        try capture(historyModel, "readme-overview-en", output, dark: true)
+        var claudeMonitor = ThreadMonitor(key: ThreadKey(homeID: "claude:/Synthetic", runID: nil, threadID: "claude-preview"), source: .rolloutLog, epoch: "claude")
+        try claudeMonitor.setConnectivity(.connected, at: 0)
+        try claudeMonitor.observeUsage(TokenUsage(outputTokens: 0), turnID: "history", source: .rolloutLog, epoch: "claude", at: 0, historical: true)
+        try claudeMonitor.startTurn("claude-turn", at: 0)
+        try claudeMonitor.observeUsage(TokenUsage(outputTokens: 600, inputTokens: 40000, cachedInputTokens: 32000), turnID: "claude-turn", source: .rolloutLog, epoch: "claude", at: 303, rateInterval: .excludingTools(10))
+        try claudeMonitor.setGenerating(true, turnID: "claude-turn", at: 303)
+        var claudeRow = SessionPresentation(monitor: claudeMonitor, cwd: "/Synthetic/claude-preview", model: "claude-opus-5-5")
+        claudeRow.provider = .claude
+        claudeRow.rootObserved = true
+        claudeRow.process = ProcessIdentity(pid: 4242, osStartTime: "fixture")
+        claudeRow.usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data("{\"reasoningEffort\":\"medium\"}".utf8))
+        let claudePoints = stride(from: 3, to: 302, by: 7).enumerated().map { UsageHistoryPoint(time: Double($1), outputTokens: [20, 35, 10, 50, 28][$0 % 5]) }
+        let readme = HubPresentation()
+        readme.notice = historyModel.notice
+        readme.restoreUsageHistory(historyModel.usageHistory.merging([claudeMonitor.key: claudePoints]) { current, _ in current })
+        readme.sessions = [historyModel.sessions[0], claudeRow]
+        readme.frame = try ReportedFrame(monitors: readme.sessions.map(\.monitor), verifiedIndependentThreads: Set(readme.sessions.map(\.id)), at: 303)
+        precondition(readme.providerBreakdown?.hasPrefix("Codex ") == true && readme.providerBreakdown?.contains("Claude 60") == true, "UI96 combined speed lists each provider when both run")
+        readme.language = .english
+        try capture(readme, "readme-overview-en", output, dark: true)
+        readme.language = .korean
+        try capture(readme, "readme-overview-ko", output, dark: true)
         historyModel.language = .korean
         historyModel.page = .detail(historyModel.sessions[0].id)
         try capture(historyModel, "wide-detail-full-dark", output, dark: true, height: 1600)
@@ -381,7 +401,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI95 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI96 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
