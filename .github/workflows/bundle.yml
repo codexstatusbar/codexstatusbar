@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: bundle-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
@@ -62,6 +62,8 @@ jobs:
           retention-days: 14
 
   bundle:
+    permissions:
+      contents: write
     needs: [test, verify]
     runs-on: xcode-27
     timeout-minutes: 30
@@ -81,6 +83,19 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" .build/dist/*.zip .build/dist/*.sha256 --clobber
+          else
+            gh release create "$RELEASE_TAG" .build/dist/*.zip .build/dist/*.sha256 \
+              --verify-tag --title "Codex Hub $RELEASE_TAG" \
+              --notes "Apple Silicon macOS 14+ bundle. Local ad-hoc signature; not notarized. Includes the helper, tokenizer resources and app icon. See README for measurement limitations."
+          fi
       - name: Preserve build log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

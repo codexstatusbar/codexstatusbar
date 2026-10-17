@@ -37,7 +37,7 @@ open '.build/Codex Hub.app'
 저장소 **Actions → macOS bundle → 실행 결과 → Artifacts**에서
 `Codex-Hub-macos-arm64-<commit>`을 받으세요. 안에는 `Codex-Hub-macos-arm64.zip`과
 SHA-256 파일이 있습니다. 앱 ZIP에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
-아티팩트와 실행 로그는 14일간 보관하며, GitHub Release를 자동 공개하지 않습니다.
+아티팩트와 실행 로그는 14일간 보관합니다. 모든 검증과 번들 생성이 성공하면 태그 이름의 GitHub Release를 만들고 ZIP·SHA-256 파일을 업로드합니다. 같은 태그의 재실행은 릴리스 파일을 교체합니다.
 태그를 로컬에 생성한 것만으로는 실행되지 않으며, 해당 태그를 GitHub에 push해야 합니다.
 
 로컬에서도 같은 번들을 만들 수 있습니다.
