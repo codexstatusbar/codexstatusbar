@@ -156,3 +156,21 @@ provider, persistence integration and independent verification remain unrun here
 Applied: minimal-code, diagnose, mattpocock-skills:tdd, ponytail,
 reuse-defensive-decoupled-coding, orca-cli, orchestration. Disabled qa-verification
 was not loaded.
+
+## Work-average mode (user-approved 2026-10-17)
+
+The app's ReportedFrame now sums workAverageRate values at one shared frame time.
+Each turn retains an observation start and output baseline; waiting/tools/approval
+do not reset them. Completion clears the current rate and retains workAverage for
+Summary. Late same-turn usage updates that completed record without reviving it.
+A missing start/baseline, gap or reconciliation establishes an observed-period
+baseline, excluding catch-up increments. Such averages are explicitly partial.
+No-report, zero-duration and nonfinite rates remain unavailable; an actual zero
+increment report can produce zero. The low-level reportedRate API retains its
+legacy rolling-window behavior for compatibility, but the UI no longer uses it.
+
+C21 failed before the change (10-second expiry returned zero instead of 20/10).
+C21–C26 now cover sustained means, tools/waits/completion/late usage, observation
+baselines and gaps, valid zero, differing start times summed at a common end, and
+zero/tiny-time boundaries. S227 also checks the reattached observed average.
+All 58 Core/Collector tests passed. This is scoped verification, not full QA approval.

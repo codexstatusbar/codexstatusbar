@@ -43,6 +43,24 @@ public struct TurnRecord: Sendable {
     public fileprivate(set) var outcome: TurnOutcome?
     public fileprivate(set) var outputTokens = 0
     public fileprivate(set) var isComplete: Bool
+    fileprivate var observationStartedAt: Double?
+    fileprivate var observationBaselineTokens = 0
+    fileprivate var hasObservationReport = false
+    public var isObservedAveragePartial: Bool { !isComplete || observationStartedAt != startedAt }
+    public var workAverage: Double? {
+        guard let endedAt else { return nil }
+        return observedRate(at: endedAt)
+    }
+    fileprivate mutating func resetObservation(at time: Double?) {
+        observationStartedAt = time
+        observationBaselineTokens = outputTokens
+        hasObservationReport = false
+    }
+    fileprivate func observedRate(at time: Double) -> Double? {
+        guard hasObservationReport, let observationStartedAt, time.isFinite, time > observationStartedAt else { return nil }
+        let rate = Double(outputTokens - observationBaselineTokens) / (time - observationStartedAt)
+        return rate.isFinite ? rate : nil
+    }
     public var average: Double? {
         guard isComplete, let startedAt, let endedAt, endedAt > startedAt else { return nil }
         return Double(outputTokens) / (endedAt - startedAt)
@@ -107,7 +125,8 @@ public struct ThreadMonitor: Sendable {
         generating = false
         hasCurrentReport = false
         samples.removeAll()
-        turns[id] = TurnRecord(startedAt: time, isComplete: counter.baseline != nil && !counter.isPartial && !needsBaseline)
+        let complete = counter.baseline != nil && !counter.isPartial && !needsBaseline
+        turns[id] = TurnRecord(startedAt: time, isComplete: complete, observationStartedAt: complete ? time : nil)
     }
 
     public mutating func finishTurn(_ id: String, outcome: TurnOutcome, at time: Double) throws {
@@ -164,7 +183,10 @@ public struct ThreadMonitor: Sendable {
         hasCurrentReport = false
         samples.removeAll()
         needsBaseline = true
-        if let id = activeTurnID { turns[id]?.isComplete = false }
+        if let id = activeTurnID {
+            turns[id]?.isComplete = false
+            turns[id]?.resetObservation(at: nil)
+        }
     }
 
     public mutating func reconcile(source: UsageSource, epoch: String, baseline: TokenUsage, at time: Double) throws {
@@ -172,6 +194,7 @@ public struct ThreadMonitor: Sendable {
         invalidateWindow()
         counter.reconcile(source: source, epoch: epoch, baseline: baseline)
         needsBaseline = false
+        if let id = activeTurnID { turns[id]?.resetObservation(at: time) }
     }
 
     @discardableResult
@@ -189,13 +212,26 @@ public struct ThreadMonitor: Sendable {
         switch result {
         case .baseline:
             needsBaseline = false
-            if let id = activeTurnID { turns[id]?.isComplete = false }
+            if let id = activeTurnID {
+                turns[id]?.isComplete = false
+                turns[id]?.resetObservation(at: time)
+            }
         case .regression, .suspended:
             invalidateWindow()
         case .delta(let delta):
             var record = turns[turnID] ?? TurnRecord(isComplete: false)
             record.outputTokens += delta
-            if historical || needsBaseline { record.isComplete = false }
+            if historical || needsBaseline {
+                record.isComplete = false
+                if activeTurnID == turnID {
+                    record.resetObservation(at: time)
+                }
+            } else if connectivity == .connected, record.observationStartedAt != nil {
+                record.hasObservationReport = true
+            }
+            if activeTurnID == turnID, record.observationStartedAt == nil {
+                record.resetObservation(at: time)
+            }
             turns[turnID] = record
             if !historical && !needsBaseline && connectivity == .connected && activeTurnID == turnID {
                 hasCurrentReport = true
@@ -205,6 +241,17 @@ public struct ThreadMonitor: Sendable {
         case .secondarySource, .wrongEpoch: break
         }
         return result
+    }
+
+    public var workAverageIsPartial: Bool {
+        activeTurnID.flatMap { turns[$0] }?.isObservedAveragePartial ?? false
+    }
+
+    /// Current work or observed-period average; all rows use the same frame time.
+    public func workAverageRate(at time: Double) throws -> Double? {
+        try validateTime(time)
+        guard let id = activeTurnID, measurement == .reported else { return nil }
+        return turns[id]?.observedRate(at: time)
     }
 
     /// Fixed PRD reported window; all rows must use the same injected frame time.

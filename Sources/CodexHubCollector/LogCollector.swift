@@ -78,6 +78,7 @@ struct FileState: Codable, Sendable {
     var usageSource: UsageSource { sourceName == "direct-relay" ? .directRelay : .rolloutLog }
     var offset: Int64 = 0
     var historicalUntil: Int64
+    var discardingOversizedLine: Bool?
     var boundaryHash = ""
     var epoch = UUID().uuidString
     var threadID: String?
@@ -389,7 +390,16 @@ public actor LogCollector {
                 let data = Data(bytes.prefix(readCount))
                 var consumed = 0
                 while let newline = data[consumed...].firstIndex(of: 10) {
-                    guard newline - consumed <= maximumLine else { throw CollectorError.oversizedRecord }
+                    if state.discardingOversizedLine == true || newline - consumed > maximumLine {
+                        guard !input.managed && !input.hook else { throw CollectorError.oversizedRecord }
+                        state.discardingOversizedLine = false
+                        state.hasGap = true
+                        try monitor?.markGap(at: now)
+                        visible.invalidate(reason: "oversized_record")
+                        diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
+                        consumed = newline + 1
+                        continue
+                    }
                     let historical = state.offset + Int64(consumed) < state.historicalUntil
                     do {
                         if input.hook {
@@ -412,7 +422,16 @@ public actor LogCollector {
                     consumed = newline + 1
                     if consumed == data.count { break }
                 }
-                guard data.count - consumed <= maximumLine else { throw CollectorError.oversizedRecord }
+                if state.discardingOversizedLine == true || data.count - consumed > maximumLine {
+                    guard !input.managed && !input.hook else { throw CollectorError.oversizedRecord }
+                    // Persist bounded discard progress so a large transcript record cannot pin the cursor.
+                    state.discardingOversizedLine = true
+                    state.hasGap = true
+                    try monitor?.markGap(at: now)
+                    visible.invalidate(reason: "oversized_record")
+                    diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
+                    consumed = data.count
+                }
                 var after = stat()
                 guard fstat(fd, &after) == 0, after.st_size >= info.st_size,
                       after.st_mtimespec.tv_sec == info.st_mtimespec.tv_sec && after.st_mtimespec.tv_nsec == info.st_mtimespec.tv_nsec || after.st_size > info.st_size else {

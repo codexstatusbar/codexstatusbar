@@ -15,7 +15,11 @@ open '.build/Codex Hub.app'
 
 번들은 arm64 release이며 로컬 ad-hoc 서명을 사용합니다. 배포 서명·공증은 되어 있지 않습니다. 첫 SwiftPM 빌드는 고정된 테스트 의존성을 내려받을 수 있습니다.
 
-앱의 Connection에서 Codex home을 선택하세요. 기본값은 `CODEX_HOME` 또는 `~/.codex`입니다. 기존 로그는 읽기 전용입니다. 기본 목록과 소계에는 현재 살아 있는 같은 사용자 소유 `codex` 프로세스만 포함합니다. PID와 OS 시작 시각을 확인하고, 쓰기 중인 파일의 device/inode가 세션 로그와 정확히 일치할 때 연결합니다. 세션을 아직 확인하지 못한 살아 있는 프로세스는 별도 대기 행으로 표시하며 종료된 프로세스의 이력은 목록에 넣지 않습니다. `R`은 최근 10초에 새로 보고된 출력량의 처리량이고, 서버의 순수 생성 속도가 아닙니다. 상단 또는 Settings에서 Reported(10초, 기본값)와 Live visible estimate(5초)를 선택하며 선택은 저장됩니다. 미측정·워밍업 값은 `—`, 합산 범위가 불명확하면 `Partial`입니다. 세션별 값과 소계는 같은 collector 프레임을 사용하고 선택한 모드만 합산합니다. 선택한 home에서 session_meta의 source가 정확히 cli이고 ID가 일치하는 유일한 transcript로 확인된 CLI root 카운터만 **Observed CLI root subtotal**에 포함합니다. 같은 thread의 direct/log는 기존 단일 권위만 사용하므로 중복 합산하지 않습니다. subagent·unknown·중복 transcript는 개별 속도를 보여도 소계에서 제외합니다. 숫자가 있더라도 자식 전체 사용량을 입증하지 않으므로 **Partial · child scope unknown**을 유지합니다. Coverage는 기존 eligible discovered run 범위에서 측정 가능한 root 수이며 전역 전체 사용량을 뜻하지 않습니다.
+앱의 **연결**에서 Codex home을 선택하세요. 기본값은 `CODEX_HOME` 또는 `~/.codex`입니다. 원본 로그는 읽기 전용입니다. 목록에는 현재 살아 있는 프로세스만 표시하며, PID·시작 시각과 정확한 로그 파일 ID로 세션을 연결합니다. 종료된 프로세스의 이력은 메인 목록에 넣지 않습니다.
+
+기본 속도는 **작업 평균**입니다. 작업 시작 이후 새로 보고된 출력 토큰을 현재까지의 경과 시간으로 나누며 도구 실행·승인 대기도 포함합니다. 같은 시점에 각 프로세스의 평균을 계산해 합산하고, 작업이 끝나면 메인은 **대기 중**, 완료 평균은 **작업 요약**에 표시합니다. 시작을 놓쳤거나 연결 공백이 있으면 새 기준 이후의 **관측 이후 평균**으로 구분합니다. 첫 유효 보고 전에는 숫자를 만들지 않습니다.
+
+같은 세션의 direct/log는 단일 권위만 사용하고 중복 여부가 확인된 CLI root만 합계에 포함합니다. 수집 범위·제외 이유는 작업 요약에서 확인할 수 있습니다. 메인과 메뉴바에는 내부 Partial/커버리지 문구를 표시하지 않습니다.
 
 ## 실험적 관리형 실행
 
@@ -32,7 +36,7 @@ env CODEX_HOME="$HOME/.codex" '/path/to/Codex Hub.app/Contents/Helpers/codex-hub
 
 ## 구조와 저장
 
-- `CodexHubCore`: 상태·누적 사용량·10초 보고 처리량.
+- `CodexHubCore`: 상태·누적 사용량·작업/관측 구간 평균.
 - `CodexHubCollector`: 읽기 전용 rollout/관리형 메타데이터 수집과 로컬 SQLite 체크포인트.
 - `CodexHubApp`: SwiftUI 화면, AppKit 메뉴바, 사용자 설정.
 - `CodexHubHelper`: Swift 런처와 로컬 relay. 프롬프트/응답 원문은 저장하지 않습니다.
@@ -43,7 +47,7 @@ env CODEX_HOME="$HOME/.codex" '/path/to/Codex Hub.app/Contents/Helpers/codex-hub
 
 살아 있는 프로세스 행은 개별 tok/s와 모델·추론 강도를 간단히 표시하며 작업 중인 항목이 먼저 나옵니다. Summary 버튼을 누르면 컨텍스트 사용률(%), K/M/G로 줄인 누적 입력·출력 토큰과 제한 창별 남은 사용률을 확인합니다. 컨텍스트는 `last_token_usage.total_tokens / model_context_window`, 입력·출력은 선택된 권위의 누적 스냅샷입니다. 남은 사용량은 각 창의 `100 - used_percent`이며 실제 창 길이와 reset 시각을 사용합니다. 계정 한도를 합산하거나 서버에 별도 조회하지 않습니다. 누적량에는 상속한 이력이 포함될 수 있고 모든 정보는 마지막 보고값입니다.
 
-모드 선택은 Settings에 있으며 `Reported · 10s`와 `Live · 5s`로 표시합니다. 메뉴바·상단 대표 값은 같은 모드의 살아 있는 측정 항목 합계이며, 행마다 개별 속도를 보여 줍니다. 현재 모델이나 소스가 Live 추정을 지원하지 않으면 값은 미측정으로 남고 임의로 0을 만들지 않습니다.
+모드 선택은 설정에 있으며 `작업 평균`과 `실시간 추정 · 5초`로 표시합니다. 메뉴바·상단 대표 값은 같은 모드의 살아 있는 측정 항목 합계이며, 행마다 개별 속도를 보여 줍니다. 현재 모델이나 소스가 Live 추정을 지원하지 않으면 값은 미측정으로 남고 임의로 0을 만들지 않습니다.
 
 Fast/Ultrafast는 Summary에서 프로세스가 기록한 요청 티어와 Codex home의 기본 설정을 따로 표시합니다. `priority`와 `fast`는 Fast로 표시합니다. 프로필·CLI override와 서버의 실제 응답 티어는 기본 설정과 다를 수 있으므로, 세션 기록이 없으면 활성 여부를 미확인으로 둡니다. home 설정은 작고 소유권이 확인된 일반 파일의 단순 root-level `service_tier`만 읽으며 변경하지 않습니다.
 
@@ -59,9 +63,9 @@ Connection 또는 Settings의 **Check hook status**, **Install hooks…**, **Rem
 
 Hook은 상태 보조 자료일 뿐 사용량 소스가 아닙니다. 선택한 home의 정확한 세션/turn이 로그와 일치할 때만 tool 상태에 반영하며, Stop 등은 완료 후보로 표시하고 Idle을 만들지 않습니다. 설치 파일이 충돌하거나 안전하지 않으면 helper가 거부합니다. 실패·타임아웃 후에는 상태를 다시 확인하고 보존된 백업으로 복구 여부를 판단해야 합니다.
 
-전체 PRD의 출시 완료 상태가 아닙니다. 부모/자식 합산 범위는 확인되지 않으면 Partial로 남깁니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다.
+전체 PRD의 출시 완료 상태가 아닙니다. 합계의 범위 제약은 작업 요약에서 안내합니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다.
 
-**2026-10-17 사용자 요청으로 QA를 재개했습니다.** Core/Collector 자동 테스트 51개가 통과했고 합성 UI fixture UI01–UI34가 통과했습니다. 실제 메뉴바 앱에서 발견한 읽기 전용 하드링크 로그 거부를 수정했으며, private 메타데이터의 단일 링크 제한은 유지합니다. 전체 QA 완료 상태는 아니며 TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기, Live tokenizer 동등성과 실제 Hook 설치/신뢰·provider 동작은 미검증입니다. 최신 범위는 [QA 기록](docs/verification/collector.md)을 참고하세요.
+**2026-10-17 사용자 요청으로 QA를 재개했습니다.** Core/Collector 자동 테스트 58개가 통과했고 합성 UI fixture UI01–UI36가 통과했습니다. 실제 메뉴바 앱에서 발견한 읽기 전용 하드링크 로그 거부를 수정했으며, private 메타데이터의 단일 링크 제한은 유지합니다. 전체 QA 완료 상태는 아니며 TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기, Live tokenizer 동등성과 실제 Hook 설치/신뢰·provider 동작은 미검증입니다. 최신 범위는 [QA 기록](docs/verification/collector.md)을 참고하세요.
 
 자세한 내용: [PRD](docs/Codex_Hub_PRD.md), [관리형 helper 계약](docs/managed-helper.md), [네이티브 구현 기록](docs/verification/native-ui.md).
 

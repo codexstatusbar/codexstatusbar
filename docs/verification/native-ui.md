@@ -232,3 +232,28 @@ Idle restoration is regression-tested; the current active conversation was not
 artificially ended for an actual Idle capture. No provider run or Hook mutation was
 performed. Actual Logs-to-Live estimation remains unavailable by the source
 contract, and full-product QA remains incomplete.
+
+## Work-average UI and purpose-first copy
+
+Default reported mode is now labeled 작업 평균. Main shows the combined current
+work averages and each process's own average; menu text identifies 평균. Completed
+averages are near the top of 작업 요약, with observed-period averages distinguished.
+Main uses concise Korean work/readiness states. Internal Partial/coverage text is
+removed from main/menu and retained as readable scope information in Summary.
+The divider below Close is removed. UI35/36 verify the average persists after ten
+seconds and the menu contains only the meaningful metric/unit. UI01–UI36 and
+P01–P06 passed; synthetic screenshots are in `.build/qa-work-average/`. Synthetic
+values remain separate from any actual runtime observations. Release arm64 app
+and helper builds passed. Full-product QA remains incomplete.
+
+
+The user-opened app initially displayed 22.4 tok/s and Working, then degraded.
+Connection diagnostics and bounded local inspection identified a 1.16 MB
+compacted rollout record, exceeding the 256 KB per-record bound. This was not a
+successful no-gap runtime verification. The collector now persists bounded
+oversized-line discard progress, marks the measurement gap, and resumes at the
+next record without counting catch-up usage. S232 covers checkpoint restart,
+recovery, and fresh usage. Managed and Hook record limits remain fail-closed.
+The overview title now shares the close-button row, removing the empty header
+row and reducing the top inset. All 58 Core/Collector tests and UI01–UI36/P01–P06
+passed after these changes. Actual post-replacement verification is pending.

@@ -10,7 +10,7 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 - **Baseline**: first known cumulative snapshot, excluded from current throughput. Zero is allowed only for a verified empty thread.
 - **Reported output**: outputTokens, including reasoningOutputTokens as a subset; never total + last.
 - **Non-reasoning output**: output minus reasoning when that breakdown is valid; not an exact visible-answer count.
-- **Reported throughput**: newly reported output in the shared monotonic (frame − window, frame] interval divided by window seconds. Not decode speed.
+- **Reported throughput (legacy API)**: the retained low-level 10-second reported-window calculation. It is no longer the UI default; the UI uses Work average throughput.
 - **Turn average**: verified new output over observed full turn duration, including tool and approval time. Missing start or baseline means unavailable.
 - **Coverage**: measured active runs / discovered active or activity-unknown runs. Confirmed idle runs are excluded. Parent/child overlap must be resolved by the adapter before marking scope verified.
 - **History**: finished turn metadata and reported output. Late usage can correct history without changing current activity or speed.
@@ -29,3 +29,6 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 
 - **Requested speed tier**: the session's recorded service_tier selection (Fast includes fast/priority, Ultrafast is ultrafast). It is not proof of the provider's actual served tier.
 - **Home default tier**: the read-only root service_tier in the selected Codex home's config.toml. Profile/CLI/project overrides may differ; this value never substitutes for missing per-session evidence.
+
+- **Work average throughput**: reported output token growth divided by monotonic elapsed time from the observed work start to the current frame, including generation, tools and approval waits. This replaces the UI's 10-second reported window by the user's 2026-10-17 decision. Active process averages are summed at the same frame; Idle clears the current rate and retains the completed average in Summary.
+- **Observed-period average**: when start/baseline was missed or a gap invalidated continuity, the next valid report establishes a new numerator baseline and start time. Only subsequent fresh increments are averaged. It is explicitly partial and never described as the whole work average.

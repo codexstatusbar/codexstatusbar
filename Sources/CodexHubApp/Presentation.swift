@@ -36,8 +36,8 @@ struct SessionPresentation: Identifiable {
         [model, usageDetails?.reasoningEffort, usageDetails?.serviceTier?.displayName].compactMap { $0 }.joined(separator: " · ")
     }
     var contextDescription: String {
-        guard let details = usageDetails, let used = details.contextTokens, let window = details.contextWindow, window > 0 else { return "Unavailable" }
-        return (100 * Double(used) / Double(window)).formatted(.number.precision(.fractionLength(0...1))) + "% used"
+        guard let details = usageDetails, let used = details.contextTokens, let window = details.contextWindow, window > 0 else { return "미확인" }
+        return (100 * Double(used) / Double(window)).formatted(.number.precision(.fractionLength(0...1))) + "%"
     }
     var tokenDescription: String {
         guard let total = monitor.counter.baseline else { return "In — · Out —" }
@@ -54,27 +54,27 @@ struct SessionPresentation: Identifiable {
         (usageDetails?.limits ?? []).map { limit in
             let window: String
             if let minutes = limit.windowMinutes {
-                window = minutes % 1440 == 0 ? "\(minutes / 1440)d" : minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes)m"
+                window = minutes % 1440 == 0 ? "\(minutes / 1440)일" : minutes % 60 == 0 ? "\(minutes / 60)시간" : "\(minutes)분"
             } else { window = limit.name.capitalized }
             let remaining = limit.remainingPercent.formatted(.number.precision(.fractionLength(0...1)))
-            return "\(window) left \(remaining)%" + (limit.resetsAt.map { " · resets " + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) } ?? "")
+            return "\(window) \(remaining)% 남음" + (limit.resetsAt.map { " · 갱신 " + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) } ?? "")
         }
     }
     var identity: String { process.map { "PID \($0.pid)" } ?? "Session only" }
     var status: String {
         switch monitor.connectivity {
-        case .disconnected: return "Disconnected"
-        case .degraded: return "Degraded"
-        case .unknown: return "Unknown"
+        case .disconnected: return "연결 끊김"
+        case .degraded: return "수집 확인 필요"
+        case .unknown: return "상태 미확인"
         case .connected: break
         }
         switch activity {
-        case .idle: return "Idle"
-        case .working: return "Working"
-        case .generating: return "Generating"
-        case .toolRunning: return "Tool running"
-        case .approvalWait: return "Approval needed"
-        case .unknown: return "Unknown"
+        case .idle: return "대기 중"
+        case .working: return "작업 중"
+        case .generating: return "응답 생성 중"
+        case .toolRunning: return "도구 실행 중"
+        case .approvalWait: return "승인 대기"
+        case .unknown: return "상태 미확인"
         }
     }
     var priority: Int {
@@ -88,14 +88,14 @@ struct SessionPresentation: Identifiable {
     }
     func rate(at time: Double) -> String {
         guard measurement == .reported else { return "—" }
-        return HubPresentation.rate(try? monitor.reportedRate(at: time))
+        return HubPresentation.rate(try? monitor.workAverageRate(at: time))
     }
 }
 
 enum MeasurementMode: String, CaseIterable {
     case reported, live
-    var label: String { self == .reported ? "Reported · 10s" : "Live · 5s" }
-    var symbol: String { self == .reported ? "R" : "≈" }
+    var label: String { self == .reported ? "작업 평균" : "실시간 추정 · 5초" }
+    var symbol: String { self == .reported ? "" : "≈" }
 }
 
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
@@ -143,7 +143,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var close: (() -> Void)?
     var quit: (() -> Void)?
 
-    nonisolated static func rate(_ value: Double?, symbol: String = "R") -> String {
+    nonisolated static func rate(_ value: Double?, symbol: String = "") -> String {
         guard let value, value.isFinite, value >= 0 else { return "—" }
         return symbol + value.formatted(.number.precision(.fractionLength(0...1)))
     }
@@ -155,19 +155,21 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         }
     }
     var summary: String {
-        if error != nil { return "Unavailable" }
-        guard !sessions.isEmpty else { return unattachedProcesses.isEmpty ? "No running Codex" : "Codex running" }
-        if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "Disconnected" }
+        if error != nil { return "측정 불가" }
+        guard !sessions.isEmpty else { return unattachedProcesses.isEmpty ? "실행 없음" : "정보 미확인" }
+        if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "연결 끊김" }
         if let speed = aggregateRate { return Self.rate(speed, symbol: measurementMode.symbol) }
-        if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "Working" }
-        if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "Idle" }
-        return "Unknown"
+        if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "계산 준비 중" }
+        if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "대기 중" }
+        return "상태 미확인"
     }
     var menuTitle: String {
-        let text = compact ? "Hub" : summary + ((aggregateRate != nil && error == nil) ? " tok/s · Partial" : "")
+        let numeric = aggregateRate != nil && error == nil
+        let prefix = numeric && measurementMode == .reported ? "평균 " : ""
+        let text = compact ? "Hub" : prefix + summary + (numeric ? " tok/s" : "")
         return text + (sessions.contains { $0.monitor.connectivity == .connected && $0.activity == .approvalWait } ? " · !" : "")
     }
-    func status(for session: SessionPresentation) -> String { error == nil ? session.status : "Unknown" }
+    func status(for session: SessionPresentation) -> String { error == nil ? session.status : "상태 미확인" }
     func rate(for session: SessionPresentation) -> String {
         guard error == nil else { return "—" }
         return measurementMode == .reported ? session.rate(at: frame?.time ?? 0) : Self.rate(session.liveMeasurement == .estimated ? session.liveRate : nil, symbol: "≈")
@@ -200,14 +202,13 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     }
     var aggregateRate: Double? { measurementMode == .reported ? frame?.tokensPerSecond : liveAggregate.rate }
     var coverage: String {
-        guard error == nil, let frame else { return "Unavailable" }
+        guard error == nil, let frame else { return "측정 불가" }
         let live = liveAggregate
         let measured = measurementMode == .reported ? frame.measuredRuns : live.measured
         let eligible = measurementMode == .reported ? frame.eligibleRuns : live.eligible
-        return "\(measured) measured roots / \(eligible) eligible runs · Partial"
+        return "\(eligible)개 대상 중 \(measured)개 계산 가능"
     }
-    var source: String { Set(sessions.map(\.source)).count > 1 ? "Mixed sources" : sessions.first?.source ?? "Logs" }
     var freshness: String {
-        refreshedAt.map { "Checked " + $0.formatted(date: .omitted, time: .standard) } ?? "Not checked"
+        refreshedAt.map { "확인 " + $0.formatted(date: .omitted, time: .standard) } ?? "미확인"
     }
 }

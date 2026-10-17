@@ -1,6 +1,5 @@
 public struct ReportedFrame: Sendable {
     public let time: Double
-    public let windowSeconds = 10.0
     public let tokensPerSecond: Double?
     public let eligibleRuns: Int
     public let measuredRuns: Int
@@ -27,7 +26,7 @@ public struct ReportedFrame: Sendable {
         var sum = 0.0
         var hasValue = false
         for monitor in monitors {
-            let rate = try monitor.reportedRate(at: time)
+            let rate = try monitor.workAverageRate(at: time)
             guard monitor.activity != .idle else { continue }
             let run = RunKey(monitor.key)
             eligible.insert(run)
@@ -40,9 +39,9 @@ public struct ReportedFrame: Sendable {
             }
         }
         self.time = time
-        tokensPerSecond = hasValue ? sum : nil
+        tokensPerSecond = hasValue && sum.isFinite ? sum : nil
         eligibleRuns = eligible.count
         measuredRuns = measured.subtracting(incomplete).count
-        isPartial = !incomplete.isEmpty
+        isPartial = !sum.isFinite || !incomplete.isEmpty || monitors.contains { $0.activeTurnID != nil && $0.workAverageIsPartial }
     }
 }

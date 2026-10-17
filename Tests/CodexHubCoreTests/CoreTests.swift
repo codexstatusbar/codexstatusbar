@@ -44,7 +44,7 @@ func monitor(_ run: String, empty: Bool = true) throws -> ThreadMonitor {
     return m
 }
 
-@Test func C04OneFrameAggregates600And300AsR90() throws {
+@Test func C04OneFrameAggregatesWorkAverages() throws {
     var a = try monitor("a")
     var b = try monitor("b")
     try a.observeUsage(TokenUsage(outputTokens: 600), turnID: "turn", source: .rolloutLog, epoch: "e", at: 5)
@@ -142,7 +142,7 @@ func rejects(_ body: () throws -> Void) {
     var a = try monitor("a")
     try a.observeUsage(TokenUsage(outputTokens: 0), turnID: "turn", source: .rolloutLog, epoch: "e", at: 0)
     let b = try monitor("b", empty: false)
-    let f = try ReportedFrame(monitors: [a, b], verifiedIndependentThreads: [a.key, b.key], at: 0)
+    let f = try ReportedFrame(monitors: [a, b], verifiedIndependentThreads: [a.key, b.key], at: 1)
     #expect(f.measuredRuns == 1 && f.eligibleRuns == 2 && f.isPartial)
     let unverified = try ReportedFrame(monitors: [a], verifiedIndependentThreads: [], at: 0)
     #expect(unverified.tokensPerSecond == nil && unverified.isPartial)
@@ -200,7 +200,7 @@ func rejects(_ body: () throws -> Void) {
     #expect(partial.eligibleRuns == 1 && partial.measuredRuns == 0 && partial.isPartial)
     try b.observeUsage(TokenUsage(outputTokens: 50), turnID: "childTurn", source: .rolloutLog, epoch: "e", at: 1)
     let measured = try ReportedFrame(monitors: [a, b], verifiedIndependentThreads: [a.key, b.key], at: 1)
-    #expect(measured.eligibleRuns == 1 && measured.measuredRuns == 1 && measured.tokensPerSecond == 15)
+    #expect(measured.eligibleRuns == 1 && measured.measuredRuns == 1 && measured.tokensPerSecond == 150)
     try a.finishTurn("turn", outcome: .failed, at: 2)
     try b.finishTurn("childTurn", outcome: .completed, at: 2)
     let idle = try ReportedFrame(monitors: [a, b], verifiedIndependentThreads: [], at: 2)
@@ -326,4 +326,76 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     var empty = try UsageCounter(source: .rolloutLog, epoch: "e", baseline: nil,
                                  lastKnownReasoningOutputTokens: nil, lastKnownTotalTokens: nil, isPartial: false)
     #expect(empty.observe(known, source: .rolloutLog, epoch: "e") == .baseline)
+}
+
+@Test func C21WorkAverageDoesNotExpireAfterTenSeconds() throws {
+    var m = try monitor("work-average")
+    try m.observeUsage(TokenUsage(outputTokens: 600), turnID: "turn", source: .rolloutLog, epoch: "e", at: 5)
+    let later = try ReportedFrame(monitors: [m], verifiedIndependentThreads: [m.key], at: 30)
+    #expect(later.tokensPerSecond == 20)
+    let waiting = try ReportedFrame(monitors: [m], verifiedIndependentThreads: [m.key], at: 60)
+    #expect(waiting.tokensPerSecond == 10)
+}
+
+@Test func C22WorkAverageIncludesToolsAndWaitsAndClosesAtIdle() throws {
+    var m = try monitor("average-waits")
+    try m.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 5)
+    try m.setTool("tool", running: true, turnID: "turn", at: 7)
+    #expect(try m.workAverageRate(at: 10) == 10)
+    try m.setApproval("approval", waiting: true, turnID: "turn", at: 15)
+    try m.observeUsage(TokenUsage(outputTokens: 200), turnID: "turn", source: .rolloutLog, epoch: "e", at: 20)
+    #expect(try m.workAverageRate(at: 20) == 10)
+    try m.finishTurn("turn", outcome: .completed, at: 40)
+    #expect(m.activity == .idle)
+    #expect(try m.workAverageRate(at: 40) == nil)
+    #expect(m.turns["turn"]?.workAverage == 5)
+    try m.observeUsage(TokenUsage(outputTokens: 240), turnID: "turn", source: .rolloutLog, epoch: "e", at: 45)
+    #expect(m.turns["turn"]?.workAverage == 6)
+    #expect(try m.workAverageRate(at: 45) == nil)
+}
+
+@Test func C23MissingBaselineAndGapProduceOnlyObservedPeriodAverage() throws {
+    var m = try monitor("average-gap", empty: false)
+    try m.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 10)
+    #expect(try m.workAverageRate(at: 10) == nil)
+    try m.observeUsage(TokenUsage(outputTokens: 140), turnID: "turn", source: .rolloutLog, epoch: "e", at: 20)
+    #expect(try m.workAverageRate(at: 30) == 2)
+    #expect(m.workAverageIsPartial)
+    try m.markGap(at: 31)
+    try m.observeUsage(TokenUsage(outputTokens: 500), turnID: "turn", source: .rolloutLog, epoch: "e", at: 40)
+    #expect(try m.workAverageRate(at: 40) == nil)
+    try m.observeUsage(TokenUsage(outputTokens: 560), turnID: "turn", source: .rolloutLog, epoch: "e", at: 50)
+    let frame = try ReportedFrame(monitors: [m], verifiedIndependentThreads: [m.key], at: 60)
+    #expect(frame.tokensPerSecond == 3 && frame.isPartial)
+    try m.finishTurn("turn", outcome: .completed, at: 70)
+    #expect(m.turns["turn"]?.workAverage == 2)
+    #expect(m.turns["turn"]?.isObservedAveragePartial == true)
+}
+
+@Test func C24WorkAverageDistinguishesNoReportFromReportedZero() throws {
+    var m = try monitor("average-zero")
+    #expect(try m.workAverageRate(at: 10) == nil)
+    try m.observeUsage(TokenUsage(outputTokens: 0), turnID: "turn", source: .rolloutLog, epoch: "e", at: 10)
+    #expect(try m.workAverageRate(at: 10) == 0)
+    try m.finishTurn("turn", outcome: .completed, at: 20)
+    #expect(m.turns["turn"]?.workAverage == 0)
+}
+
+@Test func C25DifferentWorkStartsSumIndividualAveragesAtOneFrame() throws {
+    var a = try monitor("average-a")
+    try a.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 10)
+    var b = ThreadMonitor(key: ThreadKey(homeID: "h", runID: "average-b", threadID: "average-b"), source: .rolloutLog, epoch: "e", verifiedEmptyThread: true)
+    try b.setConnectivity(.connected, at: 0)
+    try b.startTurn("turn", at: 10)
+    try b.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 20)
+    let frame = try ReportedFrame(monitors: [a,b], verifiedIndependentThreads: [a.key,b.key], at: 20)
+    #expect(frame.tokensPerSecond == 15)
+}
+
+@Test func C26ZeroOrUnrepresentableElapsedRateDoesNotProduceANumber() throws {
+    var m = try monitor("average-time-boundary")
+    try m.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 0)
+    #expect(try m.workAverageRate(at: 0) == nil)
+    #expect(try m.workAverageRate(at: Double.leastNonzeroMagnitude) == nil)
+    #expect(try m.workAverageRate(at: 1) == 100)
 }

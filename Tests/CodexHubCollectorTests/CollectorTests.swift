@@ -431,6 +431,8 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     try s.append(usage(200)); _ = try await c.refresh()
     try s.append(usage(230)); let measured = try await c.refresh()
     #expect(try measured.sessions[0].monitor.reportedRate(at: 100) == 3)
+    #expect(try measured.sessions[0].monitor.workAverageRate(at: 110) == 3)
+    #expect(measured.sessions[0].monitor.workAverageIsPartial)
     #expect(measured.sessions[0].monitor.turns["old"]?.average == nil)
     let repeatBinding = try await c.bindRunningSessions([initial.sessions[0].id])
     #expect(try repeatBinding.sessions[0].monitor.reportedRate(at: 100) == 3)
@@ -500,4 +502,25 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     let bound = try await c.bindRunningSessions([initial.sessions[0].id])
     #expect(bound.sessions[0].monitor.activity == .unknown)
     #expect(try bound.sessions[0].monitor.reportedRate(at: 100) == nil)
+}
+
+@Test func S232OversizedRolloutRecoversAcrossCheckpointWithoutCatchUp() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(10))
+    var c: LogCollector? = try s.collector(); _ = try await c?.refresh()
+    try s.append(start("live") + "{\"type\":\"compacted\",\"payload\":\"" + String(repeating: "x", count: 1_200_000))
+    let skipped = try #require(await c?.refresh())
+    #expect(skipped.diagnostics.contains { $0.error == .oversizedRecord })
+    c = nil
+    let resumed = try s.collector()
+    try s.append("\"}\n" + usage(9000))
+    let baseline = try await resumed.refresh()
+    let recovered = try #require(baseline.sessions.first)
+    #expect(recovered.monitor.counter.baseline?.outputTokens == 9000)
+    #expect(try recovered.monitor.reportedRate(at: 100) == nil)
+    try s.append(start("next") + usage(9030))
+    let current = try await resumed.refresh()
+    #expect(current.sessions[0].monitor.connectivity == .connected)
+    #expect(current.sessions[0].monitor.activity == .working)
+    #expect(try current.sessions[0].monitor.reportedRate(at: 100) == 3)
+    #expect(current.diagnostics.isEmpty)
 }

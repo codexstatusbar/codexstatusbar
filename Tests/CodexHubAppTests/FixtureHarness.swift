@@ -26,17 +26,22 @@ import CodexHubCollector
             model.notice = "Synthetic UI fixture · not live telemetry"
         }
         try set([a,b], verified: [a.key,b.key])
-        precondition(model.summary == "R90", "UI01 same-window sum")
+        precondition(model.summary == "100", "UI01 same-frame work averages")
         precondition(model.sessions[0].identity == "Session only", "UI02 no inferred PID")
-        precondition(HubPresentation.rate(nil) == "—" && HubPresentation.rate(0) == "R0", "UI03 missing vs zero")
+        precondition(HubPresentation.rate(nil) == "—" && HubPresentation.rate(0) == "0", "UI03 missing vs zero")
         precondition(model.sessions[0].monitor.counter.baseline?.nonReasoningOutputTokens == 200)
         try capture(model, "reported-light", output, dark: false)
         try capture(model, "reported-dark", output, dark: true)
+        model.frame = try ReportedFrame(monitors: [a,b], verifiedIndependentThreads: [a.key,b.key], at: 20)
+        precondition(model.summary == "47.4", "UI35 elapsed work average does not expire after ten seconds")
+        precondition(model.menuTitle == "평균 47.4 tok/s", "UI36 menu identifies the average without internal coverage text")
+        try capture(model, "work-average-waiting", output, dark: false)
+        try set([a,b], verified: [a.key,b.key])
         model.sessions[0].usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data("{\"reasoningEffort\":\"high\",\"contextTokens\":600,\"contextWindow\":1000,\"limits\":[{\"name\":\"primary\",\"usedPercent\":21,\"windowMinutes\":10080}]}".utf8))
         precondition(model.sessions[0].modelDescription == "Fixture model · high", "UI21 observed model and reasoning")
-        precondition(model.sessions[0].contextDescription == "60% used", "UI22 context is last prompt usage, not cumulative usage")
+        precondition(model.sessions[0].contextDescription == "60%", "UI22 context is last prompt usage, not cumulative usage")
         precondition(model.sessions[0].tokenDescription == "In 0 · Out 600", "UI23 input/output counters retain their own meaning")
-        precondition(model.sessions[0].limitDescriptions == ["7d left 79%"], "UI24 actual rate window determines remaining usage label")
+        precondition(model.sessions[0].limitDescriptions == ["7일 79% 남음"], "UI24 actual rate window determines remaining usage label")
         precondition(SessionPresentation.tokens(999) == "999" && SessionPresentation.tokens(1_000) == "1K", "UI26 small token count boundary")
         precondition(SessionPresentation.tokens(115_911) == "115.9K" && SessionPresentation.tokens(39_568_473) == "39.6M", "UI27 K/M token formatting")
         precondition(SessionPresentation.tokens(1_250_000_000) == "1.3G", "UI28 G token formatting")
@@ -63,14 +68,14 @@ import CodexHubCollector
         try capture(model, "connection-full", output, dark: false, height: 900)
         model.page = .overview
         try set([a,b], verified: [a.key])
-        precondition(model.coverage == "1 measured roots / 2 eligible runs · Partial" && model.summary == "R60", "UI04 scope exclusion")
+        precondition(model.coverage == "2개 대상 중 1개 계산 가능" && model.summary == "66.7", "UI04 scope exclusion")
         try capture(model, "partial", output, dark: false)
         model.measurementMode = .live
         model.sessions[0].liveRate = 12
         model.sessions[0].liveMeasurement = .estimated
         model.sessions[1].liveRate = 34
         model.sessions[1].liveMeasurement = .estimated
-        precondition(model.summary == "≈12" && model.menuTitle.contains("Partial"), "UI12 Live excludes unknown roots and reported samples")
+        precondition(model.summary == "≈12" && model.coverage == "2개 대상 중 1개 계산 가능", "UI12 Live excludes unknown roots and reported samples")
         try capture(model, "live-partial", output, dark: false)
         model.sessions[0].liveMeasurement = .warmingUp
         model.sessions[0].liveRate = nil
@@ -80,27 +85,27 @@ import CodexHubCollector
         model.sessions[0].sourceReconciliationPending = true
         precondition(model.aggregateRate == nil, "UI14 source reconciliation suppresses Live subtotal")
         model.measurementMode = .reported
-        precondition(model.summary == "R60", "UI15 selected Reported frame remains separate from Live")
+        precondition(model.summary == "66.7", "UI15 work averages remain separate from Live")
         try a.finishTurn("fixture-turn", outcome: .completed, at: 6)
         try b.finishTurn("fixture-turn", outcome: .completed, at: 6)
         try set([a,b], verified: [a.key,b.key])
-        precondition(model.summary == "Idle" && model.frame?.tokensPerSecond == nil, "UI05 idle clears speed")
+        precondition(model.summary == "대기 중" && model.frame?.tokensPerSecond == nil, "UI05 idle clears speed")
         try capture(model, "idle", output, dark: true)
         var historical = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-history"), source: .rolloutLog, epoch: "historical")
         try historical.setConnectivity(.connected, at: 0)
         try set([a,historical], verified: [a.key])
-        precondition(model.summary == "Idle", "UI16 observed idle is not hidden by historical unknown sessions")
-        precondition(model.status(for: model.sessions[1]) == "Unknown", "UI17 unknown history is not relabeled idle")
+        precondition(model.summary == "대기 중", "UI16 observed idle is not hidden by historical unknown sessions")
+        precondition(model.status(for: model.sessions[1]) == "상태 미확인", "UI17 unknown history is not relabeled idle")
         try capture(model, "idle-with-history", output, dark: true)
         var active = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-active"), source: .rolloutLog, epoch: "active")
         try active.setConnectivity(.connected, at: 0)
         try active.startTurn("active-turn", at: 1)
         try set([a,historical,active], verified: [a.key])
-        precondition(model.summary == "Working", "UI18 active turn takes precedence over idle without numeric throughput")
+        precondition(model.summary == "계산 준비 중", "UI18 active turn takes precedence over idle without numeric throughput")
         precondition(model.visibleSessions.first?.id == active.key, "UI25 active session sorts ahead of idle and unknown")
         try active.setConnectivity(.disconnected, at: 2)
         try set([active,historical], verified: [])
-        precondition(model.summary == "Unknown", "UI19 disconnected work and unknown history cannot assert idle")
+        precondition(model.summary == "상태 미확인", "UI19 disconnected work and unknown history cannot assert idle")
         try set([a,b], verified: [a.key,b.key])
         model.hideIdle = true
         precondition(model.visibleSessions.isEmpty, "UI06 idle filtering")
@@ -108,25 +113,25 @@ import CodexHubCollector
         try a.startTurn("new-turn", at: 7)
         try a.setApproval("approval", waiting: true, turnID: "new-turn", at: 8)
         try set([a,b], verified: [a.key,b.key])
-        precondition(model.summary == "Working" && model.menuTitle.contains("!"), "UI07 approval without samples")
+        precondition(model.summary == "계산 준비 중" && model.menuTitle.contains("!"), "UI07 approval without samples")
         try capture(model, "working-approval", output, dark: false)
         try a.setConnectivity(.disconnected, at: 9)
         try set([a], verified: [a.key])
         precondition(!model.menuTitle.contains("!"), "UI11 disconnected approval is stale")
-        precondition(model.summary == "Disconnected", "UI08 disconnect not idle")
+        precondition(model.summary == "연결 끊김", "UI08 disconnect not idle")
         try capture(model, "disconnected", output, dark: true)
         model.error = "Fixture read error"
-        precondition(model.summary == "Unavailable", "UI09 errors invalidate menu speed")
+        precondition(model.summary == "측정 불가", "UI09 errors invalidate menu speed")
         try capture(model, "error", output, dark: false)
         model.error = nil
         try set([], verified: [])
-        precondition(model.summary == "No running Codex", "UI10 empty discovery")
+        precondition(model.summary == "실행 없음", "UI10 empty discovery")
         try capture(model, "empty", output, dark: false)
         model.unattachedProcesses = [ProcessIdentity(pid: 1234, osStartTime: "fixture")]
-        precondition(model.summary == "Codex running", "UI20 running process without a session is not historical data")
+        precondition(model.summary == "정보 미확인", "UI20 running process without a session is not historical data")
         try capture(model, "running-without-session", output, dark: false)
         model.unattachedProcesses = []
-        print("PASS UI01–UI34 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI36 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
