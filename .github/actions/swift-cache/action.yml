@@ -4,6 +4,10 @@ inputs:
   mode:
     description: debug, release or verify
     required: true
+outputs:
+  exact-hit:
+    description: True only for this exact toolchain, mode, lockfile and source commit.
+    value: ${{ steps.cache.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -13,9 +17,10 @@ runs:
         CACHE_MODE: ${{ inputs.mode }}
       run: |
         case "$CACHE_MODE" in debug|release|verify) ;; *) exit 2 ;; esac
-        identity="$({ swiftc --version 2>&1; xcrun --show-sdk-version; xcrun --show-sdk-path; sw_vers -productVersion; } | shasum -a 256 | cut -d ' ' -f 1)"
+        identity="$({ swiftc --version 2>&1; xcrun --show-sdk-version; xcrun --show-sdk-path; sw_vers -productVersion; pwd -P; } | shasum -a 256 | cut -d ' ' -f 1)"
         printf 'identity=%s\n' "$identity" >> "$GITHUB_OUTPUT"
-    - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+    - id: cache
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: |
           .build/checkouts

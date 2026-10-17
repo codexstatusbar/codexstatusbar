@@ -28,13 +28,18 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/swift-cache
+      - id: swift-cache
+        uses: ./.github/actions/swift-cache
         with:
           mode: debug
       - name: Core and collector tests
+        env:
+          EXACT_CACHE_HIT: ${{ steps.swift-cache.outputs.exact-hit }}
         run: |
           swift --version
-          swift test --build-system native --disable-xctest \
+          build_args=()
+          if [[ "$EXACT_CACHE_HIT" == true ]]; then build_args+=(--skip-build); fi
+          swift test --build-system native --disable-xctest "${build_args[@]}" \
             -Xcxx -isystem -Xcxx "$(xcrun --show-sdk-path)/usr/include/c++/v1" 2>&1 | tee test.log
       - name: Release notes regression tests
         run: python3 -m unittest discover -s Tests/ReleaseNotesTests -v 2>&1 | tee -a test.log
@@ -54,7 +59,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/swift-cache
+      - id: swift-cache
+        uses: ./.github/actions/swift-cache
         with:
           mode: verify
       - name: Synthetic UI and isolated process checks
@@ -81,10 +87,13 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: ./.github/actions/swift-cache
+      - id: swift-cache
+        uses: ./.github/actions/swift-cache
         with:
           mode: release
       - name: Build and package arm64 app
+        env:
+          TOKLOOM_REUSE_COMPILED: ${{ steps.swift-cache.outputs.exact-hit }}
         run: ./scripts/package-app.sh 2>&1 | tee bundle.log
       - name: Upload app bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

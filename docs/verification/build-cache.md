@@ -14,10 +14,12 @@ These step times exclude runner queue time and artifact transfer.
 
 ## Cache contract
 
-- Separate debug, release and verify caches use compiler/SDK/OS/architecture,
+- Separate debug, release and verify caches use compiler/SDK/OS/architecture/workspace,
   Package.swift + Package.resolved, mode and commit in their keys.
 - Compatible earlier commits can restore a prefix-matching cache; SwiftPM still
-  executes its build/test commands and determines what needs rebuilding.
+  compiles after prefix-only hits. Exact source-commit/toolchain/workspace hits
+  reuse compiled products; tests, packaging, signatures and resources are still
+  verified. Missing cached products fail rather than silently publishing a partial app.
 - GitHub cannot share caches between sibling tags. A separate main-push cache
   warmer creates default-branch caches that version-tag runs can restore.
   Release publishing remains tag-only.
@@ -54,3 +56,13 @@ available for 14 days. Native Actions logs/history remain.
 Previously published runs were checked for successful release-publishing steps.
 41 artifacts (61,749,322 bytes) across 10 successful published runs were deleted;
 zero caches were deleted. Release assets were retained.
+
+## Hosted cache verification
+
+Run 39045878034 (0.0.11) restored all three caches from main. Step times were
+20 s tests, 26 s UI verification and 49 s build/package, compared with 42/50/68 s
+in the baseline. These exclude cache transfer and queue time. Native SwiftPM
+still recompiled unchanged targets, so a follow-up uses exact-hit compiled
+products, while prefix-only restores continue to compile. The same checks run
+on either path. Cleanup succeeded: four uploaded artifacts were removed, release
+assets remained, and three caches totaling 537,259,178 bytes remained accessible.

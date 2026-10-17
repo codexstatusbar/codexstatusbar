@@ -91,7 +91,7 @@ After publication succeeds and both release assets are confirmed, `cleanup` dele
 
 Release notes include every commit since the previous ancestor version tag and a full comparison link. Rerunning the same tag updates its assets and notes. Creating a local tag alone does not trigger a release; push it to GitHub.
 
-A separate [Warm Swift caches workflow](.github/workflows/cache.yml) runs on relevant `main` changes to seed caches accessible to version tags. Debug, Release and UI compiler caches are separated by compiler/SDK, architecture, dependency lockfile and commit. Tag builds can fall back to compatible main-branch caches. UI binaries are reused only when their source/toolchain fingerprint matches; all checks still execute every time. Final apps, DMGs, screenshots and user data are not cached. The first build or a changed toolchain can still be cold.
+A separate [Warm Swift caches workflow](.github/workflows/cache.yml) runs on relevant `main` changes to seed caches accessible to version tags. Debug, Release and UI compiler caches are separated by compiler/SDK, architecture, dependency lockfile and commit. Tag builds can fall back to compatible main-branch caches. An exact source-commit/toolchain cache hit reuses compiled products; prefix-only matches still compile. Tests, packaging and signature/resource checks always run. UI binaries are reused only when their source/toolchain fingerprint matches; all checks still execute every time. Final apps, DMGs, screenshots and user data are not cached. The first build or a changed toolchain can still be cold.
 
 The same packaging path is available locally:
 

@@ -8,9 +8,17 @@ case "$CONFIGURATION" in
     debug) APP_NAME="Tokloom Debug" ;;
     *) printf 'Usage: %s [release|debug]\n' "$0" >&2; exit 2 ;;
 esac
-swift build --build-system native -c "$CONFIGURATION" --arch arm64 --product CodexHubApp
-swift build --build-system native -c "$CONFIGURATION" --arch arm64 --product codex-hub
 BIN="$(swift build --build-system native -c "$CONFIGURATION" --arch arm64 --show-bin-path)"
+# CI enables this only after an exact source-commit and toolchain cache hit.
+if [[ "${TOKLOOM_REUSE_COMPILED:-false}" == true ]]; then
+    test -x "$BIN/CodexHubApp"
+    test -x "$BIN/codex-hub"
+    test -d "$BIN/CodexHub_CodexHubHelper.bundle"
+    printf 'Reusing compiled products from exact CI cache.\n'
+else
+    swift build --build-system native -c "$CONFIGURATION" --arch arm64 --product CodexHubApp
+    swift build --build-system native -c "$CONFIGURATION" --arch arm64 --product codex-hub
+fi
 APP="$ROOT/.build/$APP_NAME.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 cp "$BIN/CodexHubApp" "$APP/Contents/MacOS/"
