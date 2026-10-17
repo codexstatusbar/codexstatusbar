@@ -227,7 +227,7 @@ import CodexHubCollector
         }
         let represented = Set(rows.flatMap { [$0.process, $0.server].compactMap { $0 } })
         model.unattachedProcesses = running.map(\.identity).filter { !represented.contains($0) }
-        let frame = try ReportedFrame(monitors: rows.map(\.monitor), verifiedIndependentThreads: Set(rows.filter { $0.rootObserved && $0.measurement == .reported }.map(\.id)), at: snapshot.observedAt)
+        let frame = try ReportedFrame(monitors: rows.map(\.monitor), verifiedIndependentThreads: Set(rows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
         model.sessions = rows
         model.frame = frame
         model.diagnostics = Dictionary(grouping: snapshot.diagnostics, by: \.message).map { message, occurrences in

@@ -65,7 +65,7 @@ struct HubView: View {
                 Text(model.text(model.summary)).font(.system(size: model.summary.count > 12 ? 28 : 42, weight: .semibold)).monospacedDigit()
                 if model.aggregateRate != nil && model.error == nil { Text(model.text("tok/s")) }
             }.accessibilityElement(children: .combine)
-            Text(model.text(model.measurementMode == .reported ? "작업 시작부터 지금까지의 평균 · 도구 실행과 대기 시간 포함" : "최근 5초 동안 관측한 화면 출력의 추정 속도")).font(.system(size: 11))
+            Text(model.text(model.measurementMode == .reported ? "최근 사용량 로그 기준 작업 평균 · 다음 로그까지 값 유지" : "최근 5초 동안 관측한 화면 출력의 추정 속도")).font(.system(size: 11))
             if model.sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .approvalWait }) {
                 Text(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."))
             }

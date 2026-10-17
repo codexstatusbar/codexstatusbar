@@ -79,6 +79,9 @@ public struct ThreadMonitor: Sendable {
     private var generating = false
     private var hasCurrentReport = false
     private var lastTime: Double = 0
+    private var latestTurnID: String?
+    private var latestWorkAverage: Double?
+    private var latestWorkAverageIsPartial = false
     private var needsBaseline = false
     private var samples: [(time: Double, tokens: Int)] = []
 
@@ -121,6 +124,7 @@ public struct ThreadMonitor: Sendable {
         guard turns[id] == nil, activeTurnID == nil else { throw CoreError.invalidTransition }
         try advance(time)
         activeTurnID = id
+        latestTurnID = id
         observedIdle = false
         generating = false
         hasCurrentReport = false
@@ -180,6 +184,8 @@ public struct ThreadMonitor: Sendable {
     }
 
     private mutating func invalidateWindow() {
+        latestTurnID = activeTurnID
+        latestWorkAverage = nil
         hasCurrentReport = false
         samples.removeAll()
         needsBaseline = true
@@ -211,6 +217,7 @@ public struct ThreadMonitor: Sendable {
         counter = nextCounter
         switch result {
         case .baseline:
+            latestWorkAverage = nil
             needsBaseline = false
             if let id = activeTurnID {
                 turns[id]?.isComplete = false
@@ -222,6 +229,7 @@ public struct ThreadMonitor: Sendable {
             var record = turns[turnID] ?? TurnRecord(isComplete: false)
             record.outputTokens += delta
             if historical || needsBaseline {
+                latestWorkAverage = nil
                 record.isComplete = false
                 if activeTurnID == turnID {
                     record.resetObservation(at: time)
@@ -233,6 +241,11 @@ public struct ThreadMonitor: Sendable {
                 record.resetObservation(at: time)
             }
             turns[turnID] = record
+            if !historical && !needsBaseline && connectivity == .connected && latestTurnID == turnID,
+               let rate = record.observedRate(at: record.endedAt ?? time) {
+                latestWorkAverage = rate
+                latestWorkAverageIsPartial = record.isObservedAveragePartial
+            }
             if !historical && !needsBaseline && connectivity == .connected && activeTurnID == turnID {
                 hasCurrentReport = true
                 if delta > 0 { samples.append((time, delta)) }
@@ -244,14 +257,14 @@ public struct ThreadMonitor: Sendable {
     }
 
     public var workAverageIsPartial: Bool {
-        activeTurnID.flatMap { turns[$0] }?.isObservedAveragePartial ?? false
+        latestWorkAverage != nil ? latestWorkAverageIsPartial : (activeTurnID.flatMap { turns[$0] }?.isObservedAveragePartial ?? false)
     }
 
-    /// Current work or observed-period average; all rows use the same frame time.
+    /// Last usage-event average, held across activity changes until another report or invalidation.
     public func workAverageRate(at time: Double) throws -> Double? {
         try validateTime(time)
-        guard let id = activeTurnID, measurement == .reported else { return nil }
-        return turns[id]?.observedRate(at: time)
+        guard connectivity == .connected, !needsBaseline, !counter.isPartial else { return nil }
+        return latestWorkAverage
     }
 
     /// Fixed PRD reported window; all rows must use the same injected frame time.

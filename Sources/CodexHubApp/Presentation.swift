@@ -87,7 +87,7 @@ struct SessionPresentation: Identifiable {
         }
     }
     func rate(at time: Double) -> String {
-        guard measurement == .reported else { return "—" }
+        guard measurement == .reported || measurement == .warmingUp else { return "—" }
         return HubPresentation.rate(try? monitor.workAverageRate(at: time))
     }
 }

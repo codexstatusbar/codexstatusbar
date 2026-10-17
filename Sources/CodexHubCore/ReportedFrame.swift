@@ -27,7 +27,7 @@ public struct ReportedFrame: Sendable {
         var hasValue = false
         for monitor in monitors {
             let rate = try monitor.workAverageRate(at: time)
-            guard monitor.activity != .idle else { continue }
+            guard monitor.activity != .idle || rate != nil else { continue }
             let run = RunKey(monitor.key)
             eligible.insert(run)
             if verifiedIndependentThreads.contains(monitor.key), let rate {
@@ -42,6 +42,6 @@ public struct ReportedFrame: Sendable {
         tokensPerSecond = hasValue && sum.isFinite ? sum : nil
         eligibleRuns = eligible.count
         measuredRuns = measured.subtracting(incomplete).count
-        isPartial = !sum.isFinite || !incomplete.isEmpty || monitors.contains { $0.activeTurnID != nil && $0.workAverageIsPartial }
+        isPartial = !sum.isFinite || !incomplete.isEmpty || monitors.contains { $0.workAverageIsPartial }
     }
 }

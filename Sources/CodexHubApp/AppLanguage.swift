@@ -37,7 +37,7 @@ enum AppLanguage: String, CaseIterable {
         "Combined live estimate": "실시간 추정 합계",
         "Work average": "작업 평균",
         "Live estimate · 5s": "실시간 추정 · 5초",
-        "Average since work started · includes tools and waiting": "작업 시작부터 지금까지의 평균 · 도구 실행과 대기 시간 포함",
+        "Work average at the latest usage report · held until the next report": "최근 사용량 로그 기준 작업 평균 · 다음 로그까지 값 유지",
         "Estimated visible output over the last 5 seconds": "최근 5초 동안 관측한 화면 출력의 추정 속도",
         "Live estimates require a managed direct connection": "실시간 추정은 관리형 직접 연결이 필요합니다",
         "No Codex processes running": "실행 중인 Codex가 없습니다",

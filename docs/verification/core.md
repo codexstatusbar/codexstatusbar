@@ -174,3 +174,17 @@ C21–C26 now cover sustained means, tools/waits/completion/late usage, observat
 baselines and gaps, valid zero, differing start times summed at a common end, and
 zero/tiny-time boundaries. S227 also checks the reattached observed average.
 All 58 Core/Collector tests passed. This is scoped verification, not full QA approval.
+
+
+## Usage-event-held averages
+
+The user changed the display contract to calculate only when fresh usage arrives.
+C27 failed on the previous implementation (time decay, Idle clear, next-turn
+clear), then passed with a cached usage-event average. C21/C22 now verify unchanged
+rates across elapsed time, tools, approval, and completion. C27 also checks that a
+late older-turn report cannot overwrite the newest turn's value and that gaps
+invalidate held data. C26 requires a positive elapsed interval at the actual
+report time; a later UI tick cannot manufacture a rate. ReportedFrame sums held
+verified values, including Idle rows with a usable rate, while preserving scope
+suppression. All 59 Core/Collector tests passed. Legacy reportedRate remains a
+separate API and does not drive the UI.

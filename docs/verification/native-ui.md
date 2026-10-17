@@ -295,3 +295,15 @@ English/Korean settings fixture images were visually checked for clipped labels.
 The arm64 app/helper bundle built successfully. Actual post-replacement menu
 interaction and full-product QA remain unverified; no Hook/provider operation or
 user metadata change was performed.
+
+
+## Hold tok/s between usage reports
+
+Work average now samples elapsed time only at usage reports, preserving the value
+through Idle, tools, approval, and the next turn's warm-up. Live visible estimates
+retain their separate contract. Main explicitly says that the latest usage-log
+average is held until the next report. UI01/04/05/07/15/16/18/35/36 verify the new
+aggregate, held Idle value, new-turn carryover, source exclusion, and menu copy.
+All UI01–UI42/P01–P06 fixtures passed. Synthetic Idle rendering shows rates beside
+Idle statuses; it is not proof of actual runtime stability. Actual post-build
+observation remains pending, and full-product QA is not complete.

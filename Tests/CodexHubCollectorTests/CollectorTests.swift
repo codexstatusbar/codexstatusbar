@@ -431,7 +431,7 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     try s.append(usage(200)); _ = try await c.refresh()
     try s.append(usage(230)); let measured = try await c.refresh()
     #expect(try measured.sessions[0].monitor.reportedRate(at: 100) == 3)
-    #expect(try measured.sessions[0].monitor.workAverageRate(at: 110) == 3)
+    #expect(try measured.sessions[0].monitor.workAverageRate(at: 110) == nil)
     #expect(measured.sessions[0].monitor.workAverageIsPartial)
     #expect(measured.sessions[0].monitor.turns["old"]?.average == nil)
     let repeatBinding = try await c.bindRunningSessions([initial.sessions[0].id])
