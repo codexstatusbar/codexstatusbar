@@ -48,6 +48,7 @@ public struct SessionSnapshot: Sendable {
     public var measurement: CodexHubCore.Measurement { sourceReconciliationPending || observationStopped ? .partial : monitor.measurement }
     /// Exact CLI root provenance only; descendant coverage and PID ownership are not proven.
     public let observedCLIRoot: Bool
+    public let parentThreadID: String?
     public let usageDetails: SessionUsageDetails?
     public let serverTiming: ServerTiming?
 }
@@ -76,6 +77,7 @@ struct FileState: Codable, Sendable {
     var managedValidated: Bool?
     // Persisted session_meta source == cli proof, shared by hooks and root subtotal.
     var hookIdentityEligible: Bool?
+    var parentThreadID: String?
     var usageSource: UsageSource { sourceName == "direct-relay" ? .directRelay : .rolloutLog }
     var offset: Int64 = 0
     var historicalUntil: Int64
@@ -208,6 +210,7 @@ public actor LogCollector {
                                    liveUnavailableReason: reason ?? (live.measurement(at: lastFrame) == .partial ? "invalid_window" : nil),
                                    observedCLIRoot: roots.contains(monitor.key.threadID) &&
                                        (state.usageSource == .rolloutLog || state.managedValidated == true),
+                                   parentThreadID: state.usageSource == .rolloutLog ? state.parentThreadID : transcripts[monitor.key.threadID].flatMap { $0.count == 1 ? $0.first?.value.parentThreadID : nil },
                                    usageDetails: context?.usageDetails, serverTiming: monitor.connectivity == .connected && state.reconciliationPeer == nil && state.observationStopped != true ? state.serverTiming : nil)
         }.sorted { $0.id < $1.id }
         let grouped = Dictionary(grouping: allSessions, by: { $0.monitor.key.threadID })
@@ -339,12 +342,14 @@ public actor LogCollector {
                     let count = pread(fd, &header, header.count, 0)
                     guard count >= 0 else { throw CollectorError.inaccessibleSource }
                     state.hookIdentityEligible = false
+                    state.parentThreadID = nil
                     if let newline = header.prefix(count).firstIndex(of: 10), newline <= maximumLine,
                        let object = try? JSONSerialization.jsonObject(with: Data(header[..<newline])) as? [String: Any],
                        object["type"] as? String == "session_meta",
                        let payload = object["payload"] as? [String: Any],
                        let thread = identifier(payload["id"]), thread == state.threadID {
                         state.hookIdentityEligible = payload["source"] as? String == "cli"
+                        state.parentThreadID = parentThreadID(payload, thread: thread)
                     }
                 }
                 if !input.managed && !input.hook, state.offset > 0, state.usageDetails == nil || state.lastTurnState == nil {
@@ -718,7 +723,10 @@ public actor LogCollector {
                 if state.managedValidated == nil { state.managedValidated = true }
             }
             state.threadID = id
-            if state.usageSource == .rolloutLog { state.hookIdentityEligible = payload["source"] as? String == "cli" }
+            if state.usageSource == .rolloutLog {
+                state.hookIdentityEligible = payload["source"] as? String == "cli"
+                state.parentThreadID = parentThreadID(payload, thread: id)
+            }
             state.cwd = metadataString(payload["cwd"])
             if monitor == nil { monitor = try restoredMonitor(thread: id, state: state, at: now) }
             return
@@ -1066,6 +1074,14 @@ public actor LogCollector {
                   let micros = integer(fields["start_microseconds"]), (0..<1_000_000).contains(micros) else { throw CollectorError.invalidRecord }
             return ManagedProcessInfo(role: role, pid: Int32(pid), startSeconds: UInt64(seconds), startMicroseconds: UInt64(micros))
         }
+    }
+
+    private func parentThreadID(_ payload: [String: Any], thread: String) -> String? {
+        guard let source = payload["source"] as? [String: Any],
+              let subagent = source["subagent"] as? [String: Any],
+              let spawn = subagent["thread_spawn"] as? [String: Any],
+              let parent = identifier(spawn["parent_thread_id"]), parent != thread else { return nil }
+        return parent
     }
 
     private func identifier(_ value: Any?) -> String? {

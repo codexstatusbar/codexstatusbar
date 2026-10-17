@@ -682,3 +682,30 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     try store.save(["direct:fixture": state], retention: RetentionPolicy(days: 7, maximumSessions: 1000))
     #expect(throws: CollectorError.database) { try store.load() }
 }
+
+@Test func S241SubagentParentMetadataPersistsAndLegacyCheckpointRecovers() async throws {
+    let s = try Sandbox()
+    try s.write(#"{"type":"session_meta","payload":{"id":"child","cwd":"/project","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent","depth":1}}}}}"# + "\n" + usage(100))
+    var collector: LogCollector? = try s.collector()
+    let first = try #require(try await collector?.refresh())
+    #expect(first.sessions.first?.parentThreadID == "parent")
+    #expect(first.sessions.first?.observedCLIRoot == false)
+    collector = nil
+    let scope = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
+    var store: MetadataStore? = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
+    var states = try #require(try store?.load())
+    #expect(states.values.first?.parentThreadID == "parent")
+    for id in states.keys { states[id]?.parentThreadID = nil }
+    try store?.save(states, retention: RetentionPolicy(days: 7, maximumSessions: 1000))
+    store = nil
+    collector = try s.collector()
+    let recovered = try #require(try await collector?.refresh())
+    #expect(recovered.sessions.first?.parentThreadID == "parent")
+}
+
+@Test func S242SubagentParentRequiresExplicitNonSelfMetadata() async throws {
+    let s = try Sandbox()
+    try s.write(#"{"type":"session_meta","payload":{"id":"child","cwd":"/project","source":{"subagent":{"thread_spawn":{"parent_thread_id":"child"}}}}}"# + "\n")
+    let c = try s.collector()
+    #expect(try await c.refresh().sessions.first?.parentThreadID == nil)
+}
