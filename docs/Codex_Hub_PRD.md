@@ -4,6 +4,7 @@
 > **제품명:** Codex Hub — 작업명, 최종 명칭 미확정  
 > **대상:** 여러 Codex CLI 작업을 동시에 사용하는 macOS 개발자  
 > **산출물:** 제품 요구사항, 연결 방식 조사, 수집·계산 설계, Figma UI  
+> **구현 확정 (2026-10-17):** 사용자 지정에 따라 앱과 helper를 Swift로 구현하며 Apple Silicon(arm64) macOS 네이티브를 대상으로 한다. 기존 Rust helper 제안보다 이 결정이 우선한다.
 > **검증 범위:** 공식 문서·공개 소스 조사 및 Figma 제작 완료. 사용자 Mac에서 실제 Codex 연결·성능·토큰 정합성을 실행 검증한 상태는 아니다.
 
 ## 1. 결정 요약
@@ -81,7 +82,7 @@ Figma는 편집 가능한 텍스트·벡터·오토레이아웃·프로세스 �
 |---|---|
 | 지원 OS | macOS 14 이상을 개발 기준으로 제안. 실제 지원표는 빌드·시험 결과로 확정 |
 | UI | SwiftUI + AppKit 보완, MenuBarExtra 또는 NSStatusItem |
-| 수집·중계 | 번들 Rust helper; Swift UI와 별도 프로세스 |
+| 수집·중계 | 번들 Swift helper; Swift UI와 별도 프로세스 |
 | 저장소 | 로컬 SQLite, 숫자·식별자·시각만 저장 |
 | Live 구간 | 5초 |
 | Reported 구간 | 10초 |
@@ -623,7 +624,7 @@ CodexHub/
   docs/                # 이 PRD, 호환성표, 릴리스 검증 결과
 ```
 
-Rust/Swift 라이브러리의 정확한 버전은 초기 기술 검증에서 고정하고 lockfile로 관리한다. PRD에 확인하지 않은 패키지 버전을 넣지 않는다.
+Swift 라이브러리의 정확한 버전은 초기 기술 검증에서 고정하고 lockfile로 관리한다. PRD에 확인하지 않은 패키지 버전을 넣지 않는다.
 
 권장 테이블은 `runs`, `process_identities`, `threads`, `turns`, `usage_checkpoints`, `usage_deltas`, `source_authorities`, `state_events`, `measurement_gaps`, `file_checkpoints`, `settings`다. 실시간 원문과 토크나이저 작업 버퍼는 DB 테이블로 만들지 않는다. 카운터 변경과 체크포인트 저장은 한 트랜잭션으로 묶는다.
 
