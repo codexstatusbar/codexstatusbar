@@ -283,35 +283,66 @@ struct HubView: View {
         }
     }
     private var connection: some View {
-        Group {
-            Text(model.text("Keep your terminal.")).font(.system(size: 24, weight: .semibold))
-            Text(model.text("Logs compatibility mode observes saved metadata without restarting Codex."))
-            Text(model.codexHome).font(.system(size: 11)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-            Text(model.text("로그는 1초 간격으로 자동 수집합니다.")).font(.system(size: 11))
-            Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy || model.hooksBusy)
-            Button(model.text(model.checkingConnection ? "연결 확인 중…" : "지금 확인")) { model.refresh?() }.disabled(model.busy || model.refresh == nil)
-            Divider()
-            hooksControls
-            Divider()
-            if !model.diagnostics.isEmpty {
-                Text(model.text("Collection diagnostics")).font(.headline)
-                ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in Text(model.text(text)).textSelection(.enabled) }
-                Divider()
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "terminal").font(.system(size: 22)).foregroundStyle(.blue)
+                    .frame(width: 42, height: 42).background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(model.text("Keep your terminal.")).font(.system(size: 17, weight: .semibold))
+                    connectionNote("Logs compatibility mode observes saved metadata without restarting Codex.")
+                }
             }
-            value("Managed direct", model.helperPath == nil ? "Helper unavailable" : "Experimental · unverified")
-            Text(model.text("Start a new run yourself in a terminal. Existing sessions are never resumed or replayed. Relay behavior and G0 await user QA."))
-            copyValue("Bundled helper", model.helperPath)
-            copyValue("Installed Codex", model.codexPath)
-            Button(model.text("Choose Codex executable…")) { model.chooseCodex?() }.disabled(model.chooseCodex == nil || model.doctorBusy)
-            Button(model.text(model.doctorBusy ? "Checking version…" : "Check helper compatibility")) { model.runDoctor?() }
-                .disabled(model.runDoctor == nil || model.helperPath == nil || model.codexPath == nil || model.doctorBusy)
-            Text(model.text(model.doctorResult)).font(.system(size: 11))
-            copyValue("서버 타이밍 수집 실행 명령", model.managedCommand)
-            Text(model.text("새 관리형 Codex 실행에만 적용됩니다. 전역 설정은 바꾸지 않으며 기존 프로세스에는 소급 적용되지 않습니다.")).font(.system(size: 11))
-            Text(model.text("Run from your intended project directory. Additional flags, prompts, profiles and resume commands are not supported.")).font(.system(size: 11))
-            Text(model.text("Live estimates require a managed direct run with supported model metadata and complete visible-text observation. Unsupported models and missing evidence remain unavailable."))
-            Text(model.text("A collection error does not mean your Codex task failed. Check the original terminal for task status.")).font(.system(size: 11))
-        }
+            connectionSection("Current log location", icon: "folder", tint: .blue) {
+                copyValue("Codex home", model.codexHome)
+                connectionNote("로그는 1초 간격으로 자동 수집합니다.")
+                HStack {
+                    Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy || model.hooksBusy)
+                    Button(model.text(model.checkingConnection ? "연결 확인 중…" : "지금 확인")) { model.refresh?() }.disabled(model.busy || model.refresh == nil)
+                }
+            }
+            connectionSection("Optional compatibility hooks", icon: "puzzlepiece.extension", tint: .blue) { hooksControls }
+            if !model.diagnostics.isEmpty {
+                connectionSection("Collection diagnostics", icon: "exclamationmark.triangle", tint: attention) {
+                    ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in
+                        Text(model.text(text)).font(.system(size: 11)).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    connectionNote("A collection error does not mean your Codex task failed. Check the original terminal for task status.")
+                }
+            }
+            connectionSection("Managed direct", icon: "flask", tint: .purple) {
+                Text(model.text(model.helperPath == nil ? "Helper unavailable" : "Experimental · unverified"))
+                    .font(.system(size: 10, weight: .medium)).foregroundStyle(.purple)
+                connectionNote("Start a new run yourself in a terminal. Existing sessions are never resumed or replayed. Relay behavior and G0 await user QA.")
+                copyValue("Bundled helper", model.helperPath)
+                copyValue("Installed Codex", model.codexPath)
+                HStack {
+                    Button(model.text("Choose Codex executable…")) { model.chooseCodex?() }.disabled(model.chooseCodex == nil || model.doctorBusy)
+                    Button(model.text(model.doctorBusy ? "Checking version…" : "Check helper compatibility")) { model.runDoctor?() }
+                        .disabled(model.runDoctor == nil || model.helperPath == nil || model.codexPath == nil || model.doctorBusy)
+                }
+                if !model.doctorResult.isEmpty { Text(model.text(model.doctorResult)).font(.system(size: 11)).textSelection(.enabled) }
+                copyValue("서버 타이밍 수집 실행 명령", model.managedCommand)
+                connectionNote("새 관리형 Codex 실행에만 적용됩니다. 전역 설정은 바꾸지 않으며 기존 프로세스에는 소급 적용되지 않습니다.")
+                connectionNote("Run from your intended project directory. Additional flags, prompts, profiles and resume commands are not supported.")
+                connectionNote("Live estimates require a managed direct run with supported model metadata and complete visible-text observation. Unsupported models and missing evidence remain unavailable.")
+            }
+        }.buttonStyle(.bordered).controlSize(.regular)
+    }
+
+    private func connectionSection<Content: View>(_ title: String, icon: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label { Text(model.text(title)).font(.system(size: 13, weight: .semibold)) } icon: {
+                Image(systemName: icon).foregroundStyle(tint)
+            }
+            content()
+            Divider().padding(.top, 4)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func connectionNote(_ text: String) -> some View {
+        Text(model.text(text)).font(.system(size: 11)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
     private var modePicker: some View {
         Picker(model.text("속도 계산 방식"), selection: Binding(get: { model.measurementMode }, set: { model.updateMeasurementMode?($0) })) {
@@ -320,29 +351,34 @@ struct HubView: View {
     }
     private var hooksControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(model.text("Optional compatibility hooks")).font(.headline)
-            Text(model.codexHome + "/hooks.json").font(.system(size: 11)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            copyValue("hooks.json", model.codexHome + "/hooks.json")
             Text(model.text(model.hooksResult)).font(.system(size: 11)).textSelection(.enabled)
-            Button(model.text(model.hooksBusy ? "Working…" : "Check hook status")) { model.hookAction?(.status) }
             HStack {
+                Button(model.text(model.hooksBusy ? "Working…" : "Check hook status")) { model.hookAction?(.status) }
                 Button(model.text("Install hooks…")) { model.hookAction?(.install) }
                 Button(model.text("Remove hooks…")) { model.hookAction?(.uninstall) }
             }
             Text(model.text("State only, never token usage. Installation requires confirmation; manually review and trust in Codex /hooks. No automatic feature enablement.")).font(.system(size: 11))
         }.disabled(model.hooksBusy || model.helperPath == nil || model.hookAction == nil)
     }
-    private func value(_ label: String, _ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline) { Text(model.text(label)); Spacer(minLength: 12); Text(model.text(text)).multilineTextAlignment(.trailing).monospacedDigit() }.accessibilityElement(children: .combine)
-    }
     private func copyValue(_ label: String, _ text: String?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack { Text(model.text(label)); Spacer(); Button(model.text("Copy")) {
-                guard let text else { return }
-                model.copyMetadata(text, label: label)
-            }.disabled(text == nil).accessibilityLabel(model.text("Copy") + " " + model.text(label)) }
-            Text(text ?? model.text("Unavailable")).font(.system(size: 11)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 5) {
+            Text(model.text(label)).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 8) {
+                Text(text ?? model.text("Unavailable"))
+                    .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    guard let text else { return }
+                    model.copyMetadata(text, label: label)
+                } label: {
+                    Image(systemName: "doc.on.doc").frame(width: 28, height: 28).contentShape(Rectangle())
+                }.buttonStyle(.borderless).disabled(text == nil)
+                    .accessibilityLabel(model.text("Copy") + " " + model.text(label)).help(model.text("Copy"))
+            }.padding(8).background(inset, in: RoundedRectangle(cornerRadius: 6))
         }
     }
+
 }
 
 

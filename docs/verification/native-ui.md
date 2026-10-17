@@ -438,3 +438,13 @@ an opaque system background and bordered controls. No monitoring logic changed.
 Validation: UI01–UI72/P01–P06 fixture suite; Korean/dark and English/light settings
 renders. Real desktop backdrop compositing and keyboard traversal are not proven
 by the fixture captures. Full QA is not claimed.
+
+## Connection page hierarchy
+
+Adapted the supplied connection reference at the existing 460pt width: terminal
+intro, log location, optional hooks, diagnostics and managed direct connection.
+Flat titled sections reuse the shared glass backdrop. Paths and commands have
+adjacent copy controls, wrapping monospace text and explicit unavailable states.
+Related actions share a row; diagnostic text and installer/compatibility results
+remain visible. Existing confirmation, busy guards and callbacks are unchanged.
+No hooks or provider commands were executed for this presentation change.

@@ -16,6 +16,8 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Current log location": "현재 로그 경로",
+        "Codex home": "Codex 홈",
         "General settings": "일반 설정",
         "Choose the app language and speed display.": "앱의 기본 동작과 표시 방식을 설정합니다.",
         "Behavior": "동작 설정",
