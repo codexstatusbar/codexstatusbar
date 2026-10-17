@@ -14,6 +14,7 @@ import ServiceManagement
         popover.behavior = .transient
         item.button?.target = self
         item.button?.action = #selector(toggle)
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         item.button?.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         model.close = { [weak self] in self?.popover.performClose(nil) }
         model.quit = { NSApplication.shared.terminate(nil) }
@@ -31,8 +32,37 @@ import ServiceManagement
     }
 
     @objc private func toggle() {
+        if let event = NSApp.currentEvent,
+           event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
+            showContextMenu()
+            return
+        }
         if popover.isShown { popover.performClose(nil); return }
+        showPopover()
+    }
+
+    private func showContextMenu() {
         guard let button = item.button else { return }
+        popover.performClose(nil)
+        let menu = NSMenu()
+        let open = NSMenuItem(title: model.text("Open"), action: #selector(openFromMenu), keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        let close = NSMenuItem(title: model.text("닫기"), action: #selector(quitFromMenu), keyEquivalent: "q")
+        close.target = self
+        close.toolTip = model.text("Quitting Hub stops monitoring, not your Codex sessions.")
+        menu.addItem(close)
+        menu.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: button.bounds.minY), in: button)
+    }
+
+    @objc private func openFromMenu() {
+        DispatchQueue.main.async { [weak self] in self?.showPopover() }
+    }
+
+    @objc private func quitFromMenu() { model.quit?() }
+
+    private func showPopover() {
+        guard !popover.isShown, let button = item.button else { return }
         let screen = button.window?.screen ?? NSScreen.main
         let height = min(520, max(1, (screen?.visibleFrame.height ?? 700) - 24))
         let size = NSSize(width: 380, height: height)

@@ -16,6 +16,7 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Open": "열기",
         "Combined throughput": "전체 속도",
         "Processes": "프로세스",
         "Session not identified": "세션 정보 미확인",
