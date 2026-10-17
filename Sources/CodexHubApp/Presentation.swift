@@ -55,7 +55,7 @@ struct SessionPresentation: Identifiable {
         (usageDetails?.limits ?? []).map { limit in
             let window: String
             if let minutes = limit.windowMinutes {
-                window = minutes % 1440 == 0 ? "\(minutes / 1440)" + (language.resolved == .korean ? "일" : "d") : minutes % 60 == 0 ? "\(minutes / 60)" + (language.resolved == .korean ? "시간" : "h") : "\(minutes)" + (language.resolved == .korean ? "분" : "m")
+                window = minutes % 1440 == 0 ? "\(minutes / 1440)d" : minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes)m"
             } else { window = limit.name.capitalized }
             let remaining = limit.remainingPercent.formatted(.number.precision(.fractionLength(0...1)))
             return "\(window) \(remaining)% " + (language.resolved == .korean ? "남음" : "left") + (limit.resetsAt.map { (language.resolved == .korean ? " · 갱신 " : " · resets ") + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) } ?? "")
