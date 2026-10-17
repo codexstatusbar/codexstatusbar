@@ -254,7 +254,28 @@ import CodexHubCollector
         historyModel.error = "Synthetic collection error"
         precondition(historyModel.overviewUsageHistory.isEmpty, "UI63 failed collection cannot present a stale current-window overview chart")
         historyModel.error = nil
-        print("PASS UI01–UI64 and P01–P06; fixture PNGs: \(output)")
+        let archive = try UsageHistoryArchive.encode(historyModel.usageHistory, home: "fixture", monotonic: 303, wall: 10000)
+        let restoredHistory = try UsageHistoryArchive.decode(archive, home: "fixture", monotonic: 3, wall: 10060)
+        precondition(restoredHistory[newTurn.key]?.last?.time == -58, "UI65 chart timestamps survive reboot by preserving wall-clock age")
+        let restartedModel = HubPresentation()
+        restartedModel.restoreUsageHistory(restoredHistory)
+        restartedModel.recordUsageHistory([], at: 3)
+        precondition(restartedModel.usageHistory == restoredHistory, "UI66 initial discovery does not erase restored charts")
+        restartedModel.recordUsageHistory([SessionPresentation(monitor: newTurn)], at: 4)
+        precondition(restartedModel.usageHistory[newTurn.key]?.count == restoredHistory[newTurn.key]?.count, "UI67 restored charts never restore live counter anchors or invent catch-up")
+        let expiredHistory = try UsageHistoryArchive.decode(archive, home: "fixture", monotonic: 3, wall: 12000)
+        precondition(expiredHistory.isEmpty, "UI68 expired samples are not restored")
+        precondition((try? UsageHistoryArchive.decode(archive, home: "other-home", monotonic: 3, wall: 10060)) == nil, "UI69 homes cannot share chart archives")
+        precondition((try? UsageHistoryArchive.decode(Data("broken".utf8), home: "fixture", monotonic: 3, wall: 10060)) == nil, "UI70 corrupt chart archives are rejected")
+        var warmingRestart = ThreadMonitor(key: newTurn.key, counter: newTurn.counter)
+        try warmingRestart.setConnectivity(.connected, at: 0)
+        try warmingRestart.markGap(at: 0)
+        try warmingRestart.startTurn("restart", at: 1)
+        restartedModel.sessions = [SessionPresentation(monitor: warmingRestart, rootObserved: true)]
+        precondition(!restartedModel.overviewUsageHistory.isEmpty, "UI71 valid restored charts remain visible while live speed establishes its new baseline")
+        let futureHistory = try UsageHistoryArchive.decode(archive, home: "fixture", monotonic: 3, wall: 9000)
+        precondition(futureHistory.isEmpty, "UI72 clock rollback does not display future samples")
+        print("PASS UI01–UI72 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

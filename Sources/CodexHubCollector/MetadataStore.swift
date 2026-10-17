@@ -33,7 +33,7 @@ final class MetadataStore: @unchecked Sendable {
                 throw CollectorError.database
             }
             try execute("PRAGMA application_id=1128813890")
-            try execute("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS files(identity TEXT PRIMARY KEY, state BLOB NOT NULL, updated REAL NOT NULL); CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1), days INTEGER NOT NULL, row_limit INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS source(home TEXT NOT NULL);")
+            try execute("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS files(identity TEXT PRIMARY KEY, state BLOB NOT NULL, updated REAL NOT NULL); CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1), days INTEGER NOT NULL, row_limit INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS source(home TEXT NOT NULL); CREATE TABLE IF NOT EXISTS chart_history(id INTEGER PRIMARY KEY CHECK(id=1), payload BLOB NOT NULL);")
             let existing = try prepare("SELECT home FROM source")
             defer { sqlite3_finalize(existing) }
             let result = sqlite3_step(existing)
@@ -98,6 +98,27 @@ final class MetadataStore: @unchecked Sendable {
         return result
     }
 
+    func loadChartHistory() throws -> Data? {
+        try validate()
+        let statement = try prepare("SELECT payload FROM chart_history WHERE id=1")
+        defer { sqlite3_finalize(statement) }
+        let code = sqlite3_step(statement)
+        if code == SQLITE_DONE { return nil }
+        guard code == SQLITE_ROW, let bytes = sqlite3_column_blob(statement, 0) else { throw CollectorError.database }
+        let size = Int(sqlite3_column_bytes(statement, 0))
+        guard (1...4_194_304).contains(size) else { throw CollectorError.database }
+        return Data(bytes: bytes, count: size)
+    }
+
+    func saveChartHistory(_ data: Data) throws {
+        try validate()
+        guard !data.isEmpty, data.count <= 4_194_304 else { throw CollectorError.database }
+        let statement = try prepare("INSERT OR REPLACE INTO chart_history(id,payload) VALUES(1,?)")
+        defer { sqlite3_finalize(statement) }
+        let code = data.withUnsafeBytes { sqlite3_bind_blob(statement, 1, $0.baseAddress, Int32(data.count), transient) }
+        guard code == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw CollectorError.database }
+    }
+
     func retention() throws -> RetentionPolicy {
         let statement = try prepare("SELECT days,row_limit FROM settings WHERE id=1")
         defer { sqlite3_finalize(statement) }
@@ -107,10 +128,11 @@ final class MetadataStore: @unchecked Sendable {
         return try RetentionPolicy(days: Int(sqlite3_column_int(statement, 0)), maximumSessions: Int(sqlite3_column_int(statement, 1)))
     }
 
-    func save(_ states: [String: FileState], retention: RetentionPolicy) throws {
+    func save(_ states: [String: FileState], retention: RetentionPolicy, clearChartHistory: Bool = false) throws {
         try validate()
         try execute("BEGIN IMMEDIATE")
         do {
+            if clearChartHistory { try execute("DELETE FROM chart_history") }
             try execute("DELETE FROM files")
             let statement = try prepare("INSERT INTO files(identity,state,updated) VALUES(?,?,?)")
             defer { sqlite3_finalize(statement) }

@@ -20,6 +20,7 @@ struct HubView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let error = model.error { Text(model.text("Collection error") + ": " + error).textSelection(.enabled) }
+                    if let historyError = model.historyError { Text(model.text(historyError)).font(.system(size: 11)).foregroundStyle(.secondary) }
                     if let notice = model.notice { Text(model.text(notice)).font(.system(size: 11)).foregroundStyle(secondary).textSelection(.enabled) }
                     switch model.page {
                     case .overview: overview

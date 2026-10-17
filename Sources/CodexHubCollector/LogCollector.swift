@@ -517,8 +517,11 @@ public actor LogCollector {
         return snapshot()
     }
 
+    public func loadChartHistory() throws -> Data? { try store.loadChartHistory() }
+    public func saveChartHistory(_ data: Data) throws { try store.saveChartHistory(data) }
+
     public func clearMetadata() throws {
-        try store.save([:], retention: policy)
+        try store.save([:], retention: policy, clearChartHistory: true)
         let cleanup = cleanupManaged(states, reportUntracked: true)
         states.removeAll(); monitors.removeAll(); visibleWindows.removeAll(); hookStates.removeAll(); recovering.removeAll(); diagnostics = cleanup
     }

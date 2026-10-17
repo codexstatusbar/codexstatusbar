@@ -16,6 +16,8 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Saved charts could not be loaded. New observations continue.": "저장된 관측 차트를 불러오지 못했습니다. 새 관측은 계속됩니다.",
+        "Observed charts could not be saved. Live collection continues.": "관측 차트를 저장하지 못했습니다. 현재 관측은 계속됩니다.",
         "Reported output · 30m": "보고 출력 · 30분",
         "Waiting for reports": "새 로그 대기",
         "Summary": "요약",

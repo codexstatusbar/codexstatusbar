@@ -108,7 +108,7 @@ enum MeasurementMode: String, CaseIterable {
     var symbol: String { self == .live ? "≈" : "" }
 }
 
-struct UsageHistoryPoint: Identifiable {
+struct UsageHistoryPoint: Identifiable, Equatable {
     static let windowSeconds: Double = 1800
     static let binSeconds: Double = 60
     static let maximumPoints = 3600
@@ -140,6 +140,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var startAtLogin = false
     var loginStatus = "Not registered"
     var diagnostics: [String] = []
+    var historyError: String?
     var error: String?
     var notice: String?
     var refreshedAt: Date?
@@ -180,18 +181,25 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         guard error == nil else { return [] }
         return sessions.filter {
             $0.rootObserved && $0.monitor.connectivity == .connected &&
-            ($0.measurement == .reported || $0.measurement == .warmingUp) &&
+            !$0.monitor.counter.isPartial &&
             !$0.sourceReconciliationPending && !$0.observationStopped
         }.flatMap { usageHistory[$0.id] ?? [] }
     }
 
     func suspendUsageHistory() { usageAnchors.removeAll() }
+    func restoreUsageHistory(_ history: [ThreadKey: [UsageHistoryPoint]]) {
+        usageAnchors.removeAll()
+        usageHistory = history
+    }
 
     func recordUsageHistory(_ rows: [SessionPresentation], at time: Double) {
         guard time.isFinite, time >= 0 else { return }
         let keys = Set(rows.map(\.id))
         usageAnchors = usageAnchors.filter { keys.contains($0.key) }
-        usageHistory = usageHistory.filter { keys.contains($0.key) }
+        usageHistory = usageHistory.compactMapValues {
+            let kept = $0.filter { $0.time > time - UsageHistoryPoint.windowSeconds && $0.time <= time }
+            return kept.isEmpty ? nil : kept
+        }
         for row in rows {
             usageHistory[row.id] = usageHistory[row.id, default: []].filter { $0.time > time - UsageHistoryPoint.windowSeconds }
             guard row.monitor.connectivity == .connected, row.measurement == .reported || row.measurement == .warmingUp,

@@ -11,6 +11,8 @@ import CodexHubCollector
     private var polling: Task<Void, Never>?
     private var backgroundRefresh: Task<Void, Never>?
     private var generation = 0
+    private var savedChartHistory: [ThreadKey: [UsageHistoryPoint]]?
+    private var chartHomeID = ""
     private let defaults = UserDefaults.standard
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -131,7 +133,9 @@ import CodexHubCollector
         collector = nil
         model.canManageMetadata = false
         model.sessions = []
-        model.recordUsageHistory([], at: ProcessInfo.processInfo.systemUptime)
+        model.restoreUsageHistory([:])
+        savedChartHistory = nil
+        model.historyError = nil
         model.unattachedProcesses = []
         model.frame = nil
         model.refreshedAt = nil
@@ -153,6 +157,16 @@ import CodexHubCollector
                 try await service.updateRetention(RetentionPolicy(days: model.retentionDays, maximumSessions: 1000))
                 guard generation == current, !Task.isCancelled else { return }
                 collector = service
+                chartHomeID = homeID
+                do {
+                    let data = try await service.loadChartHistory()
+                    guard generation == current else { return }
+                    model.restoreUsageHistory(try UsageHistoryArchive.decode(data, home: homeID, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970))
+                    savedChartHistory = nil
+                } catch {
+                    guard generation == current else { return }
+                    model.historyError = "저장된 관측 차트를 불러오지 못했습니다. 새 관측은 계속됩니다."
+                }
                 model.canManageMetadata = true
                 model.busy = false
                 model.checkingConnection = false
@@ -242,6 +256,18 @@ import CodexHubCollector
         }.sorted()
         model.refreshedAt = Date()
         model.error = nil
+        if savedChartHistory != model.usageHistory, let collector {
+            let history = model.usageHistory
+            do {
+                let data = try UsageHistoryArchive.encode(history, home: chartHomeID, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970)
+                try await collector.saveChartHistory(data)
+                guard generation == current else { return }
+                savedChartHistory = history
+                model.historyError = nil
+            } catch {
+                if generation == current { model.historyError = "관측 차트를 저장하지 못했습니다. 현재 관측은 계속됩니다." }
+            }
+        }
     }
 
     private func collectionFailed(_ error: Error) {
@@ -278,6 +304,10 @@ import CodexHubCollector
             defer { if generation == current { model.busy = false } }
             do {
                 try await collector.clearMetadata()
+                guard generation == current else { return }
+                model.restoreUsageHistory([:])
+                savedChartHistory = [:]
+                model.historyError = nil
                 let snapshot = await collector.snapshot()
                 guard generation == current else { return }
                 try await apply(snapshot)

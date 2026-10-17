@@ -611,3 +611,21 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     try await c.markGap()
     #expect(await c.snapshot().sessions.first?.serverTiming == nil)
 }
+
+
+@Test func S237ChartHistoryPersistsAcrossCollectorRestartAndClearsWithMetadata() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(10))
+    let original = try Data(contentsOf: s.log)
+    let payload = Data("synthetic-chart-checkpoint".utf8)
+    var first: LogCollector? = try s.collector()
+    #expect(try await first?.loadChartHistory() == nil)
+    try await first?.saveChartHistory(payload)
+    first = nil
+    let restored = try s.collector()
+    #expect(try await restored.loadChartHistory() == payload)
+    _ = try await restored.refresh()
+    #expect(try await restored.loadChartHistory() == payload)
+    try await restored.clearMetadata()
+    #expect(try await restored.loadChartHistory() == nil)
+    #expect(try Data(contentsOf: s.log) == original)
+}
