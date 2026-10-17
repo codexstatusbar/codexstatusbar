@@ -110,7 +110,6 @@ SHA-256 파일이 있습니다. 앱 DMG에는 아이콘, helper와 토크나이�
 | --- | --- | --- |
 | 도구 제외 추정 · 기본 | 보고된 출력 토큰과 도구 실행·대기를 제외한 관측 구간으로 계산한 평균 | 새 사용량 로그가 들어올 때 갱신하고 다음 유효한 보고까지 유지합니다. 서버 응답 대기가 일부 포함될 수 있습니다. |
 | 실시간 추정 · 5초 | 완전하게 관측한 가시 응답 텍스트의 토큰 추정치 `≈` | 지원 모델의 관리형 직접 연결이 필요합니다. 일반 로그 연결에서는 제공하지 않습니다. |
-| 서버 타이밍 진단 | 원본 서버 타이밍·출력 이벤트 메타데이터 | 속도를 계산하지 않습니다. 설정에서 추정 모드로 전환할 수 있습니다. |
 
 `t/s`는 초당 토큰, `t/m`은 분당 토큰입니다. 분 단위 표시는 같은 속도의 60배이며 계산 구간을 1분으로 바꾸는 설정이 아닙니다. 워밍업·수집 공백·지원하지 않는 소스에서는 임의로 0을 만들지 않고 `—`를 표시합니다.
 
@@ -162,14 +161,12 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 
 ```sh
 '/path/to/Tokloom.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'
-env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --server-timing --codex '/absolute/path/to/codex'
+env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --codex '/absolute/path/to/codex'
 ```
 
 `--codex`를 생략하면 PATH에서 찾습니다. 현재 helper의 허용 버전은 `codex-cli 0.163.0`입니다. 임의 위치 인수·프롬프트·추가 플래그·프로필·resume/fork는 거부합니다. 기존 실행에 붙거나 재시작하지 않으며, 앱과 관리형 실행의 수명은 분리됩니다. 관리형 relay는 **실험적이며 G0 미검증**입니다.
 
-`--server-timing`은 새 관리형 실행에만 `runtime_metrics`와 전용 trace 대상을 활성화합니다. 전역 설정과 기존 프로세스에는 적용되지 않습니다. 수집된 원본값은 상세정보에 표시됩니다.
-
-기존 실제 응답 검증에서는 출력 토큰 수·출력 이벤트 수·이벤트 평균 간격과 `missing_harness_boundary`를 받았지만 순수 생성 시간 필드는 없었습니다. 이벤트 수는 토큰 수와 다르므로 이벤트 간격의 역수를 `t/s`로 변환하지 않습니다. 자세한 근거는 [서버 타이밍 기록](docs/verification/server-timing.md)에 있습니다.
+현재 서버 메타데이터로 순수 생성 속도를 계산할 수 없어 앱의 서버 타이밍 진단 모드를 제거했습니다. 기존에 이 모드를 선택한 설정은 도구 제외 추정으로 전환합니다. helper의 명시적 진단 플래그는 개발용으로만 남으며 속도 모드가 아닙니다. 근거는 [서버 타이밍 기록](docs/verification/server-timing.md)에 있습니다.
 
 ## 현재 범위
 

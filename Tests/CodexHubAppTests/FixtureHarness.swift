@@ -157,14 +157,15 @@ import CodexHubCollector
         model.page = .preferences
         try capture(model, "preferences-korean", output, dark: false)
         try set([a,b], verified: [a.key,b.key])
-        model.measurementMode = .server
-        precondition(model.aggregateRate == nil && model.rate(for: model.sessions[0]) == "—", "UI43 server mode cannot reuse reported estimates")
-        precondition(HelperConnection.command(home: "/tmp/home", codex: "/tmp/codex", helper: "/tmp/helper").contains("--server-timing"), "UI44 timing is opt-in per managed invocation")
+        model.measurementMode = MeasurementMode(rawValue: "server") ?? .reported
+        precondition(MeasurementMode.allCases == [.reported, .live] && model.measurementMode == .reported && model.aggregateRate != nil, "UI43 removed server preference falls back to a working estimate")
+        precondition(!HelperConnection.command(home: "/tmp/home", codex: "/tmp/codex", helper: "/tmp/helper").contains("--server-timing"), "UI44 app launch commands do not enable server timing")
         model.page = .overview
         try capture(model, "server-unavailable", output, dark: false)
         precondition(HubPresentation().measurementMode == .reported, "UI45 usable estimate remains the default")
+        let beforeServerMetadata = model.aggregateRate
         model.sessions[0].serverTiming = ServerTiming.parse(logLine: #"TRACE codex_api::responses_websocket_timing: thread_id=fixture-a turn_id=fixture-turn warmup=false payload={"type":"responsesapi.websocket_timing","timing_metrics":{"num_sampled_tokens_total":163,"websocket_output_text_delta_count":159,"websocket_output_text_delta_tbt_ms":16.467705253164556,"critical_path":{"coverage":"missing_harness_boundary"}}}"#)
-        precondition(model.sessions[0].serverTiming?.sampledTokens == 163 && model.aggregateRate == nil, "UI46 output events do not become fabricated token throughput")
+        precondition(model.sessions[0].serverTiming?.sampledTokens == 163 && model.aggregateRate == beforeServerMetadata, "UI46 output events do not become fabricated token throughput")
         model.page = .detail(model.sessions[0].id)
         try capture(model, "server-real-schema-details", output, dark: false)
         var previewWorking = ThreadMonitor(key: .init(homeID: "fixture", runID: nil, threadID: "working"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)

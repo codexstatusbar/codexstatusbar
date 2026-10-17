@@ -105,10 +105,9 @@ enum RateUnit: String, CaseIterable {
 }
 
 enum MeasurementMode: String, CaseIterable {
-    case server, reported, live
+    case reported, live
     var label: String {
         switch self {
-        case .server: "서버 타이밍 진단"
         case .reported: "도구 제외 추정"
         case .live: "실시간 추정 · 5초"
         }
@@ -259,7 +258,6 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         if error != nil { return "측정 불가" }
         guard !sessions.isEmpty else { return unattachedProcesses.isEmpty ? "실행 없음" : "정보 미확인" }
         if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "연결 끊김" }
-        if measurementMode == .server { return sessions.contains { $0.serverTiming != nil } ? "생성 시간 미검증" : "서버 측정 필요" }
         if let speed = aggregateRate { return displayRate(speed, symbol: measurementMode.symbol) }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "계산 준비 중" }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "대기 중" }
@@ -271,7 +269,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     }
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
     func rate(for session: SessionPresentation) -> String {
-        guard error == nil, measurementMode != .server else { return "—" }
+        guard error == nil else { return "—" }
         if measurementMode == .reported {
             guard session.measurement == .reported || session.measurement == .warmingUp else { return "—" }
             return displayRate(try? session.monitor.workAverageRate(at: frame?.time ?? 0))
@@ -305,13 +303,9 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         return (sum?.isFinite == true ? sum : nil, measured, groups.count, measured != groups.count)
     }
     var aggregateRate: Double? {
-        // Codex 0.163.0 exposes raw TBT but no verified per-response decode-duration contract.
-        // Do not invert or subtract metrics with unverified scopes, or reuse a log estimate here.
-        guard measurementMode != .server else { return nil }
         return measurementMode == .reported ? frame?.tokensPerSecond : liveAggregate.rate
     }
     var coverage: String {
-        if measurementMode == .server { return text("순수 생성 시간 확인 필요") }
         guard error == nil, let frame else { return "측정 불가" }
         let live = liveAggregate
         let measured = measurementMode == .reported ? frame.measuredRuns : live.measured

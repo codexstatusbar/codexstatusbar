@@ -106,7 +106,6 @@ Choose the measurement mode and display unit in Settings.
 | --- | --- | --- |
 | Tool-excluded estimate · default | Reported output tokens divided by an observed interval excluding tool execution/waiting | Updates when a new usage report arrives and holds until the next valid report. Some server response waiting may remain included. |
 | Live visible estimate · 5s | Estimated tokens `≈` from fully observed visible response text | Requires a managed direct connection and supported model. Unavailable for ordinary log connections. |
-| Server timing diagnostics | Raw server timing and output-event metadata | Does not calculate throughput. Switch to an estimate in Settings to see speed. |
 
 `t/s` means tokens per second; `t/m` means tokens per minute. The minute display multiplies the same rate by 60—it does not change the measurement interval to one minute. Warm-up, observation gaps, and unsupported sources show `—`, never a fabricated zero.
 
@@ -158,14 +157,12 @@ Copy the command from Connection, or adjust these paths, then run it from your i
 
 ```sh
 '/path/to/Tokloom.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'
-env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --server-timing --codex '/absolute/path/to/codex'
+env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --codex '/absolute/path/to/codex'
 ```
 
 Without `--codex`, the helper searches PATH. Its currently allowed version is `codex-cli 0.163.0`. Arbitrary positional arguments, prompts, additional flags, profiles, and resume/fork are rejected. It does not attach to or restart existing runs; the app and managed run have separate lifetimes. The relay is **experimental; G0 remains unverified**.
 
-`--server-timing` enables `runtime_metrics` and selected trace targets only for the new managed run. It does not change global settings or existing processes. Collected raw values appear in Details.
-
-A previous real-response check received output-token counts, output-event counts, mean event intervals, and `missing_harness_boundary`, but no pure generation-duration fields. Events are not tokens, so their reciprocal interval is not converted to `t/s`. See the [server timing evidence](docs/verification/server-timing.md).
+Server timing diagnostics have been removed from the app because the available metadata cannot establish pure generation speed. Saved selections of the former mode fall back to the tool-excluded estimate. The helper's explicit diagnostic flag remains a developer facility, not a throughput mode. See the [server timing evidence](docs/verification/server-timing.md).
 
 ## Current scope
 

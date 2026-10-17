@@ -89,7 +89,6 @@ struct SessionGraphics: View {
                     information("Current turn reported output", session.measurement == .reported ? session.monitor.activeTurnID.flatMap { session.monitor.turns[$0] }?.outputTokens.formatted() : nil)
                 }
             }
-            if model.measurementMode == .server || session.serverTiming != nil { serverDiagnostics }
         }
     }
 
@@ -141,27 +140,6 @@ struct SessionGraphics: View {
             if session.hookCompletionCandidate { note("작업 종료 신호를 받았습니다. 최종 상태를 확인하고 있습니다.") }
             if session.sourceReconciliationPending { note("수집 원본의 사용량을 대조하는 중입니다.") }
             if session.observationStopped { note("수집이 중단되어 새로운 사용량 기준이 필요합니다.") }
-        }
-    }
-
-    private var serverDiagnostics: some View {
-        section("서버 타이밍 진단", icon: "clock") {
-            note("서버 타이밍은 관리형 실행에서 수집합니다. TBT 집계 범위와 요청별 토큰 대응이 검증되기 전에는 t/s로 변환하지 않습니다.")
-            if let timing = session.serverTiming {
-                columns {
-                    information("서버 추론 시간", timing.inferenceMilliseconds.map { "\($0) ms" })
-                    information("서버 첫 토큰 시간", timing.firstTokenMilliseconds.map { "\($0) ms" })
-                    information("서버 TBT 원본", timing.betweenTokenMilliseconds.map { "\($0) ms" })
-                } right: {
-                    information("서버 출력 토큰", timing.sampledTokens.map(String.init))
-                    information("출력 이벤트 수", timing.outputDeltaCount.map(String.init))
-                    information("출력 이벤트 평균 간격", timing.outputDeltaMeanMilliseconds.map { "\($0.formatted(.number.precision(.fractionLength(0...2)))) ms" })
-                    information("서버 관측 범위", timing.coverage)
-                }
-                note("출력 이벤트 수는 토큰 수와 다릅니다. 이벤트 간격의 역수를 t/s로 표시하지 않습니다.")
-            } else {
-                note("수집된 서버 타이밍이 없습니다. 연결 화면의 명령으로 시작한 새 관리형 실행에서만 수집합니다. 기존 로그 연결에는 적용되지 않습니다.")
-            }
         }
     }
 

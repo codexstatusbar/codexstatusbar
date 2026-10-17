@@ -97,9 +97,6 @@ struct HubView: View {
     }
 
     private var measurementCaption: String {
-        if model.measurementMode == .server {
-            return model.text("서버 진단 모드에서는 속도를 계산하지 않습니다")
-        }
         if model.measurementMode == .live, !model.sessions.isEmpty,
            model.sessions.allSatisfy({ ($0.observedSource ?? $0.monitor.counter.source) != .directRelay }) {
             return model.text("실시간 추정은 관리형 직접 연결이 필요합니다")
@@ -218,11 +215,6 @@ struct HubView: View {
                 }
                 Divider()
                 settingsRow("속도 계산 방식") { modePicker }
-                if model.measurementMode == .server {
-                    connectionNote("서버 진단 모드에서는 속도를 계산하지 않습니다")
-                    Button(model.text("도구 제외 추정으로 전환")) { model.updateMeasurementMode?(.reported) }
-                        .buttonStyle(.bordered).disabled(model.updateMeasurementMode == nil)
-                }
                 Divider()
                 settingsRow("속도 단위") {
                 Picker(model.text("속도 단위"), selection: Binding(get: { model.rateUnit }, set: { model.updateRateUnit?($0) })) {
@@ -330,7 +322,7 @@ struct HubView: View {
                         .disabled(model.runDoctor == nil || model.helperPath == nil || model.codexPath == nil || model.doctorBusy)
                 }
                 if !model.doctorResult.isEmpty { Text(model.text(model.doctorResult)).font(.system(size: 11)).textSelection(.enabled) }
-                copyValue("서버 타이밍 수집 실행 명령", model.managedCommand)
+                copyValue("관리형 Codex 실행 명령", model.managedCommand)
                 connectionNote("새 관리형 Codex 실행에만 적용됩니다. 전역 설정은 바꾸지 않으며 기존 프로세스에는 소급 적용되지 않습니다.")
                 connectionNote("Run from your intended project directory. Additional flags, prompts, profiles and resume commands are not supported.")
                 connectionNote("Live estimates require a managed direct run with supported model metadata and complete visible-text observation. Unsupported models and missing evidence remain unavailable.")

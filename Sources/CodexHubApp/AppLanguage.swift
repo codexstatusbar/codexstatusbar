@@ -80,7 +80,7 @@ enum AppLanguage: String, CaseIterable {
         "Server inference time": "서버 추론 시간",
         "Server time to first token": "서버 첫 토큰 시간",
         "Raw server TBT": "서버 TBT 원본",
-        "Server timing launch command": "서버 타이밍 수집 실행 명령",
+        "Managed Codex launch command": "관리형 Codex 실행 명령",
         "Applies only to new managed Codex runs. Global settings and existing processes are unchanged.": "새 관리형 Codex 실행에만 적용됩니다. 전역 설정은 바꾸지 않으며 기존 프로세스에는 소급 적용되지 않습니다.",
         "Calculation": "계산 기준",
         "Output delta / report interval excluding tools": "사용량 증가량 ÷ 도구 시간을 뺀 보고 구간",

@@ -92,3 +92,13 @@ estimate. Available raw server timing is shown in Details regardless of the
 selected speed mode, while absent timing explains the new-managed-run boundary.
 This is a presentation clarification, not a newly verified server throughput
 implementation. No new inference or provider request was performed.
+
+## Removal from the app
+
+The user requested removal after selecting diagnostic mode hid throughput in an
+installed release. MeasurementMode now contains only reported and live. Legacy
+`server` preferences fall back to reported and are normalized on app launch.
+The diagnostic panel and app-generated `--server-timing` opt-in were removed.
+The helper parser/explicit developer flag remain separate from the app UI.
+UI43 checks removed-mode fallback; UI44 checks the launch command; UI46 checks
+that raw server metadata cannot replace the reported estimate.
