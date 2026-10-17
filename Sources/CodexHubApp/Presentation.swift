@@ -94,7 +94,7 @@ struct SessionPresentation: Identifiable {
 
 enum MeasurementMode: String, CaseIterable {
     case reported, live
-    var label: String { self == .reported ? "작업 평균" : "실시간 추정 · 5초" }
+    var label: String { self == .reported ? "도구 제외 추정" : "실시간 추정 · 5초" }
     var symbol: String { self == .reported ? "" : "≈" }
 }
 

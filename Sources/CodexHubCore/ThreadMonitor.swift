@@ -67,6 +67,11 @@ public struct TurnRecord: Sendable {
     }
 }
 
+public enum UsageRateInterval: Sendable {
+    case workAverage
+    case excludingTools(Double?)
+}
+
 public struct ThreadMonitor: Sendable {
     public let key: ThreadKey
     public private(set) var counter: UsageCounter
@@ -205,7 +210,8 @@ public struct ThreadMonitor: Sendable {
 
     @discardableResult
     public mutating func observeUsage(_ total: TokenUsage, turnID: String, source: UsageSource,
-                                      epoch: String, at time: Double, historical: Bool = false) throws -> UsageObservation {
+                                      epoch: String, at time: Double, historical: Bool = false,
+                                      rateInterval: UsageRateInterval = .workAverage) throws -> UsageObservation {
         try validateTime(time)
         var nextCounter = counter
         let result = nextCounter.observe(total, source: source, epoch: epoch)
@@ -241,10 +247,20 @@ public struct ThreadMonitor: Sendable {
                 record.resetObservation(at: time)
             }
             turns[turnID] = record
-            if !historical && !needsBaseline && connectivity == .connected && latestTurnID == turnID,
-               let rate = record.observedRate(at: record.endedAt ?? time) {
-                latestWorkAverage = rate
-                latestWorkAverageIsPartial = record.isObservedAveragePartial
+            if !historical && !needsBaseline && connectivity == .connected && latestTurnID == turnID {
+                let rate: Double?
+                switch rateInterval {
+                case .workAverage: rate = record.observedRate(at: record.endedAt ?? time)
+                case .excludingTools(let seconds):
+                    if delta > 0, let seconds, seconds.isFinite, seconds > 0 {
+                        let estimate = Double(delta) / seconds
+                        rate = estimate.isFinite ? estimate : nil
+                    } else { rate = nil }
+                }
+                if let rate {
+                    latestWorkAverage = rate
+                    latestWorkAverageIsPartial = record.isObservedAveragePartial
+                }
             }
             if !historical && !needsBaseline && connectivity == .connected && activeTurnID == turnID {
                 hasCurrentReport = true

@@ -417,3 +417,14 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     try m.markGap(at: 110)
     #expect(try m.workAverageRate(at: 110) == nil)
 }
+
+
+@Test func C28RequestEstimateUsesOnlyExplicitDurationAndHoldsThroughMissingTiming() throws {
+    var m = try monitor("request-rate")
+    try m.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 100, rateInterval: .excludingTools(4))
+    #expect(try m.workAverageRate(at: 200) == 25)
+    try m.observeUsage(TokenUsage(outputTokens: 140), turnID: "turn", source: .rolloutLog, epoch: "e", at: 210, rateInterval: .excludingTools(nil))
+    #expect(try m.workAverageRate(at: 220) == 25)
+    try m.observeUsage(TokenUsage(outputTokens: 180), turnID: "turn", source: .rolloutLog, epoch: "e", at: 230, rateInterval: .excludingTools(2))
+    #expect(try m.workAverageRate(at: 240) == 20)
+}

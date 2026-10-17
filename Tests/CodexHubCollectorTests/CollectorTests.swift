@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import CodexHubCollector
+@testable import CodexHubCollector
 import CSQLite
 import CryptoKit
 
@@ -523,4 +523,54 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(current.sessions[0].monitor.activity == .working)
     #expect(try current.sessions[0].monitor.reportedRate(at: 100) == 3)
     #expect(current.diagnostics.isEmpty)
+}
+
+
+@Test func S233RequestEstimateExcludesOverlappingToolWaitsUsingLogTimes() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.collector(); _ = try await c.refresh()
+    func dated(_ record: String, _ seconds: Int) -> String {
+        let timestamp = String(format: "2026-10-17T00:00:%02d.000Z", seconds)
+        return record.replacingOccurrences(of: "{", with: "{\"timestamp\":\"" + timestamp + "\",", range: record.startIndex..<record.index(after: record.startIndex))
+    }
+    func tool(_ id: String, _ output: Bool, _ seconds: Int) -> String {
+        dated("{\"type\":\"response_item\",\"payload\":{\"type\":\"" + (output ? "function_call_output" : "function_call") + "\",\"call_id\":\"" + id + "\"}}\n", seconds)
+    }
+    try s.append(dated(start("live"), 0) + dated(start("live"), 1) + tool("a", false, 2) + tool("a", true, 8) + dated(usage(200), 10))
+    let first = try await c.refresh()
+    #expect(try first.sessions[0].monitor.workAverageRate(at: 100) == 25)
+    #expect(try first.sessions[0].monitor.workAverageRate(at: 200) == 25)
+    try s.append(tool("b", false, 11) + tool("c", false, 12) + tool("b", true, 18) + tool("c", true, 19) + dated(usage(240), 20))
+    let parallel = try await c.refresh()
+    #expect(try parallel.sessions[0].monitor.workAverageRate(at: 100) == 20)
+    try s.append(dated(complete("live"), 21))
+    let idle = try await c.refresh()
+    #expect(idle.sessions[0].monitor.activity == .idle)
+    #expect(try idle.sessions[0].monitor.workAverageRate(at: 100) == 20)
+    try s.append(dated(usage(280), 40))
+    let late = try await c.refresh()
+    #expect(try late.sessions[0].monitor.workAverageRate(at: 100) == 40)
+}
+
+@Test func S234MissingTimingNeverFallsBackToWholeTurnDuration() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.collector(); _ = try await c.refresh()
+    try s.append(start("live") + usage(200))
+    let snapshot = try await c.refresh()
+    #expect(try snapshot.sessions[0].monitor.workAverageRate(at: 200) == nil)
+}
+
+
+@Test func S235TimingRejectsBackwardsAndUnmatchedToolBoundaries() {
+    var timing = RequestTiming(at: 10)
+    #expect(!timing.accepts(9))
+    #expect(timing.tool("unknown", running: false, at: 11) == false)
+    #expect(timing.tool("old", running: true, at: 9) == false)
+    #expect(timing.sample(at: 9) == nil)
+    #expect(timing.tool("tool", running: true, at: 12) == true)
+    #expect(timing.tool("tool", running: true, at: 13) == false)
+    #expect(timing.sample(at: 14) == 2)
+    #expect(timing.sample(at: 15) == nil)
+    #expect(timing.tool("tool", running: false, at: 16) == true)
+    #expect(timing.sample(at: 18) == 2)
 }

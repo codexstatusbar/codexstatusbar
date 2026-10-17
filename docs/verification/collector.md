@@ -288,3 +288,23 @@ reset on repeated binding. S228 verifies Idle restoration requires live binding.
 S229 verifies fresh Hook recovery and native-binding requirement. S230 covers late
 old completion; S231 covers a new context not inheriting old Idle state. All 51
 Core/Collector tests passed; full QA is not claimed. No source log was changed.
+
+
+## Tool-excluded request estimate
+
+Read-only inspection of the current rollout schema showed tool call/result IDs
+and log timestamps, but Reasoning item durations were sometimes zero. Therefore
+item durations cannot honestly represent complete model-generation duration. The
+user explicitly selected the tool-excluded reporting-interval estimate with
+server-response latency potentially included. No source message/tool text was
+copied into evidence or metadata.
+
+RequestTiming subtracts the union of matched function/custom-tool waits from log
+time intervals, with a 256 pending-ID bound; direct-relay tool and approval events
+use the same accounting. Recovery and observation gaps invalidate timing. Missing
+or invalid timing never invokes the full-turn denominator. Late final usage is
+clamped to observed completion, excluding post-completion idle time. S233 covers
+batched reads, ordinary/overlapping tool waits, held values and late final usage;
+S234 covers missing timestamps. C28 covers explicit durations and holding the last
+valid estimate. All 63 Core/Collector tests passed. These are synthetic contract
+checks, not proof of pure server decode timing or full-product QA.

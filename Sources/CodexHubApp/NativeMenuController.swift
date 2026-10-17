@@ -22,7 +22,7 @@ import ServiceManagement
 
     private func observeTitle() {
         withObservationTracking {
-            item.button?.toolTip = model.language.resolved == .korean ? "Codex Hub — 작업 출력 토큰 ÷ 경과 시간(도구·대기 포함). ≈: 최근 5초 화면 출력 추정." : "Codex Hub — Work output tokens / elapsed time, including tools and waiting. ≈: visible output estimate over 5 seconds."
+            item.button?.toolTip = model.language.resolved == .korean ? "Codex Hub — 출력 증가량 ÷ 도구 실행·대기를 뺀 보고 구간(추정). ≈: 최근 5초 화면 출력 추정." : "Codex Hub — Output delta / report interval excluding tools (estimate). ≈: visible output estimate over 5 seconds."
             item.button?.title = model.menuTitle
             item.button?.setAccessibilityLabel("Codex Hub, \(model.menuTitle)")
         } onChange: { [weak self] in

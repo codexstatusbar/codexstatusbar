@@ -307,3 +307,14 @@ aggregate, held Idle value, new-turn carryover, source exclusion, and menu copy.
 All UI01–UI42/P01–P06 fixtures passed. Synthetic Idle rendering shows rates beside
 Idle statuses; it is not proof of actual runtime stability. Actual post-build
 observation remains pending, and full-product QA is not complete.
+
+
+## Tool-excluded estimate display
+
+The reported-mode preference retains its stored key but is now presented as
+도구 제외 추정 / Tool-excluded estimate. The heading and tooltip explicitly
+separate it from pure generation speed; server response latency can remain.
+Completed whole-turn averages in Details are labeled as including tools. Last
+values remain held between reports and through Idle. UI01–UI42/P01–P06 fixtures
+passed. Actual runtime comparison against a provider's generation clock is not
+available from these logs and is not claimed.

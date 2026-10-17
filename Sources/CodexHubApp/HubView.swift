@@ -11,7 +11,7 @@ struct HubView: View {
                 if model.page != .overview {
                     Button(model.text("뒤로")) { model.page = .overview }.keyboardShortcut("[", modifiers: .command)
                 }
-                Text(model.text(model.page == .overview ? (model.measurementMode == .reported ? "작업 평균 합계" : "실시간 추정 합계") : title))
+                Text(model.text(model.page == .overview ? (model.measurementMode == .reported ? "도구 제외 추정 합계" : "실시간 추정 합계") : title))
                     .font(.system(size: model.page == .overview ? 13 : 17, weight: .semibold)).lineLimit(1)
                 Spacer()
                 Button { model.close?() } label: {
@@ -65,7 +65,7 @@ struct HubView: View {
                 Text(model.text(model.summary)).font(.system(size: model.summary.count > 12 ? 28 : 42, weight: .semibold)).monospacedDigit()
                 if model.aggregateRate != nil && model.error == nil { Text(model.text("tok/s")) }
             }.accessibilityElement(children: .combine)
-            Text(model.text(model.measurementMode == .reported ? "최근 사용량 로그 기준 작업 평균 · 다음 로그까지 값 유지" : "최근 5초 동안 관측한 화면 출력의 추정 속도")).font(.system(size: 11))
+            Text(model.text(model.measurementMode == .reported ? "도구 실행·대기 제외 · 서버 응답 대기는 포함될 수 있음" : "최근 5초 동안 관측한 화면 출력의 추정 속도")).font(.system(size: 11))
             if model.sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .approvalWait }) {
                 Text(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."))
             }
@@ -115,10 +115,10 @@ struct HubView: View {
             value("작업 상태 / 수집 방식", "\(model.status(for: session)) · \(session.source)")
             value(model.measurementMode.label, model.rate(for: session) + " tok/s")
             if let last {
-                value(last.isObservedAveragePartial ? "직전 관측 구간 평균" : "직전 작업 평균", last.workAverage.map { $0.formatted(.number.precision(.fractionLength(0...1))) + " tok/s" } ?? "미확인")
+                value(last.isObservedAveragePartial ? "직전 관측 구간 평균 · 도구 포함" : "직전 작업 평균 · 도구 포함", last.workAverage.map { $0.formatted(.number.precision(.fractionLength(0...1))) + " tok/s" } ?? "미확인")
             }
-            if model.measurementMode == .reported && monitor.activeTurnID != nil {
-                value("평균 기준", monitor.workAverageIsPartial ? "관측 시작 이후" : "작업 시작 이후")
+            if model.measurementMode == .reported {
+                value(model.text("계산 기준"), model.text("사용량 증가량 ÷ 도구 시간을 뺀 보고 구간"))
             }
             if model.measurementMode == .live, let reason = session.liveUnavailableReason {
                 Text(model.text("Live: " + reason)).font(.system(size: 11)).textSelection(.enabled)

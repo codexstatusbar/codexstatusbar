@@ -84,6 +84,7 @@ struct FileState: Codable, Sendable {
     var threadID: String?
     var turnID: String?
     var lastTurnState: String?
+    var requestTiming: RequestTiming?
     var cwd: String?
     var model: String?
     var usageDetails: SessionUsageDetails?
@@ -311,6 +312,7 @@ public actor LogCollector {
                 if recovering.contains(id) || monitor?.connectivity == .disconnected || (lastFrame > 0 && now - lastFrame > 5) {
                     state.historicalUntil = info.st_size
                     state.hasGap = true
+                    state.requestTiming = nil
                     monitor = nil
                     visible.invalidate(reason: "observation_gap")
                 }
@@ -394,6 +396,7 @@ public actor LogCollector {
                         guard !input.managed && !input.hook else { throw CollectorError.oversizedRecord }
                         state.discardingOversizedLine = false
                         state.hasGap = true
+                        state.requestTiming = nil
                         try monitor?.markGap(at: now)
                         visible.invalidate(reason: "oversized_record")
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
@@ -416,6 +419,7 @@ public actor LogCollector {
                         if input.hook { invalidHookStreams.insert(id) }
                         state.hasGap = true
                         visible.invalidate(reason: "invalid_record")
+                        state.requestTiming = nil
                         try monitor?.markGap(at: now)
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .invalidRecord))
                     }
@@ -427,6 +431,7 @@ public actor LogCollector {
                     // Persist bounded discard progress so a large transcript record cannot pin the cursor.
                     state.discardingOversizedLine = true
                     state.hasGap = true
+                    state.requestTiming = nil
                     try monitor?.markGap(at: now)
                     visible.invalidate(reason: "oversized_record")
                     diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
@@ -483,6 +488,7 @@ public actor LogCollector {
             nextMonitors[id] = try resumedMonitor(monitor, turn: turn, at: now)
             nextStates[id]?.lastTurnState = "active"
             nextStates[id]?.hasGap = true
+            nextStates[id]?.requestTiming = nil
         }
         let nextHooks = reconcileHooks(pendingHooks, states: nextStates, monitors: nextMonitors,
                                        seen: seen, invalidStreams: invalidHookStreams, now: now)
@@ -660,6 +666,14 @@ public actor LogCollector {
         return monitor
     }
 
+    private func recordTime(_ object: [String: Any]) -> Double? {
+        guard let value = object["timestamp"] as? String, value.utf8.count <= 64 else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = parser.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+        return date.map { $0.timeIntervalSince1970 }
+    }
+
     private func consume(_ data: Data, state: inout FileState, monitor: inout ThreadMonitor?, visible: inout VisibleWindow, historical: Bool, now: Double) throws {
         guard !data.isEmpty else { return }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -704,6 +718,19 @@ public actor LogCollector {
             consumeDetails("turn_context", payload: payload, state: &state)
             return
         }
+        if type == "response_item", state.usageSource == .rolloutLog, !historical {
+            let kind = payload["type"] as? String
+            let starts = kind == "function_call" || kind == "custom_tool_call"
+            let ends = kind == "function_call_output" || kind == "custom_tool_call_output"
+            if starts || ends {
+                guard let call = identifier(payload["call_id"]), let time = recordTime(object),
+                      state.requestTiming?.tool(call, running: starts, at: time) == true else {
+                    state.requestTiming = nil
+                    return
+                }
+            }
+            return
+        }
         guard type == "event_msg", let event = payload["type"] as? String else { return }
         guard monitor != nil else { throw CollectorError.invalidRecord }
         if state.usageSource == .directRelay {
@@ -713,6 +740,7 @@ public actor LogCollector {
                 visible.invalidate(reason: "observation_gap")
                 state.observationStopped = true
                 state.hasGap = true
+                state.requestTiming = nil
                 if let thread = state.threadID {
                     monitor = try restoredMonitor(thread: thread, state: state, at: now)
                     try monitor?.setConnectivity(.degraded, at: now)
@@ -757,11 +785,21 @@ public actor LogCollector {
                 guard let turn = identifier(payload["turn_id"]), let item = identifier(payload["item_id"]),
                       let kind = payload["tool_kind"] as? String,
                       ["commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "collabAgentToolCall", "webSearch", "imageGeneration"].contains(kind) else { throw CollectorError.invalidRecord }
-                if !historical { try monitor?.setTool(item, running: event == "hub_tool_started", turnID: turn, at: now) }
+                if !historical {
+                    if let time = recordTime(object) {
+                        if state.requestTiming?.tool(item, running: event == "hub_tool_started", at: time) != true { state.requestTiming = nil }
+                    } else { state.requestTiming = nil }
+                    try monitor?.setTool(item, running: event == "hub_tool_started", turnID: turn, at: now)
+                }
                 return
             }
             if event == "hub_approval_requested" || event == "hub_approval_resolved" {
                 let request = try requestKey(payload["request_id"])
+                if !historical {
+                    if let time = recordTime(object) {
+                        if state.requestTiming?.tool("approval:" + request, running: event == "hub_approval_requested", at: time) != true { state.requestTiming = nil }
+                    } else { state.requestTiming = nil }
+                }
                 if event == "hub_approval_requested" {
                     guard let turn = identifier(payload["turn_id"]) else { throw CollectorError.invalidRecord }
                     if !historical { try monitor?.setApproval(request, waiting: true, turnID: turn, at: now) }
@@ -784,10 +822,12 @@ public actor LogCollector {
                 if monitor?.activeTurnID != nil, let thread = state.threadID {
                     state.hasGap = true
                     monitor = try restoredMonitor(thread: thread, state: state, at: now)
+                    state.requestTiming = nil
                     try monitor?.markGap(at: now)
                 }
                 visible = VisibleWindow()
                 try monitor?.startTurn(turn, at: now)
+                state.requestTiming = recordTime(object).map { RequestTiming(at: $0) }
             }
         case "task_complete", "turn_aborted":
             guard let turn = identifier(payload["turn_id"]) ?? state.turnID else { throw CollectorError.invalidRecord }
@@ -797,6 +837,7 @@ public actor LogCollector {
                 state.lastTurnState = outcome.rawValue
             }
             if !historical {
+                if state.turnID == turn, let time = recordTime(object) { state.requestTiming?.finish(at: time) }
                 try monitor?.finishTurn(turn, outcome: outcome, at: now)
                 if monitor?.activeTurnID == nil { visible.invalidate(reason: "no_active_turn", partial: false) }
             }
@@ -818,7 +859,15 @@ public actor LogCollector {
             }
             let total = try usage(counts)
             if let turn = state.usageSource == .directRelay ? identifier(payload["turn_id"]) : state.turnID {
-                try monitor?.observeUsage(total, turnID: turn, source: state.usageSource, epoch: state.epoch, at: now, historical: historical)
+                var duration: Double?
+                if !historical, total.outputTokens != monitor?.counter.baseline?.outputTokens {
+                    if let time = recordTime(object) {
+                        if state.requestTiming?.accepts(time) == false { state.requestTiming = nil }
+                        duration = state.requestTiming?.sample(at: time)
+                        if state.requestTiming == nil { state.requestTiming = RequestTiming(at: time) }
+                    } else { state.requestTiming = nil }
+                }
+                try monitor?.observeUsage(total, turnID: turn, source: state.usageSource, epoch: state.epoch, at: now, historical: historical, rateInterval: .excludingTools(duration))
             } else {
                 if let current = monitor {
                     var counter = current.counter
