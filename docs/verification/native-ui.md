@@ -216,3 +216,19 @@ final arm64 build passed in scope. Full QA remains unapproved/uncompleted.
 
 Sources: https://developers.openai.com/api/docs/guides/fast-mode and
 https://developers.openai.com/api/docs/guides/ultrafast-mode (retrieved 2026-10-17).
+
+## Actual app verification after final replacement
+
+On the user's opened popover, the actual selected and persisted mode was Reported
+10s. The matched live CLI row and aggregate both showed R104.7 tok/s, later R143.4,
+with Working; a tool event showed Tool running. These were actual reported-window
+observations, separate from synthetic fixture speeds and not a Live estimate.
+Known work appeared first, with unmatched live processes below. Summary opened
+successfully and showed context percent, K/M token totals, quota remaining, model
+and effort. The title was removed and Close used the accessible xmark control.
+The requested tier was Not reported and the home default was Fast; no actual Fast
+or Ultrafast provider execution was inferred. User source IDs are not copied here.
+Idle restoration is regression-tested; the current active conversation was not
+artificially ended for an actual Idle capture. No provider run or Hook mutation was
+performed. Actual Logs-to-Live estimation remains unavailable by the source
+contract, and full-product QA remains incomplete.
