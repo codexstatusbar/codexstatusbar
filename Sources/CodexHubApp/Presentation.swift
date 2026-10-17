@@ -50,14 +50,14 @@ struct SessionPresentation: Identifiable {
         }
         return count.formatted()
     }
-    var limitDescriptions: [String] {
+    func limitDescriptions(language: AppLanguage = .korean) -> [String] {
         (usageDetails?.limits ?? []).map { limit in
             let window: String
             if let minutes = limit.windowMinutes {
-                window = minutes % 1440 == 0 ? "\(minutes / 1440)일" : minutes % 60 == 0 ? "\(minutes / 60)시간" : "\(minutes)분"
+                window = minutes % 1440 == 0 ? "\(minutes / 1440)" + (language.resolved == .korean ? "일" : "d") : minutes % 60 == 0 ? "\(minutes / 60)" + (language.resolved == .korean ? "시간" : "h") : "\(minutes)" + (language.resolved == .korean ? "분" : "m")
             } else { window = limit.name.capitalized }
             let remaining = limit.remainingPercent.formatted(.number.precision(.fractionLength(0...1)))
-            return "\(window) \(remaining)% 남음" + (limit.resetsAt.map { " · 갱신 " + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) } ?? "")
+            return "\(window) \(remaining)% " + (language.resolved == .korean ? "남음" : "left") + (limit.resetsAt.map { (language.resolved == .korean ? " · 갱신 " : " · resets ") + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) } ?? "")
         }
     }
     var identity: String { process.map { "PID \($0.pid)" } ?? "Session only" }
@@ -107,6 +107,9 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var measurementMode: MeasurementMode = .reported
     var updateMeasurementMode: ((MeasurementMode) -> Void)?
     var configuredServiceTier: ServiceTier?
+    var language = AppLanguage.system
+    var saveLanguage: ((AppLanguage) -> Void)?
+    func text(_ value: String) -> String { language.text(value) }
     var hooksBusy = false
     var hooksResult = "Not checked. Hook trust and runtime compatibility are unverified."
     var hookAction: ((HelperConnection.HookAction) -> Void)?
@@ -166,11 +169,10 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     }
     var menuTitle: String {
         let numeric = aggregateRate != nil && error == nil
-        let prefix = numeric && measurementMode == .reported ? "평균 " : ""
-        let text = compact ? "Hub" : prefix + summary + (numeric ? " tok/s" : "")
+        let text = compact ? "Hub" : self.text(summary) + (numeric ? " tok/s" : "")
         return text + (sessions.contains { $0.monitor.connectivity == .connected && $0.activity == .approvalWait } ? " · !" : "")
     }
-    func status(for session: SessionPresentation) -> String { error == nil ? session.status : "상태 미확인" }
+    func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
     func rate(for session: SessionPresentation) -> String {
         guard error == nil else { return "—" }
         return measurementMode == .reported ? session.rate(at: frame?.time ?? 0) : Self.rate(session.liveMeasurement == .estimated ? session.liveRate : nil, symbol: "≈")
@@ -207,9 +209,9 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         let live = liveAggregate
         let measured = measurementMode == .reported ? frame.measuredRuns : live.measured
         let eligible = measurementMode == .reported ? frame.eligibleRuns : live.eligible
-        return "\(eligible)개 대상 중 \(measured)개 계산 가능"
+        return language.resolved == .korean ? "\(eligible)개 대상 중 \(measured)개 계산 가능" : "\(measured) of \(eligible) eligible runs measured"
     }
     var freshness: String {
-        refreshedAt.map { "확인 " + $0.formatted(date: .omitted, time: .standard) } ?? "미확인"
+        refreshedAt.map { text("확인 ") + $0.formatted(date: .omitted, time: .standard) } ?? text("미확인")
     }
 }

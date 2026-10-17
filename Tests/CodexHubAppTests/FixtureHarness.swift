@@ -12,6 +12,7 @@ import CodexHubCollector
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         try verifyRunningProcesses()
         let model = HubPresentation()
+        model.language = .korean
         var a = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-a"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
         try a.setConnectivity(.connected, at: 0)
         try a.startTurn("fixture-turn", at: 1)
@@ -34,14 +35,14 @@ import CodexHubCollector
         try capture(model, "reported-dark", output, dark: true)
         model.frame = try ReportedFrame(monitors: [a,b], verifiedIndependentThreads: [a.key,b.key], at: 20)
         precondition(model.summary == "47.4", "UI35 elapsed work average does not expire after ten seconds")
-        precondition(model.menuTitle == "평균 47.4 tok/s", "UI36 menu identifies the average without internal coverage text")
+        precondition(model.menuTitle == "47.4 tok/s", "UI36 menu shows only speed and unit")
         try capture(model, "work-average-waiting", output, dark: false)
         try set([a,b], verified: [a.key,b.key])
         model.sessions[0].usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data("{\"reasoningEffort\":\"high\",\"contextTokens\":600,\"contextWindow\":1000,\"limits\":[{\"name\":\"primary\",\"usedPercent\":21,\"windowMinutes\":10080}]}".utf8))
         precondition(model.sessions[0].modelDescription == "Fixture model · high", "UI21 observed model and reasoning")
         precondition(model.sessions[0].contextDescription == "60%", "UI22 context is last prompt usage, not cumulative usage")
         precondition(model.sessions[0].tokenDescription == "In 0 · Out 600", "UI23 input/output counters retain their own meaning")
-        precondition(model.sessions[0].limitDescriptions == ["7일 79% 남음"], "UI24 actual rate window determines remaining usage label")
+        precondition(model.sessions[0].limitDescriptions() == ["7일 79% 남음"], "UI24 actual rate window determines remaining usage label")
         precondition(SessionPresentation.tokens(999) == "999" && SessionPresentation.tokens(1_000) == "1K", "UI26 small token count boundary")
         precondition(SessionPresentation.tokens(115_911) == "115.9K" && SessionPresentation.tokens(39_568_473) == "39.6M", "UI27 K/M token formatting")
         precondition(SessionPresentation.tokens(1_250_000_000) == "1.3G", "UI28 G token formatting")
@@ -131,7 +132,26 @@ import CodexHubCollector
         precondition(model.summary == "정보 미확인", "UI20 running process without a session is not historical data")
         try capture(model, "running-without-session", output, dark: false)
         model.unattachedProcesses = []
-        print("PASS UI01–UI36 and P01–P06; fixture PNGs: \(output)")
+        let suite = "CodexHub.LanguageFixture." + UUID().uuidString
+        let preferences = UserDefaults(suiteName: suite)!
+        defer { preferences.removePersistentDomain(forName: suite) }
+        precondition(AppLanguage.load(from: preferences) == .system, "UI37 language defaults to system")
+        AppLanguage.english.save(to: preferences)
+        precondition(AppLanguage.load(from: preferences) == .english, "UI38 language persists")
+        preferences.set("unsupported", forKey: "appLanguage")
+        precondition(AppLanguage.load(from: preferences) == .system, "UI39 invalid preference falls back")
+        model.language = .english
+        precondition(model.text("설정") == "Settings" && model.menuTitle == "Not running", "UI40 live English UI and menu")
+        precondition(model.text("/private/설정") == "/private/설정", "UI41 external text is preserved")
+        model.page = .preferences
+        try capture(model, "preferences-english", output, dark: false)
+        model.page = .overview
+        try capture(model, "overview-english", output, dark: false)
+        model.language = .korean
+        precondition(model.text("Settings") == "설정" && model.menuTitle == "실행 없음", "UI42 switch back immediately")
+        model.page = .preferences
+        try capture(model, "preferences-korean", output, dark: false)
+        print("PASS UI01–UI42 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -278,3 +278,20 @@ generation checks. UI01–UI36/P01–P06 and the arm64 build passed. These fixtu
 checks do not exercise the native polling scheduler; actual multi-cycle settings
 interaction after replacement remains unverified. No retention value or metadata
 was changed during verification.
+
+
+## Language preference and compact metric copy
+
+Settings now offers System default, 한국어, and English. The selection updates
+app-owned labels, menu status, accessibility labels, and native confirmation copy
+without restarting and persists in the existing app defaults. Unsupported saved
+values fall back to System default; unsupported system languages use English.
+Paths, model names, and external diagnostic output remain unchanged. Date/number
+formatting continues to use the system region. Numeric menu text omits the average
+prefix (for example, `47.4 tok/s`); the popover retains the measurement explanation.
+UI37–UI42 cover default/fallback, isolated defaults persistence, switching both
+ways, and preservation of unknown external text. UI01–UI42/P01–P06 passed, and
+English/Korean settings fixture images were visually checked for clipped labels.
+The arm64 app/helper bundle built successfully. Actual post-replacement menu
+interaction and full-product QA remain unverified; no Hook/provider operation or
+user metadata change was performed.
