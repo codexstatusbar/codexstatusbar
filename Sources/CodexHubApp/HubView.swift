@@ -169,7 +169,6 @@ struct HubView: View {
             Toggle(model.text("Compact menu bar"), isOn: $model.compact).onChange(of: model.compact) { model.saveDisplayPreferences?() }
             Toggle(model.text("Start at login"), isOn: Binding(get: { model.startAtLogin }, set: { model.updateLogin?($0) })).disabled(model.updateLogin == nil)
             Text(model.text(model.loginStatus)).font(.system(size: 11))
-            hooksControls
             Divider()
             Picker(model.text("Metadata retention"), selection: Binding(get: { model.retentionDays }, set: { model.updateRetention?($0) })) {
                 ForEach([1, 7, 30, 90], id: \.self) { Text(model.language.resolved == .korean ? "\($0)일" : "\($0) days").tag($0) }
