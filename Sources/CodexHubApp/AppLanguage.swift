@@ -32,7 +32,7 @@ enum AppLanguage: String, CaseIterable {
         "Close": "닫기",
         "Connection": "연결",
         "Settings": "설정",
-        "Work summary": "작업 요약",
+        "Details": "상세정보",
         "Combined work average": "작업 평균 합계",
         "Combined live estimate": "실시간 추정 합계",
         "Work average": "작업 평균",

@@ -50,7 +50,7 @@ struct HubView: View {
     private var title: String {
         switch model.page {
         case .overview: "Codex Hub"
-        case .detail: "작업 요약"
+        case .detail: "상세정보"
         case .preferences: "설정"
         case .connection: "연결"
         }
@@ -90,8 +90,8 @@ struct HubView: View {
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(model.text(model.rate(for: session) + (model.rate(for: session) == "—" ? "" : " tok/s"))).monospacedDigit()
                             Text(model.text(model.status(for: session))).font(.system(size: 11))
-                            Button(model.text("작업 요약")) { model.page = .detail(session.id) }
-                                .accessibilityLabel("\(session.title), \(session.identity) " + model.text("작업 요약"))
+                            Button(model.text("상세정보")) { model.page = .detail(session.id) }
+                                .accessibilityLabel("\(session.title), \(session.identity) " + model.text("상세정보"))
                         }
                     }
                 }.padding(.vertical, 6)
