@@ -81,3 +81,14 @@ UI46 prevents output events from being presented as token throughput. Native
 managed relay/TUI provider execution and pure decode timing remain unverified;
 only the CLI probe, actual-line parser replay, normalized collector replay, and
 synthetic presentation checks were completed. Full QA remains incomplete.
+
+## Diagnostic-mode clarification
+
+Inspection confirmed that server mode intentionally returns nil throughput; it
+cannot supply pure generation speed from the previously captured event-interval
+metadata. The overview and settings now explicitly state that diagnostics do not
+calculate throughput. Settings offers an explicit switch to the tool-excluded
+estimate. Available raw server timing is shown in Details regardless of the
+selected speed mode, while absent timing explains the new-managed-run boundary.
+This is a presentation clarification, not a newly verified server throughput
+implementation. No new inference or provider request was performed.

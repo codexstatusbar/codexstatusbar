@@ -448,3 +448,10 @@ adjacent copy controls, wrapping monospace text and explicit unavailable states.
 Related actions share a row; diagnostic text and installer/compatibility results
 remain visible. Existing confirmation, busy guards and callbacks are unchanged.
 No hooks or provider commands were executed for this presentation change.
+
+## Compact speed labels
+
+Speed units now display as `t/s` and `t/m` across the menu, overview, session rows,
+details and settings. Stored unit preferences and the 60x minute conversion are
+unchanged. The menu uses 12pt monospaced digits; the overview number is 24pt and
+row rates are 11pt. UI07/36/57/59 retain explicit unit and conversion assertions.

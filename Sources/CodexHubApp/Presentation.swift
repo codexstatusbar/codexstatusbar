@@ -92,7 +92,7 @@ struct SessionPresentation: Identifiable {
 
 enum RateUnit: String, CaseIterable {
     case second, minute
-    var suffix: String { self == .second ? "tok/s" : "tok/m" }
+    var suffix: String { self == .second ? "t/s" : "t/m" }
     var multiplier: Double { self == .second ? 1 : 60 }
 }
 

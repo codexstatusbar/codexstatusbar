@@ -18,7 +18,7 @@ import ServiceManagement
         item.button?.target = self
         item.button?.action = #selector(toggle)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        item.button?.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        item.button?.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         model.close = { [weak self] in self?.popover.performClose(nil) }
         model.quit = { NSApplication.shared.terminate(nil) }
         observeTitle()

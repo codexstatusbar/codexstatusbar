@@ -36,7 +36,7 @@ import CodexHubCollector
         try capture(model, "reported-dark", output, dark: true)
         model.frame = try ReportedFrame(monitors: [a,b], verifiedIndependentThreads: [a.key,b.key], at: 20)
         precondition(model.summary == "225", "UI35 elapsed work average does not expire after ten seconds")
-        precondition(model.menuTitle == "225 tok/s", "UI36 menu shows only speed and unit")
+        precondition(model.menuTitle == "225 t/s", "UI36 menu shows only speed and unit")
         try capture(model, "work-average-waiting", output, dark: false)
         try set([a,b], verified: [a.key,b.key])
         model.sessions[0].usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data("{\"reasoningEffort\":\"high\",\"contextTokens\":600,\"contextWindow\":1000,\"limits\":[{\"name\":\"primary\",\"usedPercent\":21,\"windowMinutes\":10080}]}".utf8))
@@ -115,7 +115,7 @@ import CodexHubCollector
         try a.startTurn("new-turn", at: 7)
         try a.setApproval("approval", waiting: true, turnID: "new-turn", at: 8)
         try set([a,b], verified: [a.key,b.key])
-        precondition(model.summary == "225" && model.menuTitle == "225 tok/s", "UI07 approval without samples")
+        precondition(model.summary == "225" && model.menuTitle == "225 t/s", "UI07 approval without samples")
         try capture(model, "working-approval", output, dark: false)
         try a.setConnectivity(.disconnected, at: 9)
         try set([a], verified: [a.key])
@@ -216,10 +216,10 @@ import CodexHubCollector
         historyModel.sessions = [SessionPresentation(monitor: newTurn)]
         historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 2)
         historyModel.rateUnit = .minute
-        precondition(historyModel.menuTitle == HubPresentation.rate(1500) + " tok/m" && historyModel.rate(for: historyModel.sessions[0]) == HubPresentation.rate(1500), "UI57 minute conversion is consistent across menu and rows")
+        precondition(historyModel.menuTitle == HubPresentation.rate(1500) + " t/m" && historyModel.rate(for: historyModel.sessions[0]) == HubPresentation.rate(1500), "UI57 minute conversion is consistent across menu and rows")
         precondition(historyModel.displayRate(nil) == "—" && historyModel.displayRate(0) == "0", "UI58 unit conversion preserves missing versus zero")
         historyModel.rateUnit = .second
-        precondition(historyModel.menuTitle == "25 tok/s", "UI59 second unit restores the same underlying rate")
+        precondition(historyModel.menuTitle == "25 t/s", "UI59 second unit restores the same underlying rate")
         var chartTotal = 50
         for tick in 3...302 {
             chartTotal += [12, 24, 8, 40, 18, 4][tick % 6]

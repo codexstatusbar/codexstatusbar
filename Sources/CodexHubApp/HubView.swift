@@ -97,6 +97,9 @@ struct HubView: View {
     }
 
     private var measurementCaption: String {
+        if model.measurementMode == .server {
+            return model.text("서버 진단 모드에서는 속도를 계산하지 않습니다")
+        }
         if model.measurementMode == .live, !model.sessions.isEmpty,
            model.sessions.allSatisfy({ ($0.observedSource ?? $0.monitor.counter.source) != .directRelay }) {
             return model.text("실시간 추정은 관리형 직접 연결이 필요합니다")
@@ -111,7 +114,7 @@ struct HubView: View {
                     Text(model.text("전체 속도")).font(.system(size: 12)).foregroundStyle(secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(model.error == nil && model.aggregateRate != nil ? model.summary : "—")
-                            .font(.system(size: 28, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                            .font(.system(size: 24, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
                         Text(model.rateUnit.suffix).font(.system(size: 13)).foregroundStyle(secondary)
                     }.accessibilityElement(children: .combine)
                     Label(measurementCaption, systemImage: "info.circle")
@@ -154,7 +157,7 @@ struct HubView: View {
                             Spacer(minLength: 8)
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text(model.text("확인 중")).font(.system(size: 11)).foregroundStyle(secondary)
-                                Text("— " + model.rateUnit.suffix).font(.system(size: 12, weight: .medium))
+                                Text("— " + model.rateUnit.suffix).font(.system(size: 11, weight: .medium))
                             }
                         }.padding(.horizontal, 12).frame(minHeight: 64).background(inset, in: RoundedRectangle(cornerRadius: 8))
                     }
@@ -194,7 +197,7 @@ struct HubView: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 4) {
                 Label(model.status(for: session), systemImage: "circle.fill").font(.system(size: 10)).foregroundStyle(tint).lineLimit(1)
-                Text(model.rate(for: session) + " " + model.rateUnit.suffix).font(.system(size: 12, weight: .medium)).monospacedDigit().lineLimit(1)
+                Text(model.rate(for: session) + " " + model.rateUnit.suffix).font(.system(size: 11, weight: .medium)).monospacedDigit().lineLimit(1)
             }
             Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)
         }.padding(.horizontal, 12).frame(minHeight: 64).contentShape(Rectangle())
@@ -215,11 +218,16 @@ struct HubView: View {
                 }
                 Divider()
                 settingsRow("속도 계산 방식") { modePicker }
+                if model.measurementMode == .server {
+                    connectionNote("서버 진단 모드에서는 속도를 계산하지 않습니다")
+                    Button(model.text("도구 제외 추정으로 전환")) { model.updateMeasurementMode?(.reported) }
+                        .buttonStyle(.bordered).disabled(model.updateMeasurementMode == nil)
+                }
                 Divider()
                 settingsRow("속도 단위") {
                 Picker(model.text("속도 단위"), selection: Binding(get: { model.rateUnit }, set: { model.updateRateUnit?($0) })) {
                     ForEach(RateUnit.allCases, id: \.self) { unit in
-                        Text(model.text(unit == .second ? "초당 · tok/s" : "분당 · tok/m")).tag(unit)
+                        Text(model.text(unit == .second ? "초당 · t/s" : "분당 · t/m")).tag(unit)
                     }
                 }.disabled(model.updateRateUnit == nil)
                 }
