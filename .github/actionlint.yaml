@@ -1,0 +1,4 @@
+# Hosted preview label documented by actions/runner-images; not in older actionlint catalogs.
+self-hosted-runner:
+  labels:
+    - xcode-27

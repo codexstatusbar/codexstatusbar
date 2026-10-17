@@ -1,0 +1,92 @@
+name: macOS bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bundle-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Core and collector tests
+        run: |
+          swift --version
+          swift test --build-system native --disable-xctest \
+            -Xcxx -isystem -Xcxx "$(xcrun --show-sdk-path)/usr/include/c++/v1" 2>&1 | tee test.log
+      - name: Preserve test log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-log
+          path: test.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  verify:
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Synthetic UI and isolated process checks
+        run: ./scripts/capture-fixtures.sh .build/ui-evidence 2>&1 | tee verify.log
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ui-verification
+          path: |
+            verify.log
+            .build/ui-evidence/*.png
+          if-no-files-found: warn
+          retention-days: 14
+
+  bundle:
+    needs: [test, verify]
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Build and package arm64 app
+        run: ./scripts/package-app.sh 2>&1 | tee bundle.log
+      - name: Upload app bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Codex-Hub-macos-arm64-${{ github.sha }}
+          path: |
+            .build/dist/Codex-Hub-macos-arm64.zip
+            .build/dist/Codex-Hub-macos-arm64.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Preserve build log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bundle-log
+          path: bundle.log
+          if-no-files-found: warn
+          retention-days: 14

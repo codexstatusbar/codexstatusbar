@@ -26,6 +26,31 @@ open '.build/Codex Hub.app'
 
 목록에는 현재 살아 있는 프로세스만 표시하며, PID·시작 시각과 정확한 로그 파일 ID로 세션을 연결합니다. 아직 세션을 식별하지 못한 프로세스는 확인 중으로 표시하고, 종료된 프로세스의 과거 이력은 목록에 넣지 않습니다. 앱 종료는 Codex 세션을 종료하지 않습니다.
 
+## GitHub Actions 번들
+
+[macOS bundle](.github/workflows/bundle.yml)은 `main` push, pull request와 수동 실행(`workflow_dispatch`)에서 동작합니다. GitHub의 Xcode 27 arm64 프리뷰 러너(`xcode-27`)와 Xcode 27.0을 사용합니다. 러너 제공 범위는 [GitHub runner images](https://github.com/actions/runner-images#available-images)를 참고하세요.
+
+1. `test`: Core/Collector 자동 테스트.
+2. `verify`: 기존 합성 UI·격리된 프로세스 검증과 화면 증거 수집.
+3. `bundle`: 두 검증이 성공하면 arm64 앱을 빌드하고 서명·리소스를 확인한 뒤 ZIP 생성.
+
+저장소 **Actions → macOS bundle → 실행 결과 → Artifacts**에서
+`Codex-Hub-macos-arm64-<commit>`을 받으세요. 안에는 `Codex-Hub-macos-arm64.zip`과
+SHA-256 파일이 있습니다. 앱 ZIP에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
+아티팩트와 실행 로그는 14일간 보관하며, GitHub Release를 자동 공개하지 않습니다.
+코드를 GitHub에 push하기 전에는 워크플로가 실행되지 않습니다.
+
+로컬에서도 같은 번들을 만들 수 있습니다.
+
+```sh
+./scripts/package-app.sh
+(cd .build/dist && shasum -a 256 -c Codex-Hub-macos-arm64.zip.sha256)
+```
+
+결과는 `.build/dist/`에 생성됩니다. 로컬 ad-hoc 서명이며 Apple 배포 서명·공증을
+추가하는 작업은 아닙니다. CI의 합성 검증도 실제 provider·훅 신뢰·전체 네이티브 QA를
+대신하지 않습니다.
+
 ## 속도 계산과 표시
 
 설정에서 계산 방식과 표시 단위를 선택합니다.
