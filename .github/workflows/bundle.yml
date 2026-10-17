@@ -76,10 +76,10 @@ jobs:
       - name: Upload app bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: Codex-Hub-macos-arm64-${{ github.sha }}
+          name: Tokloom-macos-arm64-${{ github.sha }}
           path: |
-            .build/dist/Codex-Hub-macos-arm64.zip
-            .build/dist/Codex-Hub-macos-arm64.zip.sha256
+            .build/dist/Tokloom-macos-arm64.zip
+            .build/dist/Tokloom-macos-arm64.zip.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -93,7 +93,7 @@ jobs:
             gh release upload "$RELEASE_TAG" .build/dist/*.zip .build/dist/*.sha256 --clobber
           else
             gh release create "$RELEASE_TAG" .build/dist/*.zip .build/dist/*.sha256 \
-              --verify-tag --title "Codex Hub $RELEASE_TAG" \
+              --verify-tag --title "Tokloom $RELEASE_TAG" \
               --notes "Apple Silicon macOS 14+ bundle. Local ad-hoc signature; not notarized. Includes the helper, tokenizer resources and app icon. See README for measurement limitations."
           fi
       - name: Preserve build log

@@ -7,7 +7,7 @@ import ServiceManagement
     let model: HubPresentation
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
-    private let statusIcon = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Codex Hub")
+    private let statusIcon = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Tokloom")
 
     init(model: HubPresentation) {
         self.model = model
@@ -26,11 +26,11 @@ import ServiceManagement
 
     private func observeTitle() {
         withObservationTracking {
-            item.button?.toolTip = model.language.resolved == .korean ? "Codex Hub — 출력 증가량 ÷ 도구 실행·대기를 뺀 보고 구간(추정). ≈: 최근 5초 화면 출력 추정." : "Codex Hub — Output delta / report interval excluding tools (estimate). ≈: visible output estimate over 5 seconds."
+            item.button?.toolTip = model.language.resolved == .korean ? "Tokloom — 출력 증가량 ÷ 도구 실행·대기를 뺀 보고 구간(추정). ≈: 최근 5초 화면 출력 추정." : "Tokloom — Output delta / report interval excluding tools (estimate). ≈: visible output estimate over 5 seconds."
             item.button?.title = model.menuTitle
             item.button?.image = model.menuTitle.isEmpty ? statusIcon : nil
             item.button?.imagePosition = model.menuTitle.isEmpty ? .imageOnly : .noImage
-            item.button?.setAccessibilityLabel("Codex Hub, " + (model.menuTitle.isEmpty ? model.text(model.summary) : model.menuTitle))
+            item.button?.setAccessibilityLabel("Tokloom, " + (model.menuTitle.isEmpty ? model.text(model.summary) : model.menuTitle))
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in self?.observeTitle() }
         }
@@ -55,7 +55,7 @@ import ServiceManagement
         menu.addItem(open)
         let close = NSMenuItem(title: model.text("닫기"), action: #selector(quitFromMenu), keyEquivalent: "q")
         close.target = self
-        close.toolTip = model.text("Quitting Hub stops monitoring, not your Codex sessions.")
+        close.toolTip = model.text("Quitting Tokloom stops monitoring, not your Codex sessions.")
         menu.addItem(close)
         menu.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: button.bounds.minY), in: button)
     }

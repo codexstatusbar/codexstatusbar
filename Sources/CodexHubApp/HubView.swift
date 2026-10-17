@@ -41,14 +41,14 @@ struct HubView: View {
         .alert(model.text("Clear collected metadata?"), isPresented: $model.confirmClear) {
             Button(model.text("Cancel"), role: .cancel) {}
             Button(model.text("Clear metadata"), role: .destructive) { model.clearMetadata?() }
-        } message: { Text(model.text("Deletes Hub metadata only. Original Codex logs and sessions are kept.")) }
+        } message: { Text(model.text("Deletes Tokloom metadata only. Original Codex logs and sessions are kept.")) }
     }
 
     private var header: some View {
         HStack(spacing: 10) {
             if model.page == .overview {
                 Image(systemName: "waveform.path.ecg.rectangle").font(.system(size: 15)).accessibilityHidden(true)
-                Text("Codex Hub").font(.system(size: 15, weight: .medium))
+                Text("Tokloom").font(.system(size: 15, weight: .medium))
                 Spacer(minLength: 8)
             } else {
                 Button { model.page = .overview } label: {
@@ -89,7 +89,7 @@ struct HubView: View {
 
     private var title: String {
         switch model.page {
-        case .overview: "Codex Hub"
+        case .overview: "Tokloom"
         case .detail: model.text("상세정보")
         case .preferences: model.text("설정")
         case .connection: model.text("연결")
@@ -133,7 +133,7 @@ struct HubView: View {
                     .accessibilityElement(children: .combine) }
             }.frame(minHeight: 92)
             if model.sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .approvalWait }) {
-                Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."), systemImage: "hand.raised")
+                Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Tokloom never approves commands."), systemImage: "hand.raised")
                     .font(.system(size: 11)).foregroundStyle(Color.primary)
             }
             Divider()
@@ -262,8 +262,8 @@ struct HubView: View {
                     .buttonStyle(.bordered)
                     .disabled(!model.canManageMetadata || model.clearMetadata == nil || model.busy)
             }
-            settingsSection("Quit app", subtitle: "Quitting Hub stops monitoring, not your Codex sessions.") {
-                Button(model.text("Quit Codex Hub"), role: .destructive) { model.quit?() }
+            settingsSection("Quit app", subtitle: "Quitting Tokloom stops monitoring, not your Codex sessions.") {
+                Button(model.text("Quit Tokloom"), role: .destructive) { model.quit?() }
                     .buttonStyle(.bordered).tint(.red).disabled(model.quit == nil)
             }
         }.toggleStyle(.switch).controlSize(.regular)

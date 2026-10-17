@@ -491,3 +491,12 @@ Minute boundaries map monotonic sample times to the wall clock using one shared
 clock offset. Each bucket begins at second 00, not at process-uptime minute
 boundaries. UI82 covers observations straddling wall-clock 00 with a non-zero
 uptime offset.
+
+## Tokloom display name
+
+The app UI, accessibility names, Info.plist display name, generated app bundle,
+ZIP/checksum names and future release titles now use Tokloom. The bundle identifier,
+UserDefaults domain, metadata location, Swift module names and helper protocol
+remain unchanged to preserve existing settings, histories and hook ownership.
+UI01–UI82/P01–P06 passed. Workflow syntax and packaging are checked locally;
+the already-published 0.0.1 release is not rewritten by this rename.

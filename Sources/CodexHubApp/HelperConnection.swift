@@ -111,7 +111,7 @@ enum HelperConnection {
         switch status.state {
         case "installed": return "Installed · manually review and trust in Codex /hooks. Runtime compatibility is unverified."
         case "not_installed": return "Not installed. Hooks are optional and provide state only."
-        case "conflict": return "Conflict · existing hook definitions do not match Hub ownership. No automatic repair is performed."
+        case "conflict": return "Conflict · existing hook definitions do not match Tokloom ownership. No automatic repair is performed."
         default: return "Unknown hook status. Trust and compatibility remain unverified."
         }
     }

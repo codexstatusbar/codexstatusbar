@@ -1,4 +1,4 @@
-# Codex Hub
+# Tokloom
 
 Codex를 사용하는 개발자를 위한 Apple Silicon macOS 메뉴바 모니터입니다. 실행 중인 프로세스의 활동 상태와 출력 속도, 모델·토큰 사용량, 남은 사용 한도를 한곳에서 확인합니다.
 
@@ -15,7 +15,7 @@ macOS 14+ 대상이며, 빌드에는 Swift 6.4 Command Line Tools가 필요합�
 
 ```sh
 ./scripts/build-app.sh
-open '.build/Codex Hub.app'
+open '.build/Tokloom.app'
 # 또는 빌드와 실행을 함께 수행
 ./scripts/run-app.sh
 ```
@@ -35,7 +35,7 @@ open '.build/Codex Hub.app'
 3. `bundle`: 두 검증이 성공하면 arm64 앱을 빌드하고 서명·리소스를 확인한 뒤 ZIP 생성.
 
 저장소 **Actions → macOS bundle → 실행 결과 → Artifacts**에서
-`Codex-Hub-macos-arm64-<commit>`을 받으세요. 안에는 `Codex-Hub-macos-arm64.zip`과
+`Tokloom-macos-arm64-<commit>`을 받으세요. 안에는 `Tokloom-macos-arm64.zip`과
 SHA-256 파일이 있습니다. 앱 ZIP에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
 아티팩트와 실행 로그는 14일간 보관합니다. 모든 검증과 번들 생성이 성공하면 태그 이름의 GitHub Release를 만들고 ZIP·SHA-256 파일을 업로드합니다. 같은 태그의 재실행은 릴리스 파일을 교체합니다.
 태그를 로컬에 생성한 것만으로는 실행되지 않으며, 해당 태그를 GitHub에 push해야 합니다.
@@ -44,7 +44,7 @@ SHA-256 파일이 있습니다. 앱 ZIP에는 아이콘, helper와 토크나이�
 
 ```sh
 ./scripts/package-app.sh
-(cd .build/dist && shasum -a 256 -c Codex-Hub-macos-arm64.zip.sha256)
+(cd .build/dist && shasum -a 256 -c Tokloom-macos-arm64.zip.sha256)
 ```
 
 결과는 `.build/dist/`에 생성됩니다. 로컬 ad-hoc 서명이며 Apple 배포 서명·공증을
@@ -110,8 +110,8 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 연결 화면의 명령을 복사하거나 아래 경로를 설치 위치에 맞춰 바꾸고, 작업할 프로젝트 디렉터리에서 실행하세요.
 
 ```sh
-'/path/to/Codex Hub.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'
-env CODEX_HOME="$HOME/.codex" '/path/to/Codex Hub.app/Contents/Helpers/codex-hub' run --experimental --server-timing --codex '/absolute/path/to/codex'
+'/path/to/Tokloom.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'
+env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --server-timing --codex '/absolute/path/to/codex'
 ```
 
 `--codex`를 생략하면 PATH에서 찾습니다. 현재 helper의 허용 버전은 `codex-cli 0.163.0`입니다. 임의 위치 인수·프롬프트·추가 플래그·프로필·resume/fork는 거부합니다. 기존 실행에 붙거나 재시작하지 않으며, 앱과 관리형 실행의 수명은 분리됩니다. 관리형 relay는 **실험적이며 G0 미검증**입니다.
@@ -128,6 +128,8 @@ Live 추정은 관리형 direct relay에서 처음부터 완전하게 관측한 
 
 Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 포함하지 않습니다. `chars/4` 같은 대체 계산도 없습니다. 최대 4개 항목, 항목당 16 KiB, 정규식 구간 512바이트와 계산 시간·작업량 한계를 넘으면 추정을 중단합니다. 공식 tiktoken과의 동등성은 아직 검증하지 않았습니다.
 
+기존 설치의 설정·관측 기록을 유지하기 위해 앱 번들 식별자와 `CodexHub` 저장 경로, 내부 모듈·helper 이름은 그대로 사용합니다. 앱 표시 이름과 배포 파일명은 Tokloom입니다.
+
 ## 구조와 저장
 
 | 모듈 | 역할 |
@@ -139,7 +141,7 @@ Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 �
 
 프로덕션 구현은 Swift와 macOS 시스템 라이브러리를 사용합니다. Hub는 프롬프트·응답 원문을 저장하지 않습니다. 메타데이터는 `~/Library/Application Support/CodexHub/homes/<homeHash>`, 관리형 관측 파일은 같은 `CodexHub` 디렉터리의 `managed-runs/<homeHash>`에 분리합니다.
 
-삭제·보관 정책은 Hub 메타데이터에 적용합니다. 관리형 관측 파일은 종료·소유권·파일 정체성이 확인된 것만 정리하며, 실행 중이거나 판단이 불명확한 파일과 원본 Codex 로그는 유지합니다. 보류 사유는 연결 진단에 표시됩니다.
+삭제·보관 정책은 Tokloom 메타데이터에 적용합니다. 관리형 관측 파일은 종료·소유권·파일 정체성이 확인된 것만 정리하며, 실행 중이거나 판단이 불명확한 파일과 원본 Codex 로그는 유지합니다. 보류 사유는 연결 진단에 표시됩니다.
 
 ## 검증 상태와 문서
 

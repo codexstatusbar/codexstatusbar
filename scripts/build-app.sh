@@ -5,7 +5,7 @@ cd "$ROOT"
 swift build --build-system native -c release --arch arm64 --product CodexHubApp
 swift build --build-system native -c release --arch arm64 --product codex-hub
 BIN="$(swift build --build-system native -c release --arch arm64 --show-bin-path)"
-APP="$ROOT/.build/Codex Hub.app"
+APP="$ROOT/.build/Tokloom.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 cp "$BIN/CodexHubApp" "$APP/Contents/MacOS/"
 cp "$BIN/codex-hub" "$APP/Contents/Helpers/"

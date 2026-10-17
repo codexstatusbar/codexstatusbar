@@ -2,4 +2,4 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 "$ROOT/scripts/build-app.sh"
-open "$ROOT/.build/Codex Hub.app"
+open "$ROOT/.build/Tokloom.app"
