@@ -56,6 +56,8 @@ Tokloom is a native menu bar monitor for developers using Codex. Keep your exist
 
 <sub>These are renders of the current app UI with synthetic data, not real account/project information or performance benchmarks. Some action buttons are disabled in the sample state. Click an image to view it at full size.</sub>
 
+Download the DMG from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases), open it, and drag **Tokloom.app** to **Applications**. Release assets are DMG files; GitHub may wrap Actions artifacts in a separate ZIP for download.
+
 ## Build and run
 
 Targets macOS 14+. Building requires Swift 6.4 Command Line Tools. No Xcode project is required.
@@ -81,17 +83,17 @@ The [macOS bundle workflow](.github/workflows/bundle.yml) runs only when a tag m
 
 1. `test`: Core/Collector automated tests.
 2. `verify`: synthetic UI and isolated process checks, with rendered evidence.
-3. `bundle`: after both checks pass, build the arm64 app, validate signatures/resources, and create a ZIP.
+3. `bundle`: after both checks pass, build the arm64 app, validate signatures/resources, and create a DMG.
 
-Download `Tokloom-macos-arm64-<commit>` from **Actions → macOS bundle → run → Artifacts**. It contains `Tokloom-macos-arm64.zip` and its SHA-256 file. The app includes its icon, helper, and tokenizer resources.
+Download `Tokloom-macos-arm64-<commit>` from **Actions → macOS bundle → run → Artifacts**. It contains `Tokloom-macos-arm64.dmg` and its SHA-256 file. The app includes its icon, helper, and tokenizer resources.
 
-Artifacts and logs are retained for 14 days. After all checks and packaging succeed, the workflow creates a GitHub Release named after the tag and uploads the ZIP and checksum. Rerunning the same tag replaces its release assets. Creating a local tag alone does not trigger the workflow; push it to GitHub.
+Artifacts and logs are retained for 14 days. After all checks and packaging succeed, the workflow creates a GitHub Release named after the tag and uploads the DMG and checksum. Rerunning the same tag replaces its release assets. Creating a local tag alone does not trigger the workflow; push it to GitHub.
 
 The same packaging path is available locally:
 
 ```sh
 ./scripts/package-app.sh
-(cd .build/dist && shasum -a 256 -c Tokloom-macos-arm64.zip.sha256)
+(cd .build/dist && shasum -a 256 -c Tokloom-macos-arm64.dmg.sha256)
 ```
 
 Output goes to `.build/dist/`. Packaging uses ad-hoc signing, not Apple distribution signing or notarization. Synthetic CI checks do not replace provider, hook-trust, or full native QA.

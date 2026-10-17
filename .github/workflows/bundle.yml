@@ -78,8 +78,8 @@ jobs:
         with:
           name: Tokloom-macos-arm64-${{ github.sha }}
           path: |
-            .build/dist/Tokloom-macos-arm64.zip
-            .build/dist/Tokloom-macos-arm64.zip.sha256
+            .build/dist/Tokloom-macos-arm64.dmg
+            .build/dist/Tokloom-macos-arm64.dmg.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -90,11 +90,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" .build/dist/*.zip .build/dist/*.sha256 --clobber
+            gh release upload "$RELEASE_TAG" .build/dist/Tokloom-macos-arm64.dmg .build/dist/Tokloom-macos-arm64.dmg.sha256 --clobber
           else
-            gh release create "$RELEASE_TAG" .build/dist/*.zip .build/dist/*.sha256 \
+            gh release create "$RELEASE_TAG" .build/dist/Tokloom-macos-arm64.dmg .build/dist/Tokloom-macos-arm64.dmg.sha256 \
               --verify-tag --title "Tokloom $RELEASE_TAG" \
-              --notes "Apple Silicon macOS 14+ bundle. Local ad-hoc signature; not notarized. Includes the helper, tokenizer resources and app icon. See README for measurement limitations."
+              --notes "Apple Silicon macOS 14+ disk image. Open the DMG and drag Tokloom to Applications. Local ad-hoc signature; not notarized. Includes the helper, tokenizer resources and app icon. See README for measurement limitations."
           fi
       - name: Preserve build log
         if: always()

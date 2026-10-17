@@ -56,6 +56,8 @@ Tokloom은 Codex를 사용하는 개발자를 위한 네이티브 메뉴바 모�
 
 <sub>현재 앱 UI를 샘플 데이터로 렌더링한 예시입니다. 실제 계정·프로젝트 정보나 성능 벤치마크가 아니며, 일부 동작 버튼은 샘플 상태에서 비활성화돼 있습니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
+[Releases](https://github.com/codexstatusbar/codexstatusbar/releases)에서 DMG를 받아 연 다음 **Tokloom.app**을 **Applications**로 드래그하세요. 릴리스 파일은 DMG이며, Actions 아티팩트 다운로드는 GitHub가 별도 ZIP으로 감쌀 수 있습니다.
+
 ## 빌드와 실행
 
 macOS 14+ 대상이며, 빌드에는 Swift 6.4 Command Line Tools가 필요합니다. Xcode 프로젝트는 사용하지 않습니다.
@@ -81,19 +83,19 @@ open '.build/Tokloom.app'
 
 1. `test`: Core/Collector 자동 테스트.
 2. `verify`: 기존 합성 UI·격리된 프로세스 검증과 화면 증거 수집.
-3. `bundle`: 두 검증이 성공하면 arm64 앱을 빌드하고 서명·리소스를 확인한 뒤 ZIP 생성.
+3. `bundle`: 두 검증이 성공하면 arm64 앱을 빌드하고 서명·리소스를 확인한 뒤 DMG 생성.
 
 저장소 **Actions → macOS bundle → 실행 결과 → Artifacts**에서
-`Tokloom-macos-arm64-<commit>`을 받으세요. 안에는 `Tokloom-macos-arm64.zip`과
-SHA-256 파일이 있습니다. 앱 ZIP에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
-아티팩트와 실행 로그는 14일간 보관합니다. 모든 검증과 번들 생성이 성공하면 태그 이름의 GitHub Release를 만들고 ZIP·SHA-256 파일을 업로드합니다. 같은 태그의 재실행은 릴리스 파일을 교체합니다.
+`Tokloom-macos-arm64-<commit>`을 받으세요. 안에는 `Tokloom-macos-arm64.dmg`과
+SHA-256 파일이 있습니다. 앱 DMG에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
+아티팩트와 실행 로그는 14일간 보관합니다. 모든 검증과 번들 생성이 성공하면 태그 이름의 GitHub Release를 만들고 DMG·SHA-256 파일을 업로드합니다. 같은 태그의 재실행은 릴리스 파일을 교체합니다.
 태그를 로컬에 생성한 것만으로는 실행되지 않으며, 해당 태그를 GitHub에 push해야 합니다.
 
 로컬에서도 같은 번들을 만들 수 있습니다.
 
 ```sh
 ./scripts/package-app.sh
-(cd .build/dist && shasum -a 256 -c Tokloom-macos-arm64.zip.sha256)
+(cd .build/dist && shasum -a 256 -c Tokloom-macos-arm64.dmg.sha256)
 ```
 
 결과는 `.build/dist/`에 생성됩니다. 로컬 ad-hoc 서명이며 Apple 배포 서명·공증을

@@ -17,9 +17,12 @@ TOKENIZER="$APP/Contents/Helpers/CodexHub_CodexHubHelper.bundle"
 test -s "$TOKENIZER/Contents/Resources/Resources/o200k_base.tiktoken"
 codesign --verify --strict "$TOKENIZER"
 codesign --verify --strict "$APP"
-ARCHIVE="$OUT/Tokloom-macos-arm64.zip"
-# ditto preserves macOS bundle metadata and executable permissions.
-ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
-unzip -tq "$ARCHIVE"
-(cd "$OUT" && shasum -a 256 Tokloom-macos-arm64.zip > Tokloom-macos-arm64.zip.sha256)
-printf '%s\n' "$ARCHIVE"
+IMAGE="$OUT/Tokloom-macos-arm64.dmg"
+STAGING="$(mktemp -d "$ROOT/.build/tokloom-dmg.XXXXXX")"
+trap 'rm -rf "$STAGING"' EXIT
+ditto "$APP" "$STAGING/Tokloom.app"
+ln -s /Applications "$STAGING/Applications"
+hdiutil create -volname Tokloom -srcfolder "$STAGING" -fs HFS+ -format UDZO -ov "$IMAGE"
+hdiutil verify "$IMAGE"
+(cd "$OUT" && shasum -a 256 Tokloom-macos-arm64.dmg > Tokloom-macos-arm64.dmg.sha256)
+printf '%s\n' "$IMAGE"
