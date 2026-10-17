@@ -32,6 +32,8 @@ jobs:
           swift --version
           swift test --build-system native --disable-xctest \
             -Xcxx -isystem -Xcxx "$(xcrun --show-sdk-path)/usr/include/c++/v1" 2>&1 | tee test.log
+      - name: Release notes regression tests
+        run: python3 -m unittest discover -s Tests/ReleaseNotesTests -v 2>&1 | tee -a test.log
       - name: Preserve test log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -71,6 +73,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Build and package arm64 app
         run: ./scripts/package-app.sh 2>&1 | tee bundle.log
       - name: Upload app bundle
@@ -89,12 +92,14 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           GH_REPO: ${{ github.repository }}
         run: |
+          python3 scripts/release-notes.py "$RELEASE_TAG" --repo "$GH_REPO" > .build/release-notes.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" .build/dist/Tokloom-macos-arm64.dmg .build/dist/Tokloom-macos-arm64.dmg.sha256 --clobber
+            gh release edit "$RELEASE_TAG" --notes-file .build/release-notes.md
           else
             gh release create "$RELEASE_TAG" .build/dist/Tokloom-macos-arm64.dmg .build/dist/Tokloom-macos-arm64.dmg.sha256 \
               --verify-tag --title "Tokloom $RELEASE_TAG" \
-              --notes "Apple Silicon macOS 14+ disk image. Open the DMG and drag Tokloom to Applications. Local ad-hoc signature; not notarized. Includes the helper, tokenizer resources and app icon. See README for measurement limitations."
+              --notes-file .build/release-notes.md
           fi
       - name: Preserve build log
         if: always()

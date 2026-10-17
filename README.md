@@ -87,7 +87,7 @@ The [macOS bundle workflow](.github/workflows/bundle.yml) runs only when a tag m
 
 Download `Tokloom-macos-arm64-<commit>` from **Actions → macOS bundle → run → Artifacts**. It contains `Tokloom-macos-arm64.dmg` and its SHA-256 file. The app includes its icon, helper, and tokenizer resources.
 
-Artifacts and logs are retained for 14 days. After all checks and packaging succeed, the workflow creates a GitHub Release named after the tag and uploads the DMG and checksum. Rerunning the same tag replaces its release assets. Creating a local tag alone does not trigger the workflow; push it to GitHub.
+Artifacts and logs are retained for 14 days. After all checks and packaging succeed, the workflow creates a GitHub Release named after the tag and uploads the DMG and checksum. Release notes include every commit since the previous ancestor version tag and a full comparison link. Rerunning the same tag updates its assets and notes. Creating a local tag alone does not trigger the workflow; push it to GitHub.
 
 The same packaging path is available locally:
 
