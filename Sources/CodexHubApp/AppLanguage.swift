@@ -41,7 +41,7 @@ enum AppLanguage: String, CaseIterable {
         "Waiting for new usage reports": "새 사용량 로그를 기다리는 중입니다",
         "30 min ago": "30분 전",
         "Now": "지금",
-        "Observed since the app started. Historical cumulative usage is excluded.": "앱 실행 이후 관측값입니다. 과거 누적 사용량은 차트에 넣지 않습니다.",
+        "Saved observations from the last 30 minutes. Cumulative usage is not added as new data.": "저장된 최근 30분 관측값입니다. 누적 사용량을 새 데이터로 추가하지 않습니다.",
         "Advanced measurement details": "고급 측정 정보",
         "Input": "입력",
         "Output": "출력",

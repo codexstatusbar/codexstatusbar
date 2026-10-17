@@ -15,13 +15,7 @@ struct SessionGraphics: View {
         return min(1, max(0, Double(used) / Double(window)))
     }
     private var statusColor: Color {
-        if model.error != nil || session.monitor.connectivity != .connected || session.activity == .unknown {
-            return colorScheme == .dark ? Color(red: 1, green: 0.65, blue: 0.25) : Color(red: 0.65, green: 0.33, blue: 0.03)
-        }
-        if session.activity == .generating {
-            return colorScheme == .dark ? Color(red: 0.26, green: 0.87, blue: 0.55) : Color(red: 0.04, green: 0.45, blue: 0.23)
-        }
-        return session.activity == .idle ? .secondary : .primary
+        ProcessTint.status(session, failed: model.error != nil, dark: colorScheme == .dark)
     }
 
     private var baseline: TokenUsage? { session.monitor.counter.baseline }
@@ -182,7 +176,7 @@ struct SessionGraphics: View {
                 Spacer()
                 Text(model.text("지금"))
             }.font(.system(size: 10)).foregroundStyle(.secondary)
-            Text(model.text("앱 실행 이후 관측값입니다. 과거 누적 사용량은 차트에 넣지 않습니다."))
+            Text(model.text("저장된 최근 30분 관측값입니다. 누적 사용량을 새 데이터로 추가하지 않습니다."))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
         }
     }
@@ -283,5 +277,25 @@ struct ObservedTokenChart: View {
                 .frame(height: compact ? 56 : 110)
             }
         }
+    }
+}
+
+// State colors are shared by the process list and detail view.
+enum ProcessTint {
+    static func status(_ session: SessionPresentation, failed: Bool, dark: Bool) -> Color {
+        if failed || session.monitor.connectivity != .connected || session.activity == .unknown {
+            return dark ? Color(red: 1, green: 0.65, blue: 0.25) : Color(red: 0.65, green: 0.33, blue: 0.03)
+        }
+        switch session.activity {
+        case .generating: return dark ? Color(red: 0.26, green: 0.87, blue: 0.55) : Color(red: 0.04, green: 0.45, blue: 0.23)
+        case .working: return .blue
+        case .toolRunning, .approvalWait: return .purple
+        default: return .secondary
+        }
+    }
+
+    static func project(_ title: String) -> Color {
+        let index = title.utf8.reduce(0) { ($0 + Int($1)) % 3 }
+        return [Color.blue, .indigo, .cyan][index]
     }
 }

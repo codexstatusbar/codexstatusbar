@@ -5,7 +5,7 @@ import CodexHubCore
 struct HubView: View {
     @Bindable var model: HubPresentation
     @Environment(\.colorScheme) private var colorScheme
-    var width: CGFloat = 520
+    var width: CGFloat = 460
     var height: CGFloat = 720
     private var dark: Bool { colorScheme == .dark }
     private var inset: Color { dark ? Color.white.opacity(0.045) : Color.black.opacity(0.035) }
@@ -180,11 +180,13 @@ struct HubView: View {
     }
 
     private func processRow(_ session: SessionPresentation) -> some View {
-        let waiting = session.activity == .idle && session.monitor.connectivity == .connected
-        let needsAttention = model.error != nil || session.monitor.connectivity != .connected || session.activity == .unknown
+        let tint = ProcessTint.status(session, failed: model.error != nil, dark: dark)
+        let projectTint = ProcessTint.project(session.title)
         return HStack(spacing: 10) {
-            Image(systemName: needsAttention ? "exclamationmark.circle" : waiting ? "pause.circle" : "circle.inset.filled")
-                .foregroundStyle(needsAttention ? attention : waiting ? secondary : session.activity == .generating ? active : Color.primary).accessibilityHidden(true)
+            Image(systemName: "folder.fill")
+                .foregroundStyle(projectTint).frame(width: 32, height: 32)
+                .background(projectTint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 Text(session.modelDescription.isEmpty ? model.text("모델 미확인") : session.modelDescription)
@@ -192,7 +194,7 @@ struct HubView: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 4) {
-                Text(model.status(for: session)).font(.system(size: 11)).foregroundStyle(secondary).lineLimit(1)
+                Label(model.status(for: session), systemImage: "circle.fill").font(.system(size: 10)).foregroundStyle(tint).lineLimit(1)
                 Text(model.rate(for: session) + " " + model.rateUnit.suffix).font(.system(size: 12, weight: .medium)).monospacedDigit().lineLimit(1)
             }
             Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)

@@ -405,3 +405,21 @@ checks that data survives beyond five minutes, and UI53 now checks thirty-minute
 expiry. This changes chart history only, not the throughput calculation or the
 tok/s versus tok/m display conversion. History remains observation-only and is
 not backfilled from cumulative counts after an app restart.
+
+## Persistent history and compact process colors
+
+Observed chart deltas now persist in the protected metadata SQLite database.
+Restart restoration keeps only the last thirty minutes, converts stored wall-clock
+ages to the current monotonic clock, and never restores live counter anchors.
+Clear Metadata deletes chart history in the same transaction as other metadata.
+UI65–UI72 cover restart/reboot mapping, initial discovery, no catch-up samples,
+expiry, wrong-home/corrupt archives, re-baselining and future timestamps. S237
+covers database reopening and clearing without changing original logs.
+
+The default popover width is 460pt. Project icons use blue/indigo/cyan accents;
+working is blue, tool/approval activity purple, generating green, idle gray and
+unknown/disconnected orange. State text remains visible alongside color.
+UI01–UI72 and P01–P06 passed in `.build/qa-history-persistence`; the 460pt dark
+root fixture was inspected. All 68 Core/Collector tests passed for persistence.
+These are scoped automated and synthetic rendering checks, not full QA or proof
+of a long-running native restart. Old unsaved history cannot be recovered.
