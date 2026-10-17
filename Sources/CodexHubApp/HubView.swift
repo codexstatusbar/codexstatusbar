@@ -50,13 +50,16 @@ struct HubView: View {
             if model.page == .overview {
                 Image(systemName: "waveform.path.ecg.rectangle").font(.system(size: 15)).accessibilityHidden(true)
                 Text("Codex Hub").font(.system(size: 15, weight: .medium))
+                Spacer(minLength: 8)
             } else {
                 Button { model.page = .overview } label: {
-                    Image(systemName: "chevron.left").frame(width: 24, height: 28)
-                }.buttonStyle(.plain).accessibilityLabel(model.text("뒤로")).keyboardShortcut("[", modifiers: .command)
-                Text(title).font(.system(size: 15, weight: .semibold))
+                    HStack(spacing: 10) {
+                        Image(systemName: "chevron.left").frame(width: 24)
+                        Text(title).font(.system(size: 15, weight: .semibold))
+                        Spacer(minLength: 0)
+                    }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityLabel(model.text("뒤로") + ", " + title).help(model.text("뒤로")).keyboardShortcut("[", modifiers: .command)
             }
-            Spacer(minLength: 8)
             Button { model.close?() } label: {
                 HStack(spacing: 6) {
                     if model.page == .overview {
@@ -65,9 +68,9 @@ struct HubView: View {
                         Text(model.activitySummary).foregroundStyle(secondary)
                     }
                     Image(systemName: model.page == .overview ? "chevron.down" : "xmark").foregroundStyle(secondary)
-                }.font(.system(size: 11)).frame(minHeight: 28).contentShape(Rectangle())
+                }.font(.system(size: 11)).frame(minWidth: model.page == .overview ? 0 : 44, minHeight: model.page == .overview ? 28 : 44).contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel(model.text("닫기") + ", " + model.activitySummary).help(model.text("닫기")).keyboardShortcut(.cancelAction)
-        }.padding(.horizontal, 16).padding(.vertical, 12)
+        }.padding(.horizontal, 16).padding(.vertical, model.page == .overview ? 12 : 4)
     }
 
     private var footer: some View {
