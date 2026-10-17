@@ -185,9 +185,8 @@ struct SessionGraphics: View {
         VStack(alignment: .leading, spacing: 12) {
             Label(model.text(title), systemImage: icon).font(.system(size: 13, weight: .semibold))
             content()
-        }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary.opacity(0.7), lineWidth: 0.5))
+            Divider().padding(.top, 4)
+        }.padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private func columns<Left: View, Right: View>(@ViewBuilder left: () -> Left, @ViewBuilder right: () -> Right) -> some View {

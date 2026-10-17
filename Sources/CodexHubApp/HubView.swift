@@ -36,10 +36,8 @@ struct HubView: View {
             footer
         }
         .font(.system(size: 13)).frame(width: width, height: height)
-        .background {
-            Rectangle().fill(.regularMaterial)
-                .overlay(LinearGradient(colors: [.blue.opacity(dark ? 0.045 : 0.02), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
+        .background(HubGlassBackground())
+        .modifier(HubGlassControls())
         .alert(model.text("Clear collected metadata?"), isPresented: $model.confirmClear) {
             Button(model.text("Cancel"), role: .cancel) {}
             Button(model.text("Clear metadata"), role: .destructive) { model.clearMetadata?() }
@@ -86,6 +84,7 @@ struct HubView: View {
                 Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28).contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel(model.text("설정")).help(model.text("설정")).keyboardShortcut(",", modifiers: .command)
         }.font(.system(size: 11)).foregroundStyle(secondary).padding(.horizontal, 16).padding(.vertical, 10)
+            .background(.bar)
     }
 
     private var title: String {
@@ -205,33 +204,82 @@ struct HubView: View {
     }
 
     private var preferences: some View {
-        Group {
-            Picker(model.text("Language"), selection: $model.language) {
-                Text(model.text("System default")).tag(AppLanguage.system)
-                Text("한국어").tag(AppLanguage.korean)
-                Text("English").tag(AppLanguage.english)
-            }.onChange(of: model.language) { _, language in model.saveLanguage?(language) }
-            Divider()
-            modePicker
-            Picker(model.text("속도 단위"), selection: Binding(get: { model.rateUnit }, set: { model.updateRateUnit?($0) })) {
-                ForEach(RateUnit.allCases, id: \.self) { unit in
-                    Text(model.text(unit == .second ? "초당 · tok/s" : "분당 · tok/m")).tag(unit)
+        VStack(alignment: .leading, spacing: 22) {
+            settingsSection("General settings", subtitle: "Choose the app language and speed display.") {
+                settingsRow("Language") {
+                Picker(model.text("Language"), selection: $model.language) {
+                    Text(model.text("System default")).tag(AppLanguage.system)
+                    Text("한국어").tag(AppLanguage.korean)
+                    Text("English").tag(AppLanguage.english)
+                }.onChange(of: model.language) { _, language in model.saveLanguage?(language) }
                 }
-            }.disabled(model.updateRateUnit == nil)
-            Text(model.text("Live requires complete managed visible text and a supported model. Warm-up and unavailable measurements remain —.")).font(.system(size: 11))
-            Divider()
-            Toggle(model.text("Hide idle sessions"), isOn: $model.hideIdle).onChange(of: model.hideIdle) { model.saveDisplayPreferences?() }
-            Toggle(model.text("Start at login"), isOn: Binding(get: { model.startAtLogin }, set: { model.updateLogin?($0) })).disabled(model.updateLogin == nil)
-            Text(model.text(model.loginStatus)).font(.system(size: 11))
-            Divider()
-            Picker(model.text("Metadata retention"), selection: Binding(get: { model.retentionDays }, set: { model.updateRetention?($0) })) {
-                ForEach([1, 7, 30, 90], id: \.self) { Text(model.language.resolved == .korean ? "\($0)일" : "\($0) days").tag($0) }
-            }.disabled(!model.canManageMetadata || model.updateRetention == nil || model.busy)
-            Text(model.text("Prompt and response text are never stored. Clearing metadata preserves original Codex logs.")).font(.system(size: 11))
-            Button(model.text("Clear collected metadata"), role: .destructive) { model.confirmClear = true }.disabled(!model.canManageMetadata || model.clearMetadata == nil || model.busy)
-            Divider()
-            Text(model.text("Quitting Hub stops monitoring, not your Codex sessions.")).font(.system(size: 11))
-            Button(model.text("Quit Codex Hub")) { model.quit?() }.disabled(model.quit == nil)
+                Divider()
+                settingsRow("속도 계산 방식") { modePicker }
+                Divider()
+                settingsRow("속도 단위") {
+                Picker(model.text("속도 단위"), selection: Binding(get: { model.rateUnit }, set: { model.updateRateUnit?($0) })) {
+                    ForEach(RateUnit.allCases, id: \.self) { unit in
+                        Text(model.text(unit == .second ? "초당 · tok/s" : "분당 · tok/m")).tag(unit)
+                    }
+                }.disabled(model.updateRateUnit == nil)
+                }
+                Text(model.text("Live requires complete managed visible text and a supported model. Warm-up and unavailable measurements remain —."))
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            settingsSection("Behavior", subtitle: "Control startup and session visibility.") {
+                settingsRow("Hide idle sessions", icon: "eye.slash") {
+                Toggle(isOn: $model.hideIdle) {
+                    Label(model.text("Hide idle sessions"), systemImage: "eye.slash")
+                }.onChange(of: model.hideIdle) { model.saveDisplayPreferences?() }
+                }
+                Divider()
+                settingsRow("Start at login", icon: "power") {
+                Toggle(isOn: Binding(get: { model.startAtLogin }, set: { model.updateLogin?($0) })) {
+                    Label(model.text("Start at login"), systemImage: "power")
+                }.disabled(model.updateLogin == nil)
+                }
+                if !model.loginStatus.isEmpty {
+                    Text(model.text(model.loginStatus)).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
+            settingsSection("Privacy and data", subtitle: "Manage how long collected metadata is kept.") {
+                settingsRow("Metadata retention") {
+                Picker(model.text("Metadata retention"), selection: Binding(get: { model.retentionDays }, set: { model.updateRetention?($0) })) {
+                    ForEach([1, 7, 30, 90], id: \.self) { Text(model.language.resolved == .korean ? "\($0)일" : "\($0) days").tag($0) }
+                }.disabled(!model.canManageMetadata || model.updateRetention == nil || model.busy)
+                }
+                Text(model.text("Prompt and response text are never stored. Clearing metadata preserves original Codex logs."))
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button(model.text("Clear collected metadata"), role: .destructive) { model.confirmClear = true }
+                    .buttonStyle(.bordered)
+                    .disabled(!model.canManageMetadata || model.clearMetadata == nil || model.busy)
+            }
+            settingsSection("Quit app", subtitle: "Quitting Hub stops monitoring, not your Codex sessions.") {
+                Button(model.text("Quit Codex Hub"), role: .destructive) { model.quit?() }
+                    .buttonStyle(.bordered).tint(.red).disabled(model.quit == nil)
+            }
+        }.toggleStyle(.switch).controlSize(.regular)
+    }
+
+    private func settingsRow<Content: View>(_ label: String, icon: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 12) {
+            if let icon { Image(systemName: icon).frame(width: 18).foregroundStyle(.secondary).accessibilityHidden(true) }
+            Text(model.text(label))
+            Spacer(minLength: 8)
+            content().labelsHidden().frame(maxWidth: 210, alignment: .trailing)
+        }.frame(minHeight: 28)
+    }
+
+    private func settingsSection<Content: View>(_ title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(model.text(title)).font(.system(size: 13, weight: .semibold))
+                Text(model.text(subtitle)).font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 12) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Divider().padding(.top, 4)
         }
     }
     private var connection: some View {
@@ -303,5 +351,34 @@ struct HubView: View {
         NSPasteboard.general.clearContents()
         notice = NSPasteboard.general.setString(text, forType: .string)
             ? self.text("Copied") + ": " + self.text(label) : self.text("Clipboard write failed.")
+    }
+}
+
+// The popover is the single glass surface; content groups stay flat.
+struct HubGlassBackground: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    var body: some View {
+        ZStack {
+            if reduceTransparency {
+                Color(nsColor: .windowBackgroundColor)
+            } else {
+                Rectangle().fill(.regularMaterial)
+                LinearGradient(colors: [.white.opacity(scheme == .dark ? 0.09 : 0.3), .blue.opacity(0.035), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                RoundedRectangle(cornerRadius: 18).strokeBorder(
+                    LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.75)
+            }
+        }.allowsHitTesting(false)
+    }
+}
+
+struct HubGlassControls: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26.0, *), !reduceTransparency {
+            content.buttonStyle(.glass)
+        } else {
+            content.buttonStyle(.bordered)
+        }
     }
 }

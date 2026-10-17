@@ -16,6 +16,13 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "General settings": "일반 설정",
+        "Choose the app language and speed display.": "앱의 기본 동작과 표시 방식을 설정합니다.",
+        "Behavior": "동작 설정",
+        "Control startup and session visibility.": "앱의 실행과 세션 표시를 설정합니다.",
+        "Privacy and data": "개인정보 및 데이터",
+        "Manage how long collected metadata is kept.": "저장되는 데이터와 보관 기간을 관리합니다.",
+        "Quit app": "앱 종료",
         "Saved charts could not be loaded. New observations continue.": "저장된 관측 차트를 불러오지 못했습니다. 새 관측은 계속됩니다.",
         "Observed charts could not be saved. Live collection continues.": "관측 차트를 저장하지 못했습니다. 현재 관측은 계속됩니다.",
         "Reported output · 30m": "보고 출력 · 30분",

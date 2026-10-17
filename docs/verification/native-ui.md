@@ -423,3 +423,18 @@ UI01–UI72 and P01–P06 passed in `.build/qa-history-persistence`; the 460pt d
 root fixture was inspected. All 68 Core/Collector tests passed for persistence.
 These are scoped automated and synthetic rendering checks, not full QA or proof
 of a long-running native restart. Old unsaved history cannot be recovered.
+
+## Glass styling and settings hierarchy
+
+The supplied settings screenshot defines the grouping: General, Behavior,
+Privacy/Data and Quit. The 460pt layout uses trailing controls, system switches,
+section headings and flat separators rather than nested card shells. Existing
+bindings, confirmations, availability guards and status/error labels are retained.
+The shared popover background supplies material, a restrained light edge and tint
+across Overview, Details, Connection and Settings. macOS 26+ uses native glass
+button styling; older systems retain bordered controls. Reduce Transparency uses
+an opaque system background and bordered controls. No monitoring logic changed.
+
+Validation: UI01–UI72/P01–P06 fixture suite; Korean/dark and English/light settings
+renders. Real desktop backdrop compositing and keyboard traversal are not proven
+by the fixture captures. Full QA is not claimed.
