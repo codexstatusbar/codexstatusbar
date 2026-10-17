@@ -7,10 +7,13 @@ import ServiceManagement
     let model: HubPresentation
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
+    private let statusIcon = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Codex Hub")
 
     init(model: HubPresentation) {
         self.model = model
         super.init()
+        statusIcon?.isTemplate = true
+        statusIcon?.size = NSSize(width: 16, height: 16)
         popover.behavior = .transient
         item.button?.target = self
         item.button?.action = #selector(toggle)
@@ -25,7 +28,9 @@ import ServiceManagement
         withObservationTracking {
             item.button?.toolTip = model.language.resolved == .korean ? "Codex Hub — 출력 증가량 ÷ 도구 실행·대기를 뺀 보고 구간(추정). ≈: 최근 5초 화면 출력 추정." : "Codex Hub — Output delta / report interval excluding tools (estimate). ≈: visible output estimate over 5 seconds."
             item.button?.title = model.menuTitle
-            item.button?.setAccessibilityLabel("Codex Hub, \(model.menuTitle)")
+            item.button?.image = model.menuTitle.isEmpty ? statusIcon : nil
+            item.button?.imagePosition = model.menuTitle.isEmpty ? .imageOnly : .noImage
+            item.button?.setAccessibilityLabel("Codex Hub, " + (model.menuTitle.isEmpty ? model.text(model.summary) : model.menuTitle))
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in self?.observeTitle() }
         }

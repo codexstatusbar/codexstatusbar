@@ -259,7 +259,6 @@ struct HubView: View {
             Text(model.text("Live requires complete managed visible text and a supported model. Warm-up and unavailable measurements remain —.")).font(.system(size: 11))
             Divider()
             Toggle(model.text("Hide idle sessions"), isOn: $model.hideIdle).onChange(of: model.hideIdle) { model.saveDisplayPreferences?() }
-            Toggle(model.text("Compact menu bar"), isOn: $model.compact).onChange(of: model.compact) { model.saveDisplayPreferences?() }
             Toggle(model.text("Start at login"), isOn: Binding(get: { model.startAtLogin }, set: { model.updateLogin?($0) })).disabled(model.updateLogin == nil)
             Text(model.text(model.loginStatus)).font(.system(size: 11))
             Divider()

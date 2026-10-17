@@ -27,7 +27,6 @@ import CodexHubCollector
         }
         model.hookAction = { [weak self] action in self?.runHooks(action) }
         model.hideIdle = defaults.bool(forKey: "hideIdle")
-        model.compact = defaults.bool(forKey: "compact")
         model.retentionDays = [1, 7, 30, 90].contains(defaults.integer(forKey: "retentionDays")) ? defaults.integer(forKey: "retentionDays") : 7
         menu = NativeMenuController(model: model)
         menu?.refreshLoginStatus()
@@ -35,7 +34,6 @@ import CodexHubCollector
         model.saveDisplayPreferences = { [weak self] in
             guard let self else { return }
             defaults.set(model.hideIdle, forKey: "hideIdle")
-            defaults.set(model.compact, forKey: "compact")
         }
         let helper = HelperConnection.bundledURL.path
         model.helperPath = HelperConnection.executable(helper) ? helper : nil
@@ -127,6 +125,7 @@ import CodexHubCollector
         collector = nil
         model.canManageMetadata = false
         model.sessions = []
+        model.recordUsageHistory([], at: ProcessInfo.processInfo.systemUptime)
         model.unattachedProcesses = []
         model.frame = nil
         model.refreshedAt = nil
@@ -201,6 +200,7 @@ import CodexHubCollector
         model.configuredServiceTier = observed.1
         guard let running = observed.0 else {
             model.sessions = []; model.unattachedProcesses = []; model.frame = nil
+            model.recordUsageHistory([], at: snapshot.observedAt)
             model.error = "Running Codex processes could not be inspected."
             return
         }
@@ -228,6 +228,7 @@ import CodexHubCollector
         let represented = Set(rows.flatMap { [$0.process, $0.server].compactMap { $0 } })
         model.unattachedProcesses = running.map(\.identity).filter { !represented.contains($0) }
         let frame = try ReportedFrame(monitors: rows.map(\.monitor), verifiedIndependentThreads: Set(rows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
+        model.recordUsageHistory(rows, at: snapshot.observedAt)
         model.sessions = rows
         model.frame = frame
         model.diagnostics = Dictionary(grouping: snapshot.diagnostics, by: \.message).map { message, occurrences in
@@ -238,6 +239,7 @@ import CodexHubCollector
     }
 
     private func collectionFailed(_ error: Error) {
+        model.suspendUsageHistory()
         model.error = (error as? CollectorError)?.message ?? "Could not read or store metadata. Check the selected Codex home and its permissions."
         model.diagnostics = ["Collection failed. Original Codex sessions were not changed."]
     }

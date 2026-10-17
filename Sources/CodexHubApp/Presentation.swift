@@ -105,6 +105,12 @@ enum MeasurementMode: String, CaseIterable {
     var symbol: String { self == .live ? "≈" : "" }
 }
 
+struct UsageHistoryPoint: Identifiable {
+    let time: Double
+    let outputTokens: Int
+    var id: Double { time }
+}
+
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
 @MainActor @Observable final class HubPresentation {
@@ -122,7 +128,6 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
     var hideIdle = false
-    var compact = false
     var retentionDays = 7
     var startAtLogin = false
     var loginStatus = "Not registered"
@@ -153,6 +158,40 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var saveDisplayPreferences: (() -> Void)?
     var close: (() -> Void)?
     var quit: (() -> Void)?
+
+    private struct UsageAnchor {
+        let time: Double
+        let output: Int
+        let epoch: String
+        let source: UsageSource
+    }
+    private var usageAnchors: [ThreadKey: UsageAnchor] = [:]
+    private(set) var usageHistory: [ThreadKey: [UsageHistoryPoint]] = [:]
+
+    func suspendUsageHistory() { usageAnchors.removeAll() }
+
+    func recordUsageHistory(_ rows: [SessionPresentation], at time: Double) {
+        guard time.isFinite, time >= 0 else { return }
+        let keys = Set(rows.map(\.id))
+        usageAnchors = usageAnchors.filter { keys.contains($0.key) }
+        usageHistory = usageHistory.filter { keys.contains($0.key) }
+        for row in rows {
+            usageHistory[row.id] = usageHistory[row.id, default: []].filter { $0.time > time - 300 }
+            guard row.monitor.connectivity == .connected, row.measurement == .reported || row.measurement == .warmingUp,
+                  let counter = row.monitor.counter.baseline else {
+                usageAnchors.removeValue(forKey: row.id)
+                continue
+            }
+            let source = row.observedSource ?? row.monitor.counter.source
+            if let previous = usageAnchors[row.id], previous.epoch == row.monitor.counter.epoch,
+               previous.source == source, time > previous.time, time - previous.time <= 5,
+               counter.outputTokens > previous.output {
+                usageHistory[row.id, default: []].append(UsageHistoryPoint(time: time, outputTokens: counter.outputTokens - previous.output))
+                usageHistory[row.id] = Array(usageHistory[row.id, default: []].suffix(600))
+            }
+            usageAnchors[row.id] = UsageAnchor(time: time, output: counter.outputTokens, epoch: row.monitor.counter.epoch, source: source)
+        }
+    }
 
     nonisolated static func rate(_ value: Double?, symbol: String = "") -> String {
         guard let value, value.isFinite, value >= 0 else { return "—" }
@@ -187,9 +226,8 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         return "상태 미확인"
     }
     var menuTitle: String {
-        let numeric = aggregateRate != nil && error == nil
-        let text = compact ? "Hub" : self.text(summary) + (numeric ? " tok/s" : "")
-        return text + (sessions.contains { $0.monitor.connectivity == .connected && $0.activity == .approvalWait } ? " · !" : "")
+        guard aggregateRate != nil, error == nil else { return "" }
+        return summary + " tok/s"
     }
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
     func rate(for session: SessionPresentation) -> String {
