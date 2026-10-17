@@ -104,7 +104,7 @@ Choose the measurement mode and display unit in Settings.
 
 | Mode | What it shows | Requirements and limits |
 | --- | --- | --- |
-| Tool-excluded estimate · default | Reported output tokens divided by an observed interval excluding tool execution/waiting | Updates when a new usage report arrives and holds until the next valid report. Some server response waiting may remain included. |
+| Tool-excluded estimate · default | Reported output tokens divided by an observed interval excluding tool execution/waiting | Updates on new usage reports. Holds while working and for 10 seconds after becoming idle; then the row shows `—` and leaves the aggregate. Some server response waiting may remain included. |
 | Live visible estimate · 5s | Estimated tokens `≈` from fully observed visible response text | Requires a managed direct connection and supported model. Unavailable for ordinary log connections. |
 
 `t/s` means tokens per second; `t/m` means tokens per minute. The minute display multiplies the same rate by 60—it does not change the measurement interval to one minute. Warm-up, observation gaps, and unsupported sources show `—`, never a fabricated zero.
@@ -189,7 +189,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 71 Core/Collector tests, 88 synthetic UI/process checks (UI01–UI82 and P01–P06), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 72 Core/Collector tests, 90 synthetic UI/process checks (UI01–UI84 and P01–P06), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 

@@ -128,6 +128,10 @@ public struct ThreadMonitor: Sendable {
         try validateTime(time)
         guard turns[id] == nil, activeTurnID == nil else { throw CoreError.invalidTransition }
         try advance(time)
+        if idleRateExpired(at: time) {
+            latestWorkAverage = nil
+            latestWorkAverageIsPartial = false
+        }
         activeTurnID = id
         latestTurnID = id
         observedIdle = false
@@ -276,10 +280,17 @@ public struct ThreadMonitor: Sendable {
         latestWorkAverage != nil ? latestWorkAverageIsPartial : (activeTurnID.flatMap { turns[$0] }?.isObservedAveragePartial ?? false)
     }
 
-    /// Last usage-event average, held across activity changes until another report or invalidation.
+    private func idleRateExpired(at time: Double) -> Bool {
+        guard observedIdle, activeTurnID == nil,
+              let endedAt = latestTurnID.flatMap({ turns[$0]?.endedAt }) else { return false }
+        return time - endedAt >= 10
+    }
+
+    /// Holds the last usage-event average while working and for ten seconds after completion.
     public func workAverageRate(at time: Double) throws -> Double? {
         try validateTime(time)
-        guard connectivity == .connected, !needsBaseline, !counter.isPartial else { return nil }
+        guard connectivity == .connected, !needsBaseline, !counter.isPartial,
+              !idleRateExpired(at: time) else { return nil }
         return latestWorkAverage
     }
 

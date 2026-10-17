@@ -403,18 +403,18 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(try m.workAverageRate(at: 1) == 100)
 }
 
-@Test func C27RateChangesOnlyOnUsageAndSurvivesIdleAndNextTurn() throws {
+@Test func C27RateChangesOnlyOnUsageAndSurvivesBriefIdleAndNextTurn() throws {
     var m = try monitor("held-rate")
     try m.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 5)
     #expect(try m.workAverageRate(at: 50) == 20)
     try m.finishTurn("turn", outcome: .completed, at: 60)
     #expect(try m.workAverageRate(at: 60) == 20)
-    try m.startTurn("next", at: 70)
+    try m.startTurn("next", at: 69)
     #expect(try m.workAverageRate(at: 80) == 20)
     try m.observeUsage(TokenUsage(outputTokens: 200), turnID: "next", source: .rolloutLog, epoch: "e", at: 90)
-    #expect(try m.workAverageRate(at: 100) == 5)
+    #expect(try m.workAverageRate(at: 100) == 100.0 / 21)
     try m.observeUsage(TokenUsage(outputTokens: 210), turnID: "turn", source: .rolloutLog, epoch: "e", at: 101)
-    #expect(try m.workAverageRate(at: 102) == 5)
+    #expect(try m.workAverageRate(at: 102) == 100.0 / 21)
     try m.markGap(at: 110)
     #expect(try m.workAverageRate(at: 110) == nil)
 }
@@ -465,4 +465,18 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(timing?.coverage == "missing_harness_boundary")
     #expect(timing?.inferenceMilliseconds == nil && timing?.betweenTokenMilliseconds == nil)
     #expect(timing?.responseID == "response-fixture")
+}
+
+@Test func C32IdleRateExpiresAfterTenSecondsWithoutResurrectingOnNewWork() throws {
+    var m = try monitor("idle-expiry")
+    try m.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 5)
+    try m.finishTurn("turn", outcome: .completed, at: 6)
+    #expect(try m.workAverageRate(at: 15.999) == 20)
+    #expect(try m.workAverageRate(at: 16) == nil)
+    let expired = try ReportedFrame(monitors: [m], verifiedIndependentThreads: [m.key], at: 16)
+    #expect(expired.tokensPerSecond == nil && expired.measuredRuns == 0)
+    try m.startTurn("next", at: 20)
+    #expect(try m.workAverageRate(at: 21) == nil)
+    try m.observeUsage(TokenUsage(outputTokens: 150), turnID: "next", source: .rolloutLog, epoch: "e", at: 25)
+    #expect(try m.workAverageRate(at: 60) == 10)
 }

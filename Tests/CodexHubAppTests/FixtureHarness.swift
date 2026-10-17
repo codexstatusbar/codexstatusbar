@@ -307,7 +307,20 @@ import CodexHubCollector
         let clockPoints = [UsageHistoryPoint(time: 42.9, outputTokens: 10), UsageHistoryPoint(time: 43, outputTokens: 20)]
         let clockChart = ObservedTokenChart(points: clockPoints, now: 50, emptyText: "", wallClockOffset: 17)
         precondition(clockChart.bins.map(\.id) == [0, 60] && clockChart.bins.map(\.tokens) == [10, 20], "UI82 minute boundaries align to wall-clock second zero, not process uptime")
-        print("PASS UI01–UI82 and P01–P06; fixture PNGs: \(output)")
+        var idleMonitor = ThreadMonitor(key: .init(homeID: "fixture", runID: nil, threadID: "idle-timeout"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
+        try idleMonitor.setConnectivity(.connected, at: 0)
+        try idleMonitor.startTurn("turn", at: 1)
+        try idleMonitor.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "fixture", at: 6)
+        try idleMonitor.finishTurn("turn", outcome: .completed, at: 7)
+        let idleModel = HubPresentation()
+        idleModel.sessions = [SessionPresentation(monitor: idleMonitor, rootObserved: true)]
+        idleModel.restoreUsageHistory([idleMonitor.key: [UsageHistoryPoint(time: 6, outputTokens: 100)]])
+        idleModel.frame = try ReportedFrame(monitors: [idleMonitor], verifiedIndependentThreads: [idleMonitor.key], at: 16.999)
+        precondition(idleModel.rate(for: idleModel.sessions[0]) == "20" && idleModel.menuTitle == "20 t/s", "UI83 idle grace retains row and aggregate speed before ten seconds")
+        idleModel.frame = try ReportedFrame(monitors: [idleMonitor], verifiedIndependentThreads: [idleMonitor.key], at: 17)
+        precondition(idleModel.rate(for: idleModel.sessions[0]) == "—" && idleModel.aggregateRate == nil && idleModel.menuTitle.isEmpty && !idleModel.usageHistory.isEmpty, "UI84 idle expiry clears row and menu rates without clearing chart history")
+        try capture(idleModel, "idle-rate-expired", output, dark: true)
+        print("PASS UI01–UI84 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

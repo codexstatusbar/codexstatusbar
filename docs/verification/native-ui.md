@@ -500,3 +500,14 @@ UserDefaults domain, metadata location, Swift module names and helper protocol
 remain unchanged to preserve existing settings, histories and hook ownership.
 UI01–UI82/P01–P06 passed. Workflow syntax and packaging are checked locally;
 the already-published 0.0.1 release is not rewritten by this rename.
+
+## Ten-second idle rate grace
+
+On the user's request, the shared reported-rate accessor keeps the last average
+for less than ten seconds after turn completion, then returns nil. Individual
+rows show a dash and ReportedFrame excludes the expired value from the main/menu
+aggregate. Working/tool/approval intervals still hold the last rate. Starting
+new work after the idle timeout clears the old held value until a fresh report;
+chart observations and completed-turn details are retained. C32 tests the exact
+boundary and new-turn behavior, while UI83–84 check row/menu agreement and history
+preservation. Core/Collector: 72 tests; UI/process checks: UI01–UI84 and P01–P06.
