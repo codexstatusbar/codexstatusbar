@@ -16,6 +16,12 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Session groups": "세션 묶음",
+        "Auxiliary": "보조",
+        "Auxiliary sessions": "보조 세션",
+        "Back to main session": "본 세션으로 돌아가기",
+        "Main session speed; auxiliary sessions are shown separately in Details.": "본 세션의 속도입니다. 보조 세션은 상세정보에 따로 표시합니다.",
+        "Each session keeps its own speed and chart. Inherited counters are not added together.": "세션별 속도와 차트를 따로 표시합니다. 상속된 누적 토큰은 합산하지 않습니다.",
         "Could not load processes because collection failed.": "수집 오류로 프로세스 목록을 불러오지 못했습니다",
         "Server diagnostics do not calculate throughput.": "서버 진단 모드에서는 속도를 계산하지 않습니다",
         "Switch to tool-excluded estimate": "도구 제외 추정으로 전환",

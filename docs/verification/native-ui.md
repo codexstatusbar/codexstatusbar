@@ -511,3 +511,18 @@ new work after the idle timeout clears the old held value until a fresh report;
 chart observations and completed-turn details are retained. C32 tests the exact
 boundary and new-turn behavior, while UI83–84 check row/menu agreement and history
 preservation. Core/Collector: 72 tests; UI/process checks: UI01–UI84 and P01–P06.
+
+## Explicit main/auxiliary session grouping
+
+The user confirmed one overview row per main session and separate child charts in
+Details, without unverified numeric summation. Collector persists only an explicit
+same-thread session_meta.source.subagent.thread_spawn.parent_thread_id and
+recovers older checkpoints from the bounded matching header. S241–242 cover
+persistence/recovery and self-parent rejection. Presentation resolves parents
+within the same Codex home, keeps missing/ambiguous/cyclic relations visible, and
+includes active descendants in group state/hide-idle decisions. Main row speed
+and frame aggregation retain their original authority/scope; child rates/history
+remain independent. UI85–93 cover grouping, counts, scope, hierarchy, cycles,
+unknown state and history separation. Dark overview and full Details fixtures
+were inspected. Children can open their full details and navigate back to the
+main session. Historical cumulative values are not converted into new chart data.

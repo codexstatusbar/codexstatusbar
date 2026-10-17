@@ -11,6 +11,7 @@ struct SessionPresentation: Identifiable {
     var process: ProcessIdentity?
     var server: ProcessIdentity?
     var rootObserved = false
+    var parentThreadID: String?
     var observedSource: UsageSource?
     var sourceMeasurement: CodexHubCore.Measurement?
     var sourceReconciliationPending = false
@@ -128,7 +129,10 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
 
 @MainActor @Observable final class HubPresentation {
     var appName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Tokloom" }
-    var sessions: [SessionPresentation] = []
+    var sessions: [SessionPresentation] = [] {
+        didSet { sessionGroups = Self.groupSessions(sessions) }
+    }
+    private(set) var sessionGroups: [ThreadKey: [SessionPresentation]] = [:]
     var unattachedProcesses: [ProcessIdentity] = []
     var frame: ReportedFrame?
     var rateUnit = RateUnit.second
@@ -235,17 +239,59 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         Self.rate(value.map { $0 * rateUnit.multiplier }, symbol: symbol)
     }
 
+    private static func groupSessions(_ rows: [SessionPresentation]) -> [ThreadKey: [SessionPresentation]] {
+        let index = Dictionary(grouping: rows) { ThreadKey(homeID: $0.id.homeID, runID: nil, threadID: $0.id.threadID) }
+        var parents: [ThreadKey: ThreadKey] = [:]
+        for row in rows {
+            guard let parent = row.parentThreadID,
+                  let candidates = index[ThreadKey(homeID: row.id.homeID, runID: nil, threadID: parent)],
+                  candidates.count == 1, let candidate = candidates.first, candidate.id != row.id else { continue }
+            parents[row.id] = candidate.id
+        }
+        var groups: [ThreadKey: [SessionPresentation]] = [:]
+        for row in rows {
+            var root = row.id
+            var visited: Set<ThreadKey> = []
+            while let parent = parents[root] {
+                guard visited.insert(root).inserted else { root = row.id; break }
+                root = parent
+            }
+            groups[root, default: []].append(row)
+        }
+        return groups
+    }
+
+    func auxiliarySessions(for session: SessionPresentation) -> [SessionPresentation] {
+        (sessionGroups[session.id] ?? []).filter { $0.id != session.id }.sorted { $0.id.threadID < $1.id.threadID }
+    }
+    func mainSession(for session: SessionPresentation) -> SessionPresentation? {
+        guard let key = sessionGroups.first(where: { $0.key != session.id && $0.value.contains { $0.id == session.id } })?.key else { return nil }
+        return sessions.first { $0.id == key }
+    }
+    func overviewState(for session: SessionPresentation) -> SessionPresentation {
+        let members = sessionGroups[session.id] ?? [session]
+        let active = members.filter { $0.monitor.connectivity == .connected && [.working, .generating, .toolRunning, .approvalWait].contains($0.activity) }
+        return active.min { a, b in
+            if a.priority != b.priority { return a.priority < b.priority }
+            if (a.activity == .generating) != (b.activity == .generating) { return a.activity == .generating }
+            return a.id.threadID < b.id.threadID
+        } ?? members.first { $0.monitor.connectivity != .connected || $0.activity == .unknown } ?? session
+    }
     var visibleSessions: [SessionPresentation] {
-        sessions.filter { !hideIdle || $0.activity != .idle }.sorted {
-            if $0.priority != $1.priority { return $0.priority < $1.priority }
+        sessions.filter { row in
+            guard let members = sessionGroups[row.id] else { return false }
+            return !hideIdle || members.contains { $0.activity != .idle }
+        }.sorted {
+            let a = overviewState(for: $0).priority, b = overviewState(for: $1).priority
+            if a != b { return a < b }
             if $0.id.homeID != $1.id.homeID { return $0.id.homeID < $1.id.homeID }
             return $0.id.threadID < $1.id.threadID
         }
     }
-    var processCount: Int { sessions.count + unattachedProcesses.count }
-    var generatingProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && $0.activity == .generating }.count }
-    var activeProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && [.working, .generating, .toolRunning, .approvalWait].contains($0.activity) }.count }
-    var idleProcessCount: Int { sessions.filter { error == nil && $0.monitor.connectivity == .connected && $0.activity == .idle }.count }
+    var processCount: Int { sessionGroups.count + unattachedProcesses.count }
+    var generatingProcessCount: Int { error == nil ? sessionGroups.values.filter { $0.contains { $0.monitor.connectivity == .connected && $0.activity == .generating } }.count : 0 }
+    var activeProcessCount: Int { error == nil ? sessionGroups.values.filter { $0.contains { $0.monitor.connectivity == .connected && [.working, .generating, .toolRunning, .approvalWait].contains($0.activity) } }.count : 0 }
+    var idleProcessCount: Int { error == nil ? sessionGroups.values.filter { $0.allSatisfy { $0.monitor.connectivity == .connected && $0.activity == .idle } }.count : 0 }
     var activitySummary: String {
         language.resolved == .korean ? "\(activeProcessCount)개 작업 중" : "\(activeProcessCount) working"
     }

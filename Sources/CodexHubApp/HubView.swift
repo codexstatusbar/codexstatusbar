@@ -125,7 +125,7 @@ struct HubView: View {
                     .accessibilityLabel(model.text("관측 출력 토큰"))
                 if width >= 480 { VStack(spacing: 6) {
                     Text(String(model.processCount)).font(.system(size: 20, weight: .semibold)).monospacedDigit()
-                    Text(model.text("프로세스")).font(.system(size: 10)).foregroundStyle(secondary)
+                    Text(model.text("Session groups")).font(.system(size: 10)).foregroundStyle(secondary)
                 }.frame(width: 60, height: 72).background(inset, in: RoundedRectangle(cornerRadius: 8))
                     .accessibilityElement(children: .combine) }
             }.frame(minHeight: 92)
@@ -136,7 +136,7 @@ struct HubView: View {
             Divider()
             VStack(spacing: 14) {
                 HStack {
-                    Text("CODEX PROCESSES").font(.system(size: 10, weight: .medium)).tracking(0.5)
+                    Text(model.text("Session groups")).font(.system(size: 10, weight: .medium)).tracking(0.5)
                     Spacer(minLength: 8)
                     Text(model.processBreakdown).font(.system(size: 10))
                 }.foregroundStyle(secondary)
@@ -170,7 +170,7 @@ struct HubView: View {
     }
 
     private func sessionButton(_ session: SessionPresentation) -> some View {
-        let accessibility = session.title + ", " + model.status(for: session) + ", " + model.rate(for: session) + " " + model.rateUnit.suffix + ", " + model.text("상세정보")
+        let accessibility = session.title + ", " + model.status(for: model.overviewState(for: session)) + ", " + model.rate(for: session) + " " + model.rateUnit.suffix + ", " + model.text("상세정보")
         return Button { model.page = .detail(session.id) } label: { processRow(session) }
             .buttonStyle(.plain)
             .background(inset, in: RoundedRectangle(cornerRadius: 8))
@@ -179,7 +179,9 @@ struct HubView: View {
     }
 
     private func processRow(_ session: SessionPresentation) -> some View {
-        let tint = ProcessTint.status(session, failed: model.error != nil, dark: dark)
+        let state = model.overviewState(for: session)
+        let children = model.auxiliarySessions(for: session)
+        let tint = ProcessTint.status(state, failed: model.error != nil, dark: dark)
         let projectTint = ProcessTint.project(session.title)
         return HStack(spacing: 10) {
             Image(systemName: "folder.fill")
@@ -187,14 +189,21 @@ struct HubView: View {
                 .background(projectTint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    if !children.isEmpty {
+                        Text(model.text("Auxiliary") + " " + String(children.count))
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                }
                 Text(session.modelDescription.isEmpty ? model.text("모델 미확인") : session.modelDescription)
                     .font(.system(size: 10)).foregroundStyle(secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 4) {
-                Label(model.status(for: session), systemImage: "circle.fill").font(.system(size: 10)).foregroundStyle(tint).lineLimit(1)
+                Label(model.status(for: state), systemImage: "circle.fill").font(.system(size: 10)).foregroundStyle(tint).lineLimit(1)
                 Text(model.rate(for: session) + " " + model.rateUnit.suffix).font(.system(size: 11, weight: .medium)).monospacedDigit().lineLimit(1)
+                    .help(model.text("Main session speed; auxiliary sessions are shown separately in Details."))
             }
             Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)
         }.padding(.horizontal, 12).frame(minHeight: 64).contentShape(Rectangle())

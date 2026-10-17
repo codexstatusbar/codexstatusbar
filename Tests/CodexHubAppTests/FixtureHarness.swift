@@ -320,7 +320,47 @@ import CodexHubCollector
         idleModel.frame = try ReportedFrame(monitors: [idleMonitor], verifiedIndependentThreads: [idleMonitor.key], at: 17)
         precondition(idleModel.rate(for: idleModel.sessions[0]) == "—" && idleModel.aggregateRate == nil && idleModel.menuTitle.isEmpty && !idleModel.usageHistory.isEmpty, "UI84 idle expiry clears row and menu rates without clearing chart history")
         try capture(idleModel, "idle-rate-expired", output, dark: true)
-        print("PASS UI01–UI84 and P01–P06; fixture PNGs: \(output)")
+        var childMonitor = ThreadMonitor(key: .init(homeID: "fixture", runID: nil, threadID: "child-session"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
+        try childMonitor.setConnectivity(.connected, at: 0)
+        try childMonitor.startTurn("turn", at: 1)
+        try childMonitor.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "fixture", at: 6)
+        let parentRow = SessionPresentation(monitor: idleMonitor, cwd: "/Synthetic/project", model: "Fixture model", rootObserved: true)
+        let childRow = SessionPresentation(monitor: childMonitor, cwd: "/Synthetic/project", model: "Fixture model", parentThreadID: parentRow.id.threadID)
+        let groupedModel = HubPresentation()
+        groupedModel.language = .korean
+        groupedModel.sessions = [parentRow, childRow]
+        groupedModel.frame = try ReportedFrame(monitors: [idleMonitor, childMonitor], verifiedIndependentThreads: [idleMonitor.key], at: 10)
+        groupedModel.restoreUsageHistory([parentRow.id: [UsageHistoryPoint(time: 4, outputTokens: 100)], childRow.id: [UsageHistoryPoint(time: 6, outputTokens: 60), UsageHistoryPoint(time: 8, outputTokens: 40)]])
+        groupedModel.notice = "Synthetic parent/child sessions · not live telemetry"
+        precondition(groupedModel.visibleSessions.map(\.id) == [parentRow.id] && groupedModel.processCount == 1 && groupedModel.auxiliarySessions(for: parentRow).map(\.id) == [childRow.id], "UI85 explicit parent links create one overview group")
+        precondition(groupedModel.activeProcessCount == 1 && groupedModel.idleProcessCount == 0 && groupedModel.overviewState(for: parentRow).id == childRow.id, "UI86 active child keeps an idle parent group active")
+        groupedModel.hideIdle = true
+        precondition(groupedModel.visibleSessions.count == 1 && groupedModel.aggregateRate == 20 && groupedModel.rate(for: childRow) == "20" && groupedModel.usageHistory[childRow.id]?.count == 2, "UI87 grouping preserves independent rates, charts and hide-idle behavior without adding child counters")
+        try capture(groupedModel, "session-group-overview", output, dark: true)
+        groupedModel.page = .detail(parentRow.id)
+        try capture(groupedModel, "session-group-details", output, dark: true, height: 1600)
+        groupedModel.page = .detail(childRow.id)
+        try capture(groupedModel, "auxiliary-session-details", output, dark: false)
+        var orphan = childRow; orphan.parentThreadID = "missing"
+        groupedModel.sessions = [parentRow, orphan]; groupedModel.hideIdle = false
+        precondition(groupedModel.visibleSessions.count == 2, "UI88 missing parents never hide child rows")
+        var cycleParent = parentRow; cycleParent.parentThreadID = childRow.id.threadID
+        groupedModel.sessions = [cycleParent, childRow]
+        precondition(groupedModel.visibleSessions.count == 2, "UI89 cyclic parent metadata cannot swallow rows")
+        let otherHomeMonitor = ThreadMonitor(key: .init(homeID: "other-home", runID: nil, threadID: "other-child"), source: .rolloutLog, epoch: "fixture")
+        groupedModel.sessions = [parentRow, SessionPresentation(monitor: otherHomeMonitor, parentThreadID: parentRow.id.threadID)]
+        precondition(groupedModel.visibleSessions.count == 2, "UI90 parent links cannot cross Codex homes")
+        let grandchildMonitor = ThreadMonitor(key: .init(homeID: "fixture", runID: nil, threadID: "grandchild"), source: .rolloutLog, epoch: "fixture")
+        let grandchild = SessionPresentation(monitor: grandchildMonitor, parentThreadID: childRow.id.threadID)
+        groupedModel.sessions = [parentRow, childRow, grandchild]
+        precondition(groupedModel.visibleSessions.count == 1 && groupedModel.auxiliarySessions(for: parentRow).count == 2 && groupedModel.mainSession(for: grandchild)?.id == parentRow.id, "UI91 nested descendants stay reachable under their observed main session")
+        let duplicateParent = ThreadMonitor(key: .init(homeID: "fixture", runID: "other-run", threadID: parentRow.id.threadID), source: .rolloutLog, epoch: "fixture")
+        groupedModel.sessions = [parentRow, SessionPresentation(monitor: duplicateParent), childRow]
+        precondition(groupedModel.visibleSessions.count == 3, "UI92 ambiguous parent identities stay separate")
+        let unknownChild = SessionPresentation(monitor: grandchildMonitor, parentThreadID: parentRow.id.threadID)
+        groupedModel.sessions = [parentRow, unknownChild]
+        precondition(groupedModel.overviewState(for: parentRow).activity == .unknown && groupedModel.idleProcessCount == 0 && groupedModel.activeProcessCount == 0, "UI93 unknown child state agrees with overview group counts")
+        print("PASS UI01–UI93 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

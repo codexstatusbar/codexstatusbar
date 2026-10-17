@@ -238,7 +238,7 @@ import CodexHubCollector
                                 lastObserved: Date(timeIntervalSince1970: session.lastObserved),
                                 process: process,
                                 server: session.processes.first(where: { $0.role == .appServer })?.identity,
-                                rootObserved: session.observedCLIRoot,
+                                rootObserved: session.observedCLIRoot, parentThreadID: session.parentThreadID,
                                 observedSource: session.source, sourceMeasurement: session.measurement,
                                 sourceReconciliationPending: session.sourceReconciliationPending,
                                 observationStopped: session.observationStopped,

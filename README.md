@@ -111,6 +111,10 @@ Choose the measurement mode and display unit in Settings.
 
 The menu bar and overview sum only observed CLI roots with verified independent scope, using one selected mode. Direct and log observations for the same thread have a single authority. This is not an account-wide total including every child/subagent. Details explains scope and exclusions.
 
+## Session groups
+
+Explicitly linked auxiliary sessions share one overview row with their main session, marked with an auxiliary count. Details keeps each child's state, speed and 30-minute output chart separate, with a link to its full details. An active child keeps its group visible even when the parent is idle. The main row's numeric speed remains the main session's own rate; inherited parent/child counters are not blindly added. Same project names or PIDs alone never establish parentage. Missing, ambiguous or cyclic parent links remain separate.
+
 ## Per-process information
 
 Working processes appear above idle ones. Details includes:
@@ -189,7 +193,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 72 Core/Collector tests, 90 synthetic UI/process checks (UI01–UI84 and P01–P06), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 74 Core/Collector tests, 99 synthetic UI/process checks (UI01–UI93 and P01–P06), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 

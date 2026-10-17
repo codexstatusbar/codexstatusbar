@@ -27,6 +27,11 @@ struct SessionGraphics: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             hero
+            if let main = model.mainSession(for: session) {
+                Button { model.page = .detail(main.id) } label: {
+                    Label(model.text("Back to main session"), systemImage: "arrow.turn.up.left")
+                }.buttonStyle(.bordered)
+            }
             section("요약", icon: "list.bullet.rectangle") {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: wide ? 4 : 2), spacing: 10) {
                     metric("작업 상태 / 수집 방식", sourceStatus, icon: "doc.text")
@@ -45,6 +50,7 @@ struct SessionGraphics: View {
                 note("누적 토큰에는 이전 이력이 포함될 수 있습니다. 컨텍스트와 사용 한도는 마지막 보고값입니다.")
             }
             section("관측 출력 추이", icon: "chart.bar.xaxis") { usageChart }
+            if !model.auxiliarySessions(for: session).isEmpty { auxiliarySessions }
             HStack(alignment: .top, spacing: 12) {
                 Label(model.text("남은 사용 한도"), systemImage: "clock")
                 Spacer(minLength: 8)
@@ -140,6 +146,36 @@ struct SessionGraphics: View {
             if session.hookCompletionCandidate { note("작업 종료 신호를 받았습니다. 최종 상태를 확인하고 있습니다.") }
             if session.sourceReconciliationPending { note("수집 원본의 사용량을 대조하는 중입니다.") }
             if session.observationStopped { note("수집이 중단되어 새로운 사용량 기준이 필요합니다.") }
+        }
+    }
+
+    private var auxiliarySessions: some View {
+        section("Auxiliary sessions", icon: "point.3.connected.trianglepath.dotted") {
+            note("Each session keeps its own speed and chart. Inherited counters are not added together.")
+            ForEach(model.auxiliarySessions(for: session)) { child in
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(model.text("Auxiliary") + " · " + String(child.id.threadID.suffix(8)))
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(child.modelDescription).font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(model.status(for: child)).font(.system(size: 10))
+                                .foregroundStyle(ProcessTint.status(child, failed: model.error != nil, dark: colorScheme == .dark))
+                            Text(model.rate(for: child) + " " + model.rateUnit.suffix)
+                                .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                        }
+                    }
+                    Text(model.text("보고 출력 · 30분")).font(.system(size: 10)).foregroundStyle(.secondary)
+                    ObservedTokenChart(points: model.usageHistory[child.id] ?? [], now: model.frame?.time ?? 0,
+                                       emptyText: model.text("새 사용량 로그를 기다리는 중입니다"), wallClockOffset: model.chartWallClockOffset)
+                    Button(model.text("상세정보")) { model.page = .detail(child.id) }.buttonStyle(.bordered)
+                        .accessibilityLabel(model.text("상세정보") + " " + String(child.id.threadID.suffix(8)))
+                    Divider()
+                }.padding(.vertical, 4)
+            }
         }
     }
 
