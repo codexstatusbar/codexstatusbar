@@ -286,7 +286,18 @@ import CodexHubCollector
         precondition(quotaSession.limitDescriptions(now: Date(timeIntervalSince1970: 0)) == ["57% 남음 · 6d 19h"], "UI75 reset countdown uses deadline, not quota window, and reports remaining percent")
         precondition(quotaSession.limitDescriptions(language: .english, now: Date(timeIntervalSince1970: 0)) == ["57% left · 6d 19h"], "UI76 countdown uses compact units in both languages")
         precondition(quotaSession.limitDescriptions(now: Date(timeIntervalSince1970: 586801)) == ["57% 남음 · 갱신 대기"], "UI77 expired quota does not invent a refreshed allowance")
-        print("PASS UI01–UI77 and P01–P06; fixture PNGs: \(output)")
+        let idlePoints = [UsageHistoryPoint(time: 120.1, outputTokens: 10), UsageHistoryPoint(time: 120.9, outputTokens: 20)]
+        let beforeTick = ObservedTokenChart(points: idlePoints, now: 180.5, emptyText: "")
+        let afterTick = ObservedTokenChart(points: idlePoints, now: 181.5, emptyText: "")
+        precondition(beforeTick.bins.map(\.tokens) == afterTick.bins.map(\.tokens), "UI78 idle clock ticks cannot regroup existing token samples")
+        let nextMinute = ObservedTokenChart(points: idlePoints, now: 240.5, emptyText: "")
+        precondition(nextMinute.bins.map(\.id) == afterTick.bins.map(\.id) && nextMinute.bins.map(\.tokens) == [30], "UI79 advancing the window preserves historical minute totals")
+        precondition(ObservedTokenChart(points: idlePoints, now: 1980.5, emptyText: "").bins.isEmpty, "UI80 expired minutes leave the rolling chart")
+        precondition(ObservedTokenChart(points: idlePoints, now: 120.5, emptyText: "").bins.map(\.tokens) == [10], "UI81 future samples cannot enter current minute")
+        let clockPoints = [UsageHistoryPoint(time: 42.9, outputTokens: 10), UsageHistoryPoint(time: 43, outputTokens: 20)]
+        let clockChart = ObservedTokenChart(points: clockPoints, now: 50, emptyText: "", wallClockOffset: 17)
+        precondition(clockChart.bins.map(\.id) == [0, 60] && clockChart.bins.map(\.tokens) == [10, 20], "UI82 minute boundaries align to wall-clock second zero, not process uptime")
+        print("PASS UI01–UI82 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

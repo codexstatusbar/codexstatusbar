@@ -183,6 +183,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         let source: UsageSource
     }
     private var usageAnchors: [ThreadKey: UsageAnchor] = [:]
+    let chartWallClockOffset = Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime
     private(set) var usageHistory: [ThreadKey: [UsageHistoryPoint]] = [:]
 
     var overviewUsageHistory: [UsageHistoryPoint] {

@@ -172,7 +172,7 @@ struct SessionGraphics: View {
                 Spacer()
                 Text(model.text("최근 30분 · 1분 단위")).font(.system(size: 10)).foregroundStyle(.secondary)
             }
-            ObservedTokenChart(points: points, now: model.frame?.time ?? 0, emptyText: model.text("새 사용량 로그를 기다리는 중입니다"))
+            ObservedTokenChart(points: points, now: model.frame?.time ?? 0, emptyText: model.text("새 사용량 로그를 기다리는 중입니다"), wallClockOffset: model.chartWallClockOffset)
             HStack {
                 Text(model.text("30분 전"))
                 Spacer()
@@ -248,16 +248,19 @@ struct ObservedTokenChart: View {
     let now: Double
     let emptyText: String
     var compact = false
+    var wallClockOffset: Double = 0
 
-    private struct Bin: Identifiable {
-        let id: Int
+    struct Bin: Identifiable {
+        let id: Double
         let tokens: Double
-        var offset: Double { (Double(id) + 0.5) * UsageHistoryPoint.binSeconds - UsageHistoryPoint.windowSeconds }
     }
-    private var bins: [Bin] {
-        let groups = Dictionary(grouping: points.filter { $0.time > now - UsageHistoryPoint.windowSeconds && $0.time <= now }) {
-            min(Int(UsageHistoryPoint.windowSeconds / UsageHistoryPoint.binSeconds) - 1, max(0, Int(($0.time - now + UsageHistoryPoint.windowSeconds) / UsageHistoryPoint.binSeconds)))
-        }
+    private var windowEnd: Double {
+        (floor((now + wallClockOffset) / UsageHistoryPoint.binSeconds) + 1) * UsageHistoryPoint.binSeconds
+    }
+    var bins: [Bin] {
+        let groups = Dictionary(grouping: points.filter {
+            $0.time + wallClockOffset >= windowEnd - UsageHistoryPoint.windowSeconds && $0.time <= now
+        }) { floor(($0.time + wallClockOffset) / UsageHistoryPoint.binSeconds) * UsageHistoryPoint.binSeconds }
         return groups.keys.sorted().map { Bin(id: $0, tokens: groups[$0, default: []].reduce(0) { $0 + Double($1.outputTokens) }) }
     }
 
@@ -268,7 +271,7 @@ struct ObservedTokenChart: View {
                     .frame(maxWidth: .infinity, minHeight: compact ? 56 : 110)
             } else {
                 Chart(bins) { bin in
-                    BarMark(x: .value("Time", bin.offset), y: .value("Output tokens", bin.tokens), width: .fixed(compact ? 4 : 9))
+                    BarMark(x: .value("Time", bin.id + UsageHistoryPoint.binSeconds / 2 - windowEnd), y: .value("Output tokens", bin.tokens), width: .fixed(compact ? 4 : 9))
                         .foregroundStyle(LinearGradient(colors: [.blue, .indigo], startPoint: .top, endPoint: .bottom))
                         .cornerRadius(2)
                 }

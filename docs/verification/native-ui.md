@@ -476,3 +476,18 @@ not time remaining. Missing deadlines are unknown; expired deadlines await
 reset and do not fabricate a new allowance. UI24/75–77 cover the percentage
 direction, reset countdown, English labels and expired deadline. No provider
 request was made.
+
+## Stable chart buckets during idle
+
+The chart previously grouped observations relative to the current poll time.
+Advancing that time could split or combine existing points into different
+one-minute bars without new usage. UI78 reproduces this with two observations
+in one fixed minute and a one-second clock tick. Bins now use fixed minute
+boundaries, with the displayed thirty-bin window advancing once per minute.
+Existing bars keep their totals until new observations arrive or that minute
+leaves the window. No usage counters or persisted samples are changed.
+
+Minute boundaries map monotonic sample times to the wall clock using one shared
+clock offset. Each bucket begins at second 00, not at process-uptime minute
+boundaries. UI82 covers observations straddling wall-clock 00 with a non-zero
+uptime offset.
