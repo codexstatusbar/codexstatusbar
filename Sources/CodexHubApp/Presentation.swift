@@ -51,14 +51,22 @@ struct SessionPresentation: Identifiable {
         }
         return count.formatted()
     }
-    func limitDescriptions(language: AppLanguage = .korean) -> [String] {
+    func limitDescriptions(language: AppLanguage = .korean, now: Date = Date()) -> [String] {
         (usageDetails?.limits ?? []).map { limit in
-            let window: String
-            if let minutes = limit.windowMinutes {
-                window = minutes % 1440 == 0 ? "\(minutes / 1440)d" : minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes)m"
-            } else { window = limit.name.capitalized }
-            let remaining = limit.remainingPercent.formatted(.number.precision(.fractionLength(0...1)))
-            return "\(window) \(remaining)% " + (language.resolved == .korean ? "남음" : "left") + (limit.resetsAt.map { (language.resolved == .korean ? " · 갱신 " : " · resets ") + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) } ?? "")
+            let used = limit.usedPercent.formatted(.number.precision(.fractionLength(0...1)))
+            let reset: String
+            if let timestamp = limit.resetsAt {
+                let seconds = timestamp - now.timeIntervalSince1970
+                if seconds > 0 {
+                    let hours = Int(seconds / 3600)
+                    reset = "\(hours / 24)d \(hours % 24)h"
+                } else {
+                    reset = language.resolved == .korean ? "갱신 대기" : "Awaiting reset"
+                }
+            } else {
+                reset = language.resolved == .korean ? "갱신 시간 미확인" : "Reset time unknown"
+            }
+            return "\(used)% " + (language.resolved == .korean ? "사용" : "used") + " · " + reset
         }
     }
     var identity: String { process.map { "PID \($0.pid)" } ?? "Session only" }

@@ -43,7 +43,7 @@ import CodexHubCollector
         precondition(model.sessions[0].modelDescription == "Fixture model · high", "UI21 observed model and reasoning")
         precondition(model.sessions[0].contextDescription == "60%", "UI22 context is last prompt usage, not cumulative usage")
         precondition(model.sessions[0].tokenDescription == "In 0 · Out 600", "UI23 input/output counters retain their own meaning")
-        precondition(model.sessions[0].limitDescriptions() == ["7d 79% 남음"], "UI24 actual rate window determines remaining usage label")
+        precondition(model.sessions[0].limitDescriptions() == ["21% 사용 · 갱신 시간 미확인"], "UI24 usage percent remains distinct from remaining percent")
         precondition(SessionPresentation.tokens(999) == "999" && SessionPresentation.tokens(1_000) == "1K", "UI26 small token count boundary")
         precondition(SessionPresentation.tokens(115_911) == "115.9K" && SessionPresentation.tokens(39_568_473) == "39.6M", "UI27 K/M token formatting")
         precondition(SessionPresentation.tokens(1_250_000_000) == "1.3G", "UI28 G token formatting")
@@ -281,7 +281,12 @@ import CodexHubCollector
         let pathArchive = try UsageHistoryArchive.encode(pathHistory, home: pathKey.homeID, monotonic: 11, wall: 100)
         let pathRestored = try UsageHistoryArchive.decode(pathArchive, home: pathKey.homeID, monotonic: 20, wall: 102)
         precondition(pathRestored[pathKey]?.first?.outputTokens == 42, "UI74 collector path identity survives chart persistence")
-        print("PASS UI01–UI74 and P01–P06; fixture PNGs: \(output)")
+        var quotaSession = model.sessions[0]
+        quotaSession.usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data(#"{"limits":[{"name":"primary","usedPercent":43,"windowMinutes":10080,"resetsAt":586800}]}"#.utf8))
+        precondition(quotaSession.limitDescriptions(now: Date(timeIntervalSince1970: 0)) == ["43% 사용 · 6d 19h"], "UI75 reset countdown uses deadline, not quota window, and reports used percent")
+        precondition(quotaSession.limitDescriptions(language: .english, now: Date(timeIntervalSince1970: 0)) == ["43% used · 6d 19h"], "UI76 countdown uses compact units in both languages")
+        precondition(quotaSession.limitDescriptions(now: Date(timeIntervalSince1970: 586801)) == ["43% 사용 · 갱신 대기"], "UI77 expired quota does not invent a refreshed allowance")
+        print("PASS UI01–UI77 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

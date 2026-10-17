@@ -466,3 +466,13 @@ empty-write bug before the fix; UI74 checks the real path-shaped identity round
 trip. AppDelegate now supplies the canonical home path for both encode and decode;
 encoding rejects mismatched scopes instead of silently discarding samples.
 Previously empty archives cannot reconstruct the lost observations.
+
+## Usage-limit percentage and reset countdown
+
+The reference's 43% matches the log's `used_percent=43`, whereas the old UI
+intentionally showed 57% remaining. The row now says Usage limit and explicitly
+shows used percentage, followed by days and hours until `resets_at` (for example,
+`43% used · 6d 19h`). The seven-day quota window is no longer mistaken for time
+remaining. Missing deadlines are unknown; expired deadlines await reset and do
+not fabricate a new allowance. UI24/75–77 cover the percentage direction, reset
+countdown, English labels and expired deadline. No provider request was made.
