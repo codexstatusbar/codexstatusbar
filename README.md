@@ -172,6 +172,16 @@ Without `--codex`, the helper searches PATH. Its currently allowed version is `c
 
 Server timing diagnostics have been removed from the app because the available metadata cannot establish pure generation speed. Saved selections of the former mode fall back to the tool-excluded estimate. The helper's explicit diagnostic flag remains a developer facility, not a throughput mode. See the [server timing evidence](docs/verification/server-timing.md).
 
+## Claude Code sessions
+
+Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `CLAUDE_CONFIG_DIR` or `~/.claude`. A session is listed only while its `sessions/<pid>.json` matches a live process (PID and start time); the transcript under `projects/` supplies usage. Nothing is modified and no prompt or response text is stored.
+
+- **Same measurement** — each message's `output_tokens` (including thinking) divided by the time from the last user/tool-result entry to the message's last block. Tool execution falls between those entries, so it is excluded, as for Codex. Server queue and prefill time remain included.
+- **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview also lists each provider's share.
+- Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
+- **Not available for Claude**: remaining usage allowance, context utilization (the window size is not logged), live visible estimate, hooks and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
+- Claude chart history is not restored after restarting Tokloom. Collection still starts after the Codex home connects.
+
 ## Current scope
 
 Live estimation tokenizes only visible response text observed completely from the start of a managed direct relay, using official `o200k_base` assets. Assets and their MIT license are bundled beside the helper as SwiftPM resources, with no runtime download.
@@ -197,7 +207,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 74 Core/Collector tests, 100 synthetic UI/process checks (UI01–UI94 and P01–P06), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 79 Core/Collector tests, 102 synthetic UI/process checks (UI01–UI95 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 
