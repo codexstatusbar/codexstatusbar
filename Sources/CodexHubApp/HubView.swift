@@ -106,7 +106,7 @@ struct HubView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(model.error == nil && model.aggregateRate != nil ? model.summary : "—")
                             .font(.system(size: 28, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
-                        Text("tok/s").font(.system(size: 13)).foregroundStyle(secondary)
+                        Text(model.rateUnit.suffix).font(.system(size: 13)).foregroundStyle(secondary)
                     }.accessibilityElement(children: .combine)
                     Label(measurementCaption, systemImage: "info.circle")
                         .font(.system(size: 10)).foregroundStyle(secondary).fixedSize(horizontal: false, vertical: true)
@@ -143,7 +143,7 @@ struct HubView: View {
                             Spacer(minLength: 8)
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text(model.text("확인 중")).font(.system(size: 11)).foregroundStyle(secondary)
-                                Text("— tok/s").font(.system(size: 12, weight: .medium))
+                                Text("— " + model.rateUnit.suffix).font(.system(size: 12, weight: .medium))
                             }
                         }.padding(.horizontal, 12).frame(minHeight: 64).background(inset, in: RoundedRectangle(cornerRadius: 8))
                     }
@@ -159,7 +159,7 @@ struct HubView: View {
     }
 
     private func sessionButton(_ session: SessionPresentation) -> some View {
-        let accessibility = session.title + ", " + model.status(for: session) + ", " + model.rate(for: session) + " tok/s, " + model.text("상세정보")
+        let accessibility = session.title + ", " + model.status(for: session) + ", " + model.rate(for: session) + " " + model.rateUnit.suffix + ", " + model.text("상세정보")
         return Button { model.page = .detail(session.id) } label: { processRow(session) }
             .buttonStyle(.plain)
             .background(inset, in: RoundedRectangle(cornerRadius: 8))
@@ -181,7 +181,7 @@ struct HubView: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 4) {
                 Text(model.status(for: session)).font(.system(size: 11)).foregroundStyle(secondary).lineLimit(1)
-                Text(model.rate(for: session) + " tok/s").font(.system(size: 12, weight: .medium)).monospacedDigit().lineLimit(1)
+                Text(model.rate(for: session) + " " + model.rateUnit.suffix).font(.system(size: 12, weight: .medium)).monospacedDigit().lineLimit(1)
             }
             Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)
         }.padding(.horizontal, 12).frame(minHeight: 64).contentShape(Rectangle())
@@ -193,9 +193,9 @@ struct HubView: View {
         return Group {
             Text(session.title).font(.headline)
             value("작업 상태 / 수집 방식", "\(model.status(for: session)) · \(session.source)")
-            value(model.measurementMode.label, model.rate(for: session) + " tok/s")
+            value(model.measurementMode.label, model.rate(for: session) + " " + model.rateUnit.suffix)
             if let last, model.measurementMode != .server {
-                value(last.isObservedAveragePartial ? "직전 관측 구간 평균 · 도구 포함" : "직전 작업 평균 · 도구 포함", last.workAverage.map { $0.formatted(.number.precision(.fractionLength(0...1))) + " tok/s" } ?? "미확인")
+                value(last.isObservedAveragePartial ? "직전 관측 구간 평균 · 도구 포함" : "직전 작업 평균 · 도구 포함", last.workAverage.map { model.displayRate($0) + " " + model.rateUnit.suffix } ?? "미확인")
             }
             if model.measurementMode == .reported {
                 value(model.text("계산 기준"), model.text("사용량 증가량 ÷ 도구 시간을 뺀 보고 구간"))
@@ -256,6 +256,11 @@ struct HubView: View {
             }.onChange(of: model.language) { _, language in model.saveLanguage?(language) }
             Divider()
             modePicker
+            Picker(model.text("속도 단위"), selection: Binding(get: { model.rateUnit }, set: { model.updateRateUnit?($0) })) {
+                ForEach(RateUnit.allCases, id: \.self) { unit in
+                    Text(model.text(unit == .second ? "초당 · tok/s" : "분당 · tok/m")).tag(unit)
+                }
+            }.disabled(model.updateRateUnit == nil)
             Text(model.text("Live requires complete managed visible text and a supported model. Warm-up and unavailable measurements remain —.")).font(.system(size: 11))
             Divider()
             Toggle(model.text("Hide idle sessions"), isOn: $model.hideIdle).onChange(of: model.hideIdle) { model.saveDisplayPreferences?() }

@@ -16,6 +16,9 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Rate unit": "속도 단위",
+        "Per second · tok/s": "초당 · tok/s",
+        "Per minute · tok/m": "분당 · tok/m",
         "Open": "열기",
         "Combined throughput": "전체 속도",
         "Processes": "프로세스",

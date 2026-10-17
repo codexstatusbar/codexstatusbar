@@ -87,10 +87,13 @@ struct SessionPresentation: Identifiable {
         case .approvalWait: return 0
         }
     }
-    func rate(at time: Double) -> String {
-        guard measurement == .reported || measurement == .warmingUp else { return "—" }
-        return HubPresentation.rate(try? monitor.workAverageRate(at: time))
-    }
+
+}
+
+enum RateUnit: String, CaseIterable {
+    case second, minute
+    var suffix: String { self == .second ? "tok/s" : "tok/m" }
+    var multiplier: Double { self == .second ? 1 : 60 }
 }
 
 enum MeasurementMode: String, CaseIterable {
@@ -117,6 +120,8 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var sessions: [SessionPresentation] = []
     var unattachedProcesses: [ProcessIdentity] = []
     var frame: ReportedFrame?
+    var rateUnit = RateUnit.second
+    var updateRateUnit: ((RateUnit) -> Void)?
     var measurementMode: MeasurementMode = .reported
     var updateMeasurementMode: ((MeasurementMode) -> Void)?
     var configuredServiceTier: ServiceTier?
@@ -197,6 +202,10 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         guard let value, value.isFinite, value >= 0 else { return "—" }
         return symbol + value.formatted(.number.precision(.fractionLength(0...1)))
     }
+    func displayRate(_ value: Double?, symbol: String = "") -> String {
+        Self.rate(value.map { $0 * rateUnit.multiplier }, symbol: symbol)
+    }
+
     var visibleSessions: [SessionPresentation] {
         sessions.filter { !hideIdle || $0.activity != .idle }.sorted {
             if $0.priority != $1.priority { return $0.priority < $1.priority }
@@ -220,19 +229,23 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         guard !sessions.isEmpty else { return unattachedProcesses.isEmpty ? "실행 없음" : "정보 미확인" }
         if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "연결 끊김" }
         if measurementMode == .server { return sessions.contains { $0.serverTiming != nil } ? "생성 시간 미검증" : "서버 측정 필요" }
-        if let speed = aggregateRate { return Self.rate(speed, symbol: measurementMode.symbol) }
+        if let speed = aggregateRate { return displayRate(speed, symbol: measurementMode.symbol) }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "계산 준비 중" }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "대기 중" }
         return "상태 미확인"
     }
     var menuTitle: String {
         guard aggregateRate != nil, error == nil else { return "" }
-        return summary + " tok/s"
+        return summary + " " + rateUnit.suffix
     }
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
     func rate(for session: SessionPresentation) -> String {
         guard error == nil, measurementMode != .server else { return "—" }
-        return measurementMode == .reported ? session.rate(at: frame?.time ?? 0) : Self.rate(session.liveMeasurement == .estimated ? session.liveRate : nil, symbol: "≈")
+        if measurementMode == .reported {
+            guard session.measurement == .reported || session.measurement == .warmingUp else { return "—" }
+            return displayRate(try? session.monitor.workAverageRate(at: frame?.time ?? 0))
+        }
+        return displayRate(session.liveMeasurement == .estimated ? session.liveRate : nil, symbol: "≈")
     }
     // Group coverage as reported frames do; only observed CLI root counters contribute.
     private struct RunKey: Hashable {

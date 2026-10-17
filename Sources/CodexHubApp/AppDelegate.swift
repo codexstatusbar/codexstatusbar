@@ -19,6 +19,12 @@ import CodexHubCollector
             guard let self else { return }
             language.save(to: defaults)
         }
+        model.rateUnit = defaults.string(forKey: "rateUnit").flatMap(RateUnit.init(rawValue:)) ?? .second
+        model.updateRateUnit = { [weak self] unit in
+            guard let self else { return }
+            model.rateUnit = unit
+            defaults.set(unit.rawValue, forKey: "rateUnit")
+        }
         model.measurementMode = defaults.string(forKey: "measurementModeV2").flatMap(MeasurementMode.init(rawValue:)) ?? .reported
         model.updateMeasurementMode = { [weak self] mode in
             guard let self else { return }

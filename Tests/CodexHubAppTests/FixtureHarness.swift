@@ -211,7 +211,14 @@ import CodexHubCollector
         try newTurn.observeUsage(TokenUsage(outputTokens: 50), turnID: "fresh", source: .rolloutLog, epoch: "new", at: 2)
         historyModel.recordUsageHistory([SessionPresentation(monitor: newTurn)], at: 2)
         precondition(historyModel.usageHistory[newTurn.key]?.map(\.outputTokens) == [50], "UI56 known warmup baseline retains the first fresh output")
-        print("PASS UI01–UI56 and P01–P06; fixture PNGs: \(output)")
+        historyModel.sessions = [SessionPresentation(monitor: newTurn)]
+        historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 2)
+        historyModel.rateUnit = .minute
+        precondition(historyModel.menuTitle == HubPresentation.rate(1500) + " tok/m" && historyModel.rate(for: historyModel.sessions[0]) == HubPresentation.rate(1500), "UI57 minute conversion is consistent across menu and rows")
+        precondition(historyModel.displayRate(nil) == "—" && historyModel.displayRate(0) == "0", "UI58 unit conversion preserves missing versus zero")
+        historyModel.rateUnit = .second
+        precondition(historyModel.menuTitle == "25 tok/s", "UI59 second unit restores the same underlying rate")
+        print("PASS UI01–UI59 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
