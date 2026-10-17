@@ -44,7 +44,7 @@ Same machine and command, `/usr/bin/time -p env TOKLOOM_CACHE_FIXTURES=1
 | Warm repeat | 14.93 s | Same 100 checks passed |
 
 The warm median was about 44% faster locally. A script-content change caused a
-cache miss as intended. This is not yet a measured hosted-runner improvement.
+cache miss as intended. These local figures are separate from hosted-runner results below.
 
 ## Artifact cleanup
 
@@ -66,3 +66,20 @@ still recompiled unchanged targets, so a follow-up uses exact-hit compiled
 products, while prefix-only restores continue to compile. The same checks run
 on either path. Cleanup succeeded: four uploaded artifacts were removed, release
 assets remained, and three caches totaling 537,259,178 bytes remained accessible.
+
+## Exact-hit follow-up
+
+Run 39046386405 (0.0.12) confirmed exact-commit compilation reuse:
+
+| Step | Original | Dependency/build cache | Exact-hit reuse |
+| --- | --- | --- | --- |
+| Core/Collector tests | 42 s | 20 s | 11 s |
+| UI/process verification | 50 s | 26 s | 16 s |
+| Release build/package | 68 s | 49 s | 26 s |
+
+The logs confirmed all 74 Core/Collector tests and all 100 UI/process checks ran,
+and release products were reused only after an exact cache hit. These are
+observed step times, not a guarantee across runner load or cache misses, and
+exclude cache transfer/queue time. Main-branch cache warming has its own cost.
+Release publication and artifact cleanup both succeeded; run artifacts were
+zero afterward, while six cache entries and both release assets remained.
