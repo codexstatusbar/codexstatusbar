@@ -53,7 +53,7 @@ struct SessionPresentation: Identifiable {
     }
     func limitDescriptions(language: AppLanguage = .korean, now: Date = Date()) -> [String] {
         (usageDetails?.limits ?? []).map { limit in
-            let used = limit.usedPercent.formatted(.number.precision(.fractionLength(0...1)))
+            let remaining = limit.remainingPercent.formatted(.number.precision(.fractionLength(0...1)))
             let reset: String
             if let timestamp = limit.resetsAt {
                 let seconds = timestamp - now.timeIntervalSince1970
@@ -66,7 +66,7 @@ struct SessionPresentation: Identifiable {
             } else {
                 reset = language.resolved == .korean ? "갱신 시간 미확인" : "Reset time unknown"
             }
-            return "\(used)% " + (language.resolved == .korean ? "사용" : "used") + " · " + reset
+            return "\(remaining)% " + (language.resolved == .korean ? "남음" : "left") + " · " + reset
         }
     }
     var identity: String { process.map { "PID \($0.pid)" } ?? "Session only" }

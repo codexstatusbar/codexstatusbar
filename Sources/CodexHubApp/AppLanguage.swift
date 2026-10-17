@@ -16,7 +16,6 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
-        "Usage limit": "사용 한도",
         "Server diagnostics do not calculate throughput.": "서버 진단 모드에서는 속도를 계산하지 않습니다",
         "Switch to tool-excluded estimate": "도구 제외 추정으로 전환",
         "No server timing collected. Only new managed runs started with the command on Connection collect it; existing log connections do not.": "수집된 서버 타이밍이 없습니다. 연결 화면의 명령으로 시작한 새 관리형 실행에서만 수집합니다. 기존 로그 연결에는 적용되지 않습니다.",

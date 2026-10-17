@@ -46,7 +46,7 @@ struct SessionGraphics: View {
             }
             section("관측 출력 추이", icon: "chart.bar.xaxis") { usageChart }
             HStack(alignment: .top, spacing: 12) {
-                Label(model.text("사용 한도"), systemImage: "clock")
+                Label(model.text("남은 사용 한도"), systemImage: "clock")
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 5) {
                     if session.limitDescriptions(language: model.language).isEmpty { Text(model.text("미확인")) }

@@ -469,10 +469,10 @@ Previously empty archives cannot reconstruct the lost observations.
 
 ## Usage-limit percentage and reset countdown
 
-The reference's 43% matches the log's `used_percent=43`, whereas the old UI
-intentionally showed 57% remaining. The row now says Usage limit and explicitly
-shows used percentage, followed by days and hours until `resets_at` (for example,
-`43% used · 6d 19h`). The seven-day quota window is no longer mistaken for time
-remaining. Missing deadlines are unknown; expired deadlines await reset and do
-not fabricate a new allowance. UI24/75–77 cover the percentage direction, reset
-countdown, English labels and expired deadline. No provider request was made.
+The final user requirement is remaining percentage, calculated as 100 minus
+`used_percent`, followed by days and hours until `resets_at` (for example,
+`57% left · 6d 19h` when used_percent is 43). The seven-day quota window is
+not time remaining. Missing deadlines are unknown; expired deadlines await
+reset and do not fabricate a new allowance. UI24/75–77 cover the percentage
+direction, reset countdown, English labels and expired deadline. No provider
+request was made.
