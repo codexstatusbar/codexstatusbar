@@ -95,3 +95,39 @@ release, CLT native SwiftPM (61.80 seconds). Bundle: `.build/Codex Hub.app`.
 The native SwiftPM build-system deprecation warning remains. This is build evidence,
 not runtime or full QA acceptance. Managed helper bundling remains with subsequent
 S4 integration; the delivered app currently uses the real logs collector.
+
+## 2026-10-17 resumed local QA
+
+The user resumed QA and reported clipped menu-bar content. The popover now takes
+its height from the clicked status button's screen when opened, disables hosting
+controller automatic sizing, and sets an explicit viewport size. Page navigation
+recreates the scroll view so previous scroll offsets do not hide new headings.
+The native popover was opened by the user after rebuilding/restarting; direct UI
+inspection showed the complete header, measurement picker, subtotal and footer.
+Multi-display moves and long-running resize behavior remain unverified.
+
+Connection now presents optional Hook controls before collection diagnostics.
+Repeated diagnostics are grouped with occurrence counts. Real bundled helper
+status returned not_installed; the Install hooks button opened the native consent
+alert with the selected hooks.json path, backup retention and manual /hooks trust
+instructions. Cancel was selected; a subsequent status command still returned
+not_installed. No real Hook install, trust mutation or provider action was run.
+
+`./scripts/capture-fixtures.sh .build/qa-20261017-ui` passed UI01–UI15 after
+updating stale root-field and coverage contracts. Added cases verify Live-only
+root subtotal, missing/warming-up values, source reconciliation suppression and
+mode separation. Synthetic Connection capture visibly includes the install and
+remove controls above diagnostics; fixture controls are disabled by design because
+no helper is attached. Synthetic screenshots do not prove actual installation.
+
+`./scripts/build-app.sh` passed for the current arm64 release app and helper with
+ad-hoc signing. `swift test --build-system native --disable-xctest -Xcxx -isystem
+-Xcxx "$(xcrun --show-sdk-path)/usr/include/c++/v1"` passed 43 tests. Logs are local
+ignored artifacts under `.build/qa-20261017/`.
+
+Remaining actual-home diagnostics include oversized records/files and an
+uninterpretable record. Metadata-only inspection found two files over the 256 MiB
+file cap; this does not explain every size diagnostic or prove those sources were
+collected. No original logs were changed. Full-product QA is not complete:
+qa-verification is disabled in the global skill configuration and its enablement
+question is pending; no disabled skill workflow was loaded or bypassed.

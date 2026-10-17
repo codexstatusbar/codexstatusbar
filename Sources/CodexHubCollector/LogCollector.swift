@@ -364,7 +364,9 @@ public actor LogCollector {
             }
         }
         for id in nextMonitors.keys where !seen.contains(id) { try nextMonitors[id]?.setConnectivity(.disconnected, at: now) }
-        try selectAuthorities(states: &nextStates, monitors: &nextMonitors, at: now)
+        for id in try selectAuthorities(states: &nextStates, monitors: &nextMonitors, at: now) {
+            diagnose(CollectorDiagnostic(fileIdentity: id, error: .ambiguousSource))
+        }
         for id in nextVisible.keys {
             if nextMonitors[id]?.connectivity != .connected || nextStates[id]?.isAuthority != true ||
                 nextStates[id]?.reconciliationPeer != nil ||
@@ -474,7 +476,8 @@ public actor LogCollector {
         return Array(result.prefix(100))
     }
 
-    private func selectAuthorities(states next: inout [String: FileState], monitors current: inout [String: ThreadMonitor], at now: Double) throws {
+    private func selectAuthorities(states next: inout [String: FileState], monitors current: inout [String: ThreadMonitor], at now: Double) throws -> [String] {
+        var ambiguous: [String] = []
         let groups = Dictionary(grouping: current.keys, by: { current[$0]!.key.threadID })
         for ids in groups.values {
             let thread = current[ids[0]]!.key.threadID
@@ -509,11 +512,13 @@ public actor LogCollector {
             }
             let sameSource = ids.filter { next[$0]?.usageSource == next[selected]?.usageSource && current[$0]?.connectivity == .connected }
             if sameSource.count > 1 {
+                ambiguous.append(selected)
                 next[selected]?.hasGap = true
                 next[selected]?.reconciliationPeer = sameSource.first { $0 != selected }
                 try current[selected]?.setConnectivity(.degraded, at: now)
             }
         }
+        return ambiguous
     }
 
     private func retained(_ states: [String: FileState], wall: Double, policy: RetentionPolicy) -> [String: FileState] {

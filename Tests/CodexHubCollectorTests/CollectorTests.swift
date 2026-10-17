@@ -140,16 +140,18 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     }
 }
 
-@Test func S209SymlinksAndHardlinksAreRejected() async throws {
+@Test func S209ReadOnlyHardlinksAreAcceptedButSymlinksAreRejected() async throws {
     let s = try Sandbox(); try s.write(meta + usage(10))
     let outside = s.root.appendingPathComponent("outside.jsonl")
-    try Data((meta + usage(999)).utf8).write(to: outside)
+    try Data((meta.replacingOccurrences(of: "session-a", with: "session-b") + usage(999)).utf8).write(to: outside)
     try FileManager.default.createSymbolicLink(at: s.home.appendingPathComponent("sessions/link.jsonl"), withDestinationURL: outside)
     try FileManager.default.linkItem(at: outside, to: s.home.appendingPathComponent("sessions/hard.jsonl"))
     let c = try s.collector()
     let result = try await c.refresh()
-    #expect(result.sessions.count == 1)
+    #expect(result.sessions.count == 2)
+    #expect(result.sessions.first { $0.monitor.key.threadID == "session-b" }?.monitor.counter.baseline?.outputTokens == 999)
     #expect(result.diagnostics.contains { $0.error == .unsafePath })
+    #expect(try String(contentsOf: outside, encoding: .utf8) == meta.replacingOccurrences(of: "session-a", with: "session-b") + usage(999))
     let bad = s.root.appendingPathComponent("metadata-link")
     try FileManager.default.createSymbolicLink(at: bad, withDestinationURL: s.metadata)
     #expect(throws: (any Error).self) { _ = try LogCollector(codexHome: s.home, metadataDirectory: bad) }
@@ -193,8 +195,10 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(try resumed.sessions[0].monitor.reportedRate(at: 100) == nil)
     let moved = s.home.appendingPathComponent("gone")
     try FileManager.default.moveItem(at: s.home.appendingPathComponent("sessions"), to: moved)
-    do { _ = try await c.refresh(); Issue.record("Expected missing root") } catch {}
-    #expect(await c.snapshot().sessions[0].monitor.connectivity == .disconnected)
+    let missing = try await c.refresh()
+    #expect(missing.diagnostics.contains { $0.error == .inaccessibleSource })
+    #expect(missing.sessions[0].monitor.connectivity == .disconnected)
+    #expect(try missing.sessions[0].monitor.reportedRate(at: 100) == nil)
 }
 
 @Test func S213MetadataBoundaryAndExclusiveOwner() async throws {
@@ -278,7 +282,7 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(snapshot.sessions.count == 1)
     #expect(snapshot.sessions[0].monitor.connectivity == .degraded)
     #expect(snapshot.sessions[0].hasGap)
-    #expect(!snapshot.diagnostics.isEmpty)
+    #expect(snapshot.diagnostics.contains { $0.error == .ambiguousSource })
 }
 
 @Test func S220NewTurnAfterMissedCompletionMarksGap() async throws {
@@ -290,4 +294,48 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(result.sessions[0].monitor.activeTurnID == "two")
     #expect(result.sessions[0].hasGap)
     #expect(try result.sessions[0].monitor.reportedRate(at: 100) == nil)
+}
+
+@Test func S221PrivateMetadataHardlinkIsRejectedWithoutPublishing() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(10))
+    let c = try s.collector(); _ = try await c.refresh()
+    let database = s.metadata.appendingPathComponent("metadata.sqlite")
+    let alias = s.root.appendingPathComponent("metadata-alias")
+    try FileManager.default.linkItem(at: database, to: alias)
+    let original = try Data(contentsOf: alias)
+    try s.append(start("live") + usage(20))
+    do { _ = try await c.refresh(); Issue.record("Expected private metadata hardlink rejection") } catch {}
+    #expect(await c.snapshot().sessions[0].monitor.counter.baseline?.outputTokens == 10)
+    #expect(try Data(contentsOf: alias) == original)
+}
+
+@Test func S222ReadOnlyHardlinkAliasesDoNotDoubleCount() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(10))
+    try FileManager.default.linkItem(at: s.log, to: s.home.appendingPathComponent("sessions/alias.jsonl"))
+    let c = try s.collector()
+    let initial = try await c.refresh()
+    #expect(initial.sessions.count == 1)
+    #expect(initial.diagnostics.isEmpty)
+    try s.append(start("live") + usage(30))
+    let next = try await c.refresh()
+    #expect(next.sessions.count == 1)
+    #expect(next.diagnostics.isEmpty)
+    #expect(try next.sessions[0].monitor.reportedRate(at: 100) == 2)
+}
+
+@Test func S223PrivateManagedSourceHardlinkRemainsRejected() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(10))
+    let managed = s.root.appendingPathComponent("managed")
+    let run = managed.appendingPathComponent("sessions/" + UUID().uuidString)
+    try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    let source = s.root.appendingPathComponent("private-source")
+    try Data("not a managed record\n".utf8).write(to: source)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: source.path)
+    try FileManager.default.linkItem(at: source, to: run.appendingPathComponent(UUID().uuidString + ".jsonl"))
+    let c = try LogCollector(codexHome: s.home, metadataDirectory: s.metadata, managedRunsDirectory: managed)
+    let snapshot = try await c.refresh()
+    #expect(snapshot.sessions.count == 1)
+    #expect(snapshot.diagnostics.contains { $0.error == .unsafePath })
+    #expect(!snapshot.diagnostics.contains { $0.error == .invalidRecord })
+    #expect(try String(contentsOf: source, encoding: .utf8) == "not a managed record\n")
 }

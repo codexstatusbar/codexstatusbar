@@ -12,8 +12,6 @@ import ServiceManagement
         self.model = model
         super.init()
         popover.behavior = .transient
-        let height = min(620, (NSScreen.main?.visibleFrame.height ?? 700) - 60)
-        popover.contentViewController = NSHostingController(rootView: HubView(model: model, height: max(300, height)))
         item.button?.target = self
         item.button?.action = #selector(toggle)
         item.button?.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -35,6 +33,16 @@ import ServiceManagement
     @objc private func toggle() {
         if popover.isShown { popover.performClose(nil); return }
         guard let button = item.button else { return }
+        let screen = button.window?.screen ?? NSScreen.main
+        let height = min(620, max(1, (screen?.visibleFrame.height ?? 700) - 24))
+        let size = NSSize(width: 400, height: height)
+        let host = NSHostingController(rootView: HubView(model: model, height: height))
+        // AppKit owns the viewport; scrolling and refreshed rows must not resize the popover.
+        host.sizingOptions = []
+        host.preferredContentSize = size
+        host.view.setFrameSize(size)
+        popover.contentViewController = host
+        popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
         NSApplication.shared.activate(ignoringOtherApps: true)

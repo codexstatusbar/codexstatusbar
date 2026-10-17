@@ -63,7 +63,7 @@ enum MeasurementMode: String, CaseIterable {
     var symbol: String { self == .reported ? "R" : "≈" }
 }
 
-enum HubPage: Equatable { case overview, detail(ThreadKey), preferences, connection }
+enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
 @MainActor @Observable final class HubPresentation {
     var sessions: [SessionPresentation] = []

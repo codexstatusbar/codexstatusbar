@@ -29,7 +29,7 @@ struct HubView: View {
                     case .connection: connection
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
-            }
+            }.id(model.page)
             Divider()
             HStack {
                 Text(model.freshness).font(.system(size: 11))
@@ -160,8 +160,14 @@ struct HubView: View {
             Text(model.codexHome).font(.system(size: 11)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             Button("Choose Codex home…") { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy || model.hooksBusy)
             Button(model.busy ? "Checking…" : "Check connection") { model.refresh?() }.disabled(model.busy || model.refresh == nil)
-            ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in Text(text).textSelection(.enabled) }
             Divider()
+            hooksControls
+            Divider()
+            if !model.diagnostics.isEmpty {
+                Text("Collection diagnostics").font(.headline)
+                ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in Text(text).textSelection(.enabled) }
+                Divider()
+            }
             value("Managed direct", model.helperPath == nil ? "Helper unavailable" : "Experimental · unverified")
             Text("Start a new run yourself in a terminal. Existing sessions are never resumed or replayed. Relay behavior and G0 await user QA.")
             copyValue("Bundled helper", model.helperPath)
@@ -173,8 +179,6 @@ struct HubView: View {
             copyValue("Experimental terminal command", model.managedCommand)
             Text("Run from your intended project directory. Additional flags, prompts, profiles and resume commands are not supported.").font(.system(size: 11))
             Text("Live estimates require a managed direct run with supported model metadata and complete visible-text observation. Unsupported models and missing evidence remain unavailable.")
-            Divider()
-            hooksControls
             Text("A collection error does not mean your Codex task failed. Check the original terminal for task status.").font(.system(size: 11))
         }
     }

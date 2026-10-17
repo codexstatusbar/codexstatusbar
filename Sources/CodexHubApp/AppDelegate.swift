@@ -193,7 +193,9 @@ import CodexHubCollector
         let frame = try ReportedFrame(monitors: rows.map(\.monitor), verifiedIndependentThreads: Set(rows.filter { $0.rootObserved && $0.measurement == .reported }.map(\.id)), at: snapshot.observedAt)
         model.sessions = rows
         model.frame = frame
-        model.diagnostics = snapshot.diagnostics.map(\.message)
+        model.diagnostics = Dictionary(grouping: snapshot.diagnostics, by: \.message).map { message, occurrences in
+            occurrences.count == 1 ? message : "\(message) (\(occurrences.count) occurrences)"
+        }.sorted()
         model.refreshedAt = Date()
         model.error = nil
     }

@@ -18,7 +18,7 @@ import CodexHubCore
         try b.startTurn("fixture-turn", at: 1)
         try b.observeUsage(TokenUsage(outputTokens: 300), turnID: "fixture-turn", source: .rolloutLog, epoch: "fixture", at: 5)
         func set(_ monitors: [ThreadMonitor], verified: Set<ThreadKey>) throws {
-            model.sessions = monitors.enumerated().map { i, m in SessionPresentation(monitor: m, cwd: "/Synthetic/" + (i == 0 ? "sample-project" : "second-project"), model: "Fixture model", lastObserved: Date(timeIntervalSince1970: 1_700_000_000), scopeVerified: verified.contains(m.key)) }
+            model.sessions = monitors.enumerated().map { i, m in SessionPresentation(monitor: m, cwd: "/Synthetic/" + (i == 0 ? "sample-project" : "second-project"), model: "Fixture model", lastObserved: Date(timeIntervalSince1970: 1_700_000_000), rootObserved: verified.contains(m.key)) }
             model.frame = try ReportedFrame(monitors: monitors, verifiedIndependentThreads: verified, at: 10)
             model.notice = "Synthetic UI fixture · not live telemetry"
         }
@@ -43,8 +43,24 @@ import CodexHubCore
         try capture(model, "connection-full", output, dark: false, height: 900)
         model.page = .overview
         try set([a,b], verified: [a.key])
-        precondition(model.coverage == "1 of 2 · Partial" && model.summary == "R60", "UI04 scope exclusion")
+        precondition(model.coverage == "1 measured roots / 2 eligible runs · Partial" && model.summary == "R60", "UI04 scope exclusion")
         try capture(model, "partial", output, dark: false)
+        model.measurementMode = .live
+        model.sessions[0].liveRate = 12
+        model.sessions[0].liveMeasurement = .estimated
+        model.sessions[1].liveRate = 34
+        model.sessions[1].liveMeasurement = .estimated
+        precondition(model.summary == "≈12" && model.menuTitle.contains("Partial"), "UI12 Live excludes unknown roots and reported samples")
+        try capture(model, "live-partial", output, dark: false)
+        model.sessions[0].liveMeasurement = .warmingUp
+        model.sessions[0].liveRate = nil
+        precondition(model.aggregateRate == nil && model.rate(for: model.sessions[0]) == "—", "UI13 warming up is not numeric zero")
+        model.sessions[0].liveMeasurement = .estimated
+        model.sessions[0].liveRate = 12
+        model.sessions[0].sourceReconciliationPending = true
+        precondition(model.aggregateRate == nil, "UI14 source reconciliation suppresses Live subtotal")
+        model.measurementMode = .reported
+        precondition(model.summary == "R60", "UI15 selected Reported frame remains separate from Live")
         try a.finishTurn("fixture-turn", outcome: .completed, at: 6)
         try b.finishTurn("fixture-turn", outcome: .completed, at: 6)
         try set([a,b], verified: [a.key,b.key])
@@ -70,7 +86,7 @@ import CodexHubCore
         try set([], verified: [])
         precondition(model.summary == "No sessions", "UI10 empty discovery")
         try capture(model, "empty", output, dark: false)
-        print("PASS UI01–UI11; fixture PNGs: \(output)")
+        print("PASS UI01–UI15; fixture PNGs: \(output)")
     }
     @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 620) throws {
         let view = NSHostingView(rootView: HubView(model: model, height: height).environment(\.colorScheme, dark ? .dark : .light))

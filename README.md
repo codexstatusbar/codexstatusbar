@@ -53,7 +53,7 @@ Hook은 상태 보조 자료일 뿐 사용량 소스가 아닙니다. 선택한 
 
 전체 PRD의 출시 완료 상태가 아닙니다. 부모/자식 합산 범위는 확인되지 않으면 Partial로 남깁니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다.
 
-**사용자 지시로 최종 QA·테스트·리뷰·실제 앱/helper 실행·Hook 설치/제거·provider 호출·캡처를 생략했습니다.** release 빌드는 동작 보증이 아니며, TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기 검증은 후속 QA 대상입니다. Live tokenizer 동등성, Hook 호환성/신뢰와 네이티브 동의창의 실제 동작도 검증하지 않았습니다.
+**2026-10-17 사용자 요청으로 QA를 재개했습니다.** Core/Collector 자동 테스트 43개가 통과했고 합성 UI fixture UI01–UI15가 통과했습니다. 실제 메뉴바 앱에서 발견한 읽기 전용 하드링크 로그 거부를 수정했으며, private 메타데이터의 단일 링크 제한은 유지합니다. 전체 QA 완료 상태는 아니며 TUI/승인/G0·VoiceOver·장시간 실행·macOS 14 기기, Live tokenizer 동등성과 실제 Hook 설치/신뢰·provider 동작은 미검증입니다. 최신 범위는 [QA 기록](docs/verification/collector.md)을 참고하세요.
 
 자세한 내용: [PRD](docs/Codex_Hub_PRD.md), [관리형 helper 계약](docs/managed-helper.md), [네이티브 구현 기록](docs/verification/native-ui.md).
 

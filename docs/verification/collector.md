@@ -45,7 +45,8 @@ UI must preserve Partial coverage instead of calling it a complete total.
 
 - Selected home opened as owner-checked directory descriptor. `sessions` and all
   descendant opens use `openat`, no-follow and owner checks; source reads use
-  O_RDONLY and regular-file/single-link validation. Directory scans are descriptor
+  O_RDONLY and regular-file validation. Same-owner hardlinked source logs are
+  accepted read-only; private writable metadata and managed sources remain single-link. Directory scans are descriptor
   relative, so path replacement does not follow outside the selected directory.
 - File identity is device+inode; offset is last complete newline. No incomplete
   UTF-8 bytes are saved. A SHA-256 digest of at most 128 preceding bytes checks the
@@ -109,7 +110,7 @@ in the command above, including independently supplied r01 remediation tests.
 | S206 | Truncate, rotation, moved file identity; no past throughput spike | NOT RUN — user skipped QA |
 | S207 | Storage rejection leaves checkpoint/published count unchanged; retry processes once | NOT RUN — user skipped QA |
 | S208 | Prompt/auth/body sentinel absent from DB/journal; source bytes unchanged; stored files 0600 | NOT RUN — user skipped QA |
-| S209 | Symlink and hardlink source denied; symlink metadata root denied; other file still processed | NOT RUN — user skipped QA |
+| S209 | Read-only same-owner hardlink source accepted; symlink source denied; symlink metadata root denied; other file still processed | NOT RUN — user skipped QA |
 | S210 | Independent sessions; row cap; metadata clear; source preservation; invalid retention denied | NOT RUN — user skipped QA |
 | S211 | Oversized record isolated; negative counter rejected | NOT RUN — user skipped QA |
 | S212 | Sleep catch-up excluded; missing sessions root reports Disconnected | NOT RUN — user skipped QA |
@@ -236,3 +237,19 @@ instead of reporting that all producer files were removed.
 Final S2b compiler command `swift build --target CodexHubCollector` succeeded on
 Swift 6.4 arm64 with existing CLT/PIF warnings. No test/review/runtime/provider
 execution was performed for this slice.
+
+## 2026-10-17 resumed QA
+
+User resumed QA after the native app rejected ordinary hardlinked Codex logs.
+The current local run passed all 43 Swift Testing cases (20 Core, 23 Collector).
+S209 now verifies read-only hardlink acceptance and unchanged source bytes while
+symlinks remain rejected; S221 verifies private metadata hardlinks are rejected
+without publishing or modifying data; S222 verifies aliases do not double-count.
+S223 verifies private managed-source hardlinks are rejected before decoding.
+S219 exposed missing duplicate-source diagnostics, now reported as ambiguousSource.
+S212 now verifies the current multi-source contract: missing rollout roots publish
+inaccessibleSource and disconnected/no-rate state without aborting independent
+sources. The historical NOT RUN tables above describe the earlier handoff only.
+
+This is focused QA, not full-product or independent acceptance. The global
+qa-verification skill remains disabled pending explicit enablement.

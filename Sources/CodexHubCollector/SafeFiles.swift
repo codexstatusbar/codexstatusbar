@@ -2,10 +2,11 @@ import Foundation
 import Darwin
 
 public enum CollectorError: Error, Equatable, Sendable {
-    case unsafePath, inaccessibleSource, database, invalidSettings, invalidRecord, oversizedRecord, sourceMismatch, cleanupDeferred
+    case unsafePath, inaccessibleSource, database, invalidSettings, invalidRecord, oversizedRecord, sourceMismatch, cleanupDeferred, ambiguousSource
 
     public var message: String {
         switch self {
+        case .ambiguousSource: "Multiple source files claim the same session; measurement is partial."
         case .unsafePath: "A file path, owner, type, or permission is unsafe."
         case .inaccessibleSource: "The selected session logs could not be read."
         case .database: "Hub metadata could not be read or saved."
@@ -40,6 +41,7 @@ final class SafeDirectory: @unchecked Sendable {
     }
     deinit { close(fd) }
 
+    // Read-only source logs may be hardlinked; writable private metadata must have one link.
     func openFile(_ relative: String) throws -> Int32 {
         let parts = relative.split(separator: "/", omittingEmptySubsequences: false)
         guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { throw CollectorError.unsafePath }
@@ -58,7 +60,8 @@ final class SafeDirectory: @unchecked Sendable {
         guard file >= 0 else { throw CollectorError.unsafePath }
         var info = stat()
         guard fstat(file, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-              info.st_uid == getuid(), info.st_nlink == 1, !requirePrivate || info.st_mode & 0o077 == 0 else {
+              info.st_uid == getuid(),
+              !requirePrivate || (info.st_nlink == 1 && info.st_mode & 0o077 == 0) else {
             close(file)
             throw CollectorError.unsafePath
         }
