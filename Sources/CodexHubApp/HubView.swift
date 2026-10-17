@@ -160,7 +160,7 @@ struct HubView: View {
                     }
                 }
                 if model.processCount == 0 {
-                    Text(model.text("실행 중인 Codex가 없습니다")).foregroundStyle(secondary)
+                    Text(model.text(model.error == nil ? "실행 중인 Codex가 없습니다" : "수집 오류로 프로세스 목록을 불러오지 못했습니다")).foregroundStyle(secondary)
                     Button(model.text("연결 확인")) { model.page = .connection; model.refresh?() }.disabled(model.busy || model.refresh == nil)
                 } else if model.visibleSessions.isEmpty && model.unattachedProcesses.isEmpty {
                     Text(model.text("대기 중인 항목은 설정에 따라 숨겨져 있습니다.")).font(.system(size: 11)).foregroundStyle(secondary)

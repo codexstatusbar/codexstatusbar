@@ -648,3 +648,37 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     let size = try FileManager.default.attributesOfItem(atPath: s.log.path)[.size] as? NSNumber
     #expect(size?.int64Value == Int64(314_572_800))
 }
+
+@Test func S239LargeRolloutCheckpointReloadsAfterRestart() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let handle = try FileHandle(forWritingTo: s.log)
+    try handle.truncate(atOffset: 300 * 1024 * 1024)
+    try handle.close()
+    var collector: LogCollector? = try s.collector()
+    _ = try await collector?.refresh()
+    try await collector?.saveChartHistory(Data("retained-chart".utf8))
+    collector = nil
+    var restored: LogCollector? = try s.collector()
+    let snapshot = try #require(try await restored?.refresh())
+    #expect(snapshot.sessions.first?.cwd == "/project")
+    #expect(try await restored?.loadChartHistory() == Data("retained-chart".utf8))
+    restored = nil
+    let scope = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
+    var store: MetadataStore? = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
+    var states = try #require(try store?.load())
+    let key = try #require(states.keys.first)
+    states[key]?.offset = 300 * 1024 * 1024
+    try store?.save(states, retention: RetentionPolicy(days: 7, maximumSessions: 1000))
+    store = nil
+    let finalStore = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
+    #expect(try finalStore.load()[key]?.offset == Int64(314_572_800))
+}
+
+@Test func S240NonRolloutCheckpointStillRejectsOversizedOffsets() throws {
+    let s = try Sandbox()
+    let store = try MetadataStore(directoryURL: s.metadata, sourceScope: "fixture")
+    var state = FileState(path: "sessions/direct.jsonl", historicalUntil: 314_572_800, updated: 1)
+    state.sourceName = "direct-relay"
+    try store.save(["direct:fixture": state], retention: RetentionPolicy(days: 7, maximumSessions: 1000))
+    #expect(throws: CollectorError.database) { try store.load() }
+}

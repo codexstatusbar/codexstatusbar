@@ -320,3 +320,21 @@ S238 reproduced the missing session with a 300MiB sparse fixture, then verified
 project/thread discovery, no fabricated rate and unchanged original file size.
 All 69 Core/Collector tests passed. A separate app-server process with no open
 rollout cannot safely be assigned to a session merely from its working directory.
+
+## Large-checkpoint restart regression
+
+0.0.5 removed the rollout read cap but MetadataStore.load still capped offset and
+historicalUntil at 256MiB. A large checkpoint therefore prevented collector
+initialization after restart. S239 reproduced this database error and now covers
+reopening the collector with preserved chart history plus loading offsets beyond
+256MiB. Only explicitly identified rollout checkpoints permit larger offsets;
+S240 preserves rejection for managed input. Existing negative-offset, path,
+record-size, database-permission and read-budget checks remain. All 71 Core/
+Collector tests passed. The empty UI no longer claims no Codex is running when
+collection has failed. Existing user metadata is retained rather than reset.
+
+Installed 0.0.6 was launched, stopped, and launched again against the existing
+metadata (no deletion/reset). Both launches reopened metadata.sqlite successfully;
+the database resumed writes while retaining 167 records and two offsets above
+256MiB. This confirms native startup/restart recovery, not visual inspection of
+all session rows. UI01–UI82/P01–P06 and the local DMG build also passed.
