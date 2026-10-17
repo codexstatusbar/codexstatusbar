@@ -120,6 +120,7 @@ import CodexHubCollector
         collector = nil
         model.canManageMetadata = false
         model.sessions = []
+        model.unattachedProcesses = []
         model.frame = nil
         model.refreshedAt = nil
         let canonicalHome = home.standardizedFileURL.resolvingSymlinksInPath()
@@ -147,7 +148,7 @@ import CodexHubCollector
                         do {
                             let snapshot = try await service.refresh()
                             guard generation == current, !Task.isCancelled else { return }
-                            try apply(snapshot)
+                            try await apply(snapshot)
                         } catch {
                             guard generation == current else { return }
                             collectionFailed(error)
@@ -176,20 +177,32 @@ import CodexHubCollector
         return directory.appendingPathComponent(homeID, isDirectory: true)
     }
 
-    private func apply(_ snapshot: CollectorSnapshot) throws {
-        let rows = snapshot.sessions.map {
-            SessionPresentation(monitor: $0.monitor, cwd: $0.cwd, model: $0.model,
-                                lastObserved: Date(timeIntervalSince1970: $0.lastObserved),
-                                process: $0.processes.first(where: { $0.role == .tui })?.identity,
-                                server: $0.processes.first(where: { $0.role == .appServer })?.identity,
-                                rootObserved: $0.observedCLIRoot,
-                                observedSource: $0.source, sourceMeasurement: $0.measurement,
-                                sourceReconciliationPending: $0.sourceReconciliationPending,
-                                observationStopped: $0.observationStopped,
-                                observedActivity: $0.activity, hookCompletionCandidate: $0.hookCompletionCandidate,
-                                liveRate: $0.liveRate, liveMeasurement: $0.liveMeasurement,
-                                liveUnavailableReason: $0.liveUnavailableReason)
+    private func apply(_ snapshot: CollectorSnapshot) async throws {
+        let current = generation
+        let running = await Task.detached(priority: .utility) { RunningCodexProcess.capture() }.value
+        guard generation == current else { return }
+        guard let running else {
+            model.sessions = []; model.unattachedProcesses = []; model.frame = nil
+            model.error = "Running Codex processes could not be inspected."
+            return
         }
+        let rows = snapshot.sessions.compactMap { session -> SessionPresentation? in
+            let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil
+            guard let process = RunningCodexProcess.owner(of: session.id, controller: controller, in: running) else { return nil }
+            return SessionPresentation(monitor: session.monitor, cwd: session.cwd, model: session.model,
+                                lastObserved: Date(timeIntervalSince1970: session.lastObserved),
+                                process: process,
+                                server: session.processes.first(where: { $0.role == .appServer })?.identity,
+                                rootObserved: session.observedCLIRoot,
+                                observedSource: session.source, sourceMeasurement: session.measurement,
+                                sourceReconciliationPending: session.sourceReconciliationPending,
+                                observationStopped: session.observationStopped,
+                                observedActivity: session.activity, hookCompletionCandidate: session.hookCompletionCandidate,
+                                liveRate: session.liveRate, liveMeasurement: session.liveMeasurement,
+                                liveUnavailableReason: session.liveUnavailableReason)
+        }
+        let represented = Set(rows.flatMap { [$0.process, $0.server].compactMap { $0 } })
+        model.unattachedProcesses = running.map(\.identity).filter { !represented.contains($0) }
         let frame = try ReportedFrame(monitors: rows.map(\.monitor), verifiedIndependentThreads: Set(rows.filter { $0.rootObserved && $0.measurement == .reported }.map(\.id)), at: snapshot.observedAt)
         model.sessions = rows
         model.frame = frame
@@ -215,7 +228,7 @@ import CodexHubCollector
             do {
                 let snapshot = try await collector.refresh()
                 guard generation == current else { return }
-                try apply(snapshot)
+                try await apply(snapshot)
             } catch { if generation == current { collectionFailed(error) } }
         }
     }
@@ -230,7 +243,7 @@ import CodexHubCollector
                 try await collector.clearMetadata()
                 let snapshot = await collector.snapshot()
                 guard generation == current else { return }
-                try apply(snapshot)
+                try await apply(snapshot)
                 model.notice = "Hub metadata cleared. Original Codex logs were preserved." + (snapshot.diagnostics.isEmpty ? "" : " Some managed files were retained; see Connection diagnostics.")
             } catch { if generation == current { model.notice = "Metadata could not be cleared." } }
         }
@@ -246,7 +259,7 @@ import CodexHubCollector
                 try await collector.updateRetention(RetentionPolicy(days: days, maximumSessions: 1000))
                 let snapshot = await collector.snapshot()
                 guard generation == current else { return }
-                try apply(snapshot)
+                try await apply(snapshot)
                 model.retentionDays = days
                 defaults.set(days, forKey: "retentionDays")
                 model.notice = "Metadata retention updated." + (snapshot.diagnostics.isEmpty ? "" : " Some managed files were retained; see Connection diagnostics.")

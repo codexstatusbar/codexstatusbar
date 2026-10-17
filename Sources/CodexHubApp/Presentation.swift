@@ -59,7 +59,7 @@ struct SessionPresentation: Identifiable {
 
 enum MeasurementMode: String, CaseIterable {
     case reported, live
-    var label: String { self == .reported ? "Reported · 10s" : "Live visible estimate · 5s" }
+    var label: String { self == .reported ? "Reported · 10s" : "Live · 5s" }
     var symbol: String { self == .reported ? "R" : "≈" }
 }
 
@@ -67,6 +67,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
 
 @MainActor @Observable final class HubPresentation {
     var sessions: [SessionPresentation] = []
+    var unattachedProcesses: [ProcessIdentity] = []
     var frame: ReportedFrame?
     var measurementMode: MeasurementMode = .reported
     var updateMeasurementMode: ((MeasurementMode) -> Void)?
@@ -119,7 +120,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     }
     var summary: String {
         if error != nil { return "Unavailable" }
-        guard !sessions.isEmpty else { return "No sessions" }
+        guard !sessions.isEmpty else { return unattachedProcesses.isEmpty ? "No running Codex" : "Codex running" }
         if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "Disconnected" }
         if let speed = aggregateRate { return Self.rate(speed, symbol: measurementMode.symbol) }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "Working" }

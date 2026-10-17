@@ -55,7 +55,6 @@ struct HubView: View {
     }
     private var overview: some View {
         Group {
-            modePicker
             Text("Observed CLI root subtotal").font(.headline)
             HStack { Text(model.measurementMode.label); Spacer(); Text(model.source) }.font(.system(size: 11))
             HStack(alignment: .firstTextBaseline) {
@@ -69,11 +68,18 @@ struct HubView: View {
                 Text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands.")
             }
             Divider()
-            if model.sessions.isEmpty {
-                Text("No sessions discovered").font(.headline)
+            if model.sessions.isEmpty && model.unattachedProcesses.isEmpty {
+                Text("No running Codex").font(.headline)
                 Text("Check the configured Codex home and collection diagnostics.")
                 Button("Check connection") { model.page = .connection; model.refresh?() }.disabled(model.busy || model.refresh == nil)
-            } else if model.visibleSessions.isEmpty { Text("Idle sessions are hidden. Change this in Settings.") }
+            } else if !model.sessions.isEmpty && model.visibleSessions.isEmpty { Text("Idle sessions are hidden. Change this in Settings.") }
+            ForEach(model.unattachedProcesses, id: \.self) { process in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Codex · PID \(process.pid)").fontWeight(.medium)
+                    Text("Running · waiting for session identification").font(.system(size: 11))
+                }
+                Divider()
+            }
             ForEach(model.visibleSessions) { session in
                 Button { model.page = .detail(session.id) } label: {
                     HStack(alignment: .top) {

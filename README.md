@@ -15,7 +15,7 @@ open '.build/Codex Hub.app'
 
 번들은 arm64 release이며 로컬 ad-hoc 서명을 사용합니다. 배포 서명·공증은 되어 있지 않습니다. 첫 SwiftPM 빌드는 고정된 테스트 의존성을 내려받을 수 있습니다.
 
-앱의 Connection에서 Codex home을 선택하세요. 기본값은 `CODEX_HOME` 또는 `~/.codex`입니다. 기존 로그는 읽기 전용이며, 확인되지 않은 PID는 `Session only`로 표시합니다. `R`은 최근 10초에 새로 보고된 출력량의 처리량이고, 서버의 순수 생성 속도가 아닙니다. 상단 또는 Settings에서 Reported(10초, 기본값)와 Live visible estimate(5초)를 선택하며 선택은 저장됩니다. 미측정·워밍업 값은 `—`, 합산 범위가 불명확하면 `Partial`입니다. 세션별 값과 소계는 같은 collector 프레임을 사용하고 선택한 모드만 합산합니다. 선택한 home에서 session_meta의 source가 정확히 cli이고 ID가 일치하는 유일한 transcript로 확인된 CLI root 카운터만 **Observed CLI root subtotal**에 포함합니다. 같은 thread의 direct/log는 기존 단일 권위만 사용하므로 중복 합산하지 않습니다. subagent·unknown·중복 transcript는 개별 속도를 보여도 소계에서 제외합니다. 숫자가 있더라도 자식 전체 사용량을 입증하지 않으므로 **Partial · child scope unknown**을 유지합니다. Coverage는 기존 eligible discovered run 범위에서 측정 가능한 root 수이며 전역 전체 사용량을 뜻하지 않습니다.
+앱의 Connection에서 Codex home을 선택하세요. 기본값은 `CODEX_HOME` 또는 `~/.codex`입니다. 기존 로그는 읽기 전용입니다. 기본 목록과 소계에는 현재 살아 있는 같은 사용자 소유 `codex` 프로세스만 포함합니다. PID와 OS 시작 시각을 확인하고, 쓰기 중인 파일의 device/inode가 세션 로그와 정확히 일치할 때 연결합니다. 세션을 아직 확인하지 못한 살아 있는 프로세스는 별도 대기 행으로 표시하며 종료된 프로세스의 이력은 목록에 넣지 않습니다. `R`은 최근 10초에 새로 보고된 출력량의 처리량이고, 서버의 순수 생성 속도가 아닙니다. 상단 또는 Settings에서 Reported(10초, 기본값)와 Live visible estimate(5초)를 선택하며 선택은 저장됩니다. 미측정·워밍업 값은 `—`, 합산 범위가 불명확하면 `Partial`입니다. 세션별 값과 소계는 같은 collector 프레임을 사용하고 선택한 모드만 합산합니다. 선택한 home에서 session_meta의 source가 정확히 cli이고 ID가 일치하는 유일한 transcript로 확인된 CLI root 카운터만 **Observed CLI root subtotal**에 포함합니다. 같은 thread의 direct/log는 기존 단일 권위만 사용하므로 중복 합산하지 않습니다. subagent·unknown·중복 transcript는 개별 속도를 보여도 소계에서 제외합니다. 숫자가 있더라도 자식 전체 사용량을 입증하지 않으므로 **Partial · child scope unknown**을 유지합니다. Coverage는 기존 eligible discovered run 범위에서 측정 가능한 root 수이며 전역 전체 사용량을 뜻하지 않습니다.
 
 ## 실험적 관리형 실행
 

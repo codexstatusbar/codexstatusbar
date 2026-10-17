@@ -18,3 +18,5 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 
 - **Idle**: an observed session has completed its current turn and is waiting for work. The Hub summary shows Idle when at least one connected session is observed idle and no connected session has an active turn; historical Unknown rows do not hide observed idle. Process existence or missing traffic alone does not prove a session is idle.
 - **Unknown**: current session activity has not been observed reliably. The summary uses Unknown only when there is no observed connected active or idle session. It does not mean Hook installation or log collection failed.
+
+- **Running process list**: current same-user Codex executables verified by PID and OS start time. A session attaches only through an exact writable file device/inode or validated managed controller identity. Stored transcripts alone are history. Unmatched live processes remain explicit and contribute no fabricated session or usage.

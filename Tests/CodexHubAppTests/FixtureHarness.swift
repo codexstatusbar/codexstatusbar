@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftUI
 import CodexHubCore
 
@@ -8,6 +9,7 @@ import CodexHubCore
         app.setActivationPolicy(.accessory)
         let output = CommandLine.arguments.dropFirst().first ?? "/tmp/codex-hub-ui"
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+        try verifyRunningProcesses()
         let model = HubPresentation()
         var a = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-a"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
         try a.setConnectivity(.connected, at: 0)
@@ -99,9 +101,60 @@ import CodexHubCore
         try capture(model, "error", output, dark: false)
         model.error = nil
         try set([], verified: [])
-        precondition(model.summary == "No sessions", "UI10 empty discovery")
+        precondition(model.summary == "No running Codex", "UI10 empty discovery")
         try capture(model, "empty", output, dark: false)
-        print("PASS UI01–UI19; fixture PNGs: \(output)")
+        model.unattachedProcesses = [ProcessIdentity(pid: 1234, osStartTime: "fixture")]
+        precondition(model.summary == "Codex running", "UI20 running process without a session is not historical data")
+        try capture(model, "running-without-session", output, dark: false)
+        model.unattachedProcesses = []
+        print("PASS UI01–UI20 and P01–P06; fixture PNGs: \(output)")
+    }
+    @MainActor static func verifyRunningProcesses() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("codex")
+        let source = root.appendingPathComponent("writer.c")
+        try Data("#include <fcntl.h>\n#include <unistd.h>\nint main(int n, char **v) { if (n != 2 || open(v[1], O_WRONLY | O_APPEND) < 0) return 2; char c; return read(0, &c, 1) < 0; }\n".utf8).write(to: source)
+        let compiler = Process()
+        compiler.executableURL = URL(fileURLWithPath: "/usr/bin/cc")
+        compiler.arguments = [source.path, "-o", executable.path]
+        try compiler.run(); compiler.waitUntilExit()
+        precondition(compiler.terminationStatus == 0, "Process fixture compiler")
+        let log = root.appendingPathComponent("fixture.jsonl")
+        try Data().write(to: log)
+        let child = Process()
+        let input = Pipe()
+        child.executableURL = executable
+        child.arguments = [log.path]
+        child.standardInput = input
+        child.standardOutput = FileHandle.nullDevice
+        child.standardError = FileHandle.nullDevice
+        try child.run()
+        defer {
+            input.fileHandleForWriting.closeFile()
+            if child.isRunning { child.terminate() }
+            child.waitUntilExit()
+        }
+        let attributes = try FileManager.default.attributesOfItem(atPath: log.path)
+        let fileID = "\(attributes[.systemNumber]!)" + ":" + "\(attributes[.systemFileNumber]!)"
+        var observed: RunningCodexProcess?
+        let deadline = Date().addingTimeInterval(3)
+        repeat {
+            observed = RunningCodexProcess.inspect(child.processIdentifier)
+            if observed?.writableFileIDs.contains(fileID) == true { break }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        } while Date() < deadline
+        precondition(observed?.writableFileIDs.contains(fileID) == true, "P01 live writer is mapped by exact file identity")
+        let process = observed!
+        precondition(RunningCodexProcess.owner(of: fileID, controller: nil, in: [process]) == process.identity, "P02 open transcript identifies its owner")
+        precondition(RunningCodexProcess.owner(of: "missing", controller: nil, in: [process]) == nil, "P03 past transcript cannot match by name or cwd")
+        let reused = ProcessIdentity(pid: process.identity.pid, osStartTime: "different-start")
+        precondition(RunningCodexProcess.owner(of: "direct:fixture", controller: reused, in: [process]) == nil, "P04 reused PID cannot match managed identity")
+        let conflicting = RunningCodexProcess(identity: ProcessIdentity(pid: 123, osStartTime: "fixture"), writableFileIDs: [fileID])
+        precondition(RunningCodexProcess.owner(of: fileID, controller: nil, in: [process, conflicting]) == nil, "P05 ambiguous owners remain unattached")
+        child.terminate(); child.waitUntilExit()
+        precondition(RunningCodexProcess.inspect(child.processIdentifier) == nil, "P06 exited process disappears")
     }
     @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 620) throws {
         let view = NSHostingView(rootView: HubView(model: model, height: height).environment(\.colorScheme, dark ? .dark : .light))

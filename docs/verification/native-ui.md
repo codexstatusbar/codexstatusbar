@@ -145,3 +145,20 @@ plus observed Idle, unchanged historical row labels, active-turn priority and no
 idle claim for disconnected work/unknown-only rows. All 43 Core/Collector tests
 and the arm64 app build passed. Evidence is in `.build/qa-idle-summary/`; this
 focused regression run does not claim the previously pending full QA gate.
+
+## Running processes only
+
+The App now captures same-user live Codex PID/start identities with native libproc
+APIs off the main actor. Exact writable regular-file device/inode matches attach
+rollout rows; managed controller PID/start identities attach direct rows. A second
+start-time check rejects process exit/reuse during enumeration. Historical rows
+without a current owner are excluded from the visible list and selected-mode
+subtotal. Ambiguous owners remain unmatched. Live processes without matched
+sessions have explicit waiting rows; source logs and stored history are preserved.
+
+The UI01–UI20 fixture and P01–P06 native boundary checks passed. The native checks
+compile a private tiny file-writer fixture named codex, verify exact inode mapping,
+missing/ambiguous mappings, mismatched PID start identity and disappearance after
+exit. No actual Codex process/provider is launched or stopped by these fixtures.
+The 43 Core/Collector tests and arm64 app build passed. The mode picker now exists
+only in Preferences and uses the shorter Live / 5s label. Full QA remains pending.
