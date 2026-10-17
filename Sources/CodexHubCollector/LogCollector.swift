@@ -81,6 +81,7 @@ struct FileState: Codable, Sendable {
     var epoch = UUID().uuidString
     var threadID: String?
     var turnID: String?
+    var lastTurnState: String?
     var cwd: String?
     var model: String?
     var usageDetails: SessionUsageDetails?
@@ -122,6 +123,7 @@ public actor LogCollector {
     private var monitors: [String: ThreadMonitor] = [:]
     private var visibleWindows: [String: VisibleWindow] = [:]
     private var hookStates: [String: HookState] = [:]
+    private var runningSessionFiles: Set<String> = []
     private var policy: RetentionPolicy
     private var diagnostics: [CollectorDiagnostic] = []
     private var polling: Task<Void, Never>?
@@ -208,6 +210,25 @@ public actor LogCollector {
             group.sorted { $0.lastObserved == $1.lastObserved ? $0.id < $1.id : $0.lastObserved > $1.lastObserved }.first
         }.sorted { $0.id < $1.id }
         return CollectorSnapshot(sessions: sessions, diagnostics: diagnostics, observedAt: lastFrame)
+    }
+
+    /// The caller must prove a current process owns the exact transcript or managed controller identity.
+    public func bindRunningSessions(_ files: Set<String>) throws -> CollectorSnapshot {
+        runningSessionFiles = files
+        for (id, state) in states {
+            guard state.isAuthority == true, state.reconciliationPeer == nil,
+                  state.observationStopped != true, var monitor = monitors[id],
+                  files.contains(id), monitor.connectivity == .connected,
+                  monitor.activity == .unknown, let turn = state.turnID else { continue }
+            if state.lastTurnState == "active" {
+                monitor = try resumedMonitor(monitor, turn: turn, at: lastFrame)
+                states[id]?.hasGap = true
+            } else if let raw = state.lastTurnState, let outcome = TurnOutcome(rawValue: raw) {
+                try monitor.finishTurn(turn, outcome: outcome, at: lastFrame)
+            } else { continue }
+            monitors[id] = monitor
+        }
+        return snapshot()
     }
 
     @discardableResult
@@ -316,9 +337,10 @@ public actor LogCollector {
                         state.hookIdentityEligible = payload["source"] as? String == "cli"
                     }
                 }
-                if !input.managed && !input.hook, state.usageDetails == nil, state.offset > 0 {
-                    // Upgrade old checkpoints using bounded display metadata only; never replay activity/counters.
-                    state.usageDetails = SessionUsageDetails()
+                if !input.managed && !input.hook, state.offset > 0, state.usageDetails == nil || state.lastTurnState == nil {
+                    // Recover bounded context/lifecycle markers; activity still requires an exact live-process binding.
+                    if state.usageDetails == nil { state.usageDetails = SessionUsageDetails() }
+                    if state.lastTurnState == nil { state.lastTurnState = "unknown" }
                     let start = max(0, state.offset - Int64(maximumRead))
                     var bytes = [UInt8](repeating: 0, count: Int(state.offset - start))
                     let count = pread(fd, &bytes, bytes.count, off_t(start))
@@ -336,9 +358,16 @@ public actor LogCollector {
                                     state.model = metadataString(payload["model"]) ?? state.model
                                     consumeDetails("turn_context", payload: payload, state: &state)
                                 }
-                            } else if object["type"] as? String == "event_msg", payload["type"] as? String == "token_count",
-                                      let expected = state.turnID, turn == expected {
-                                consumeDetails("token_count", payload: payload, state: &state)
+                            } else if object["type"] as? String == "event_msg" {
+                                if payload["type"] as? String == "token_count", let expected = state.turnID, turn == expected {
+                                    consumeDetails("token_count", payload: payload, state: &state)
+                                }
+                                if let expected = state.turnID, identifier(payload["turn_id"]) == expected {
+                                    if payload["type"] as? String == "task_started" { state.lastTurnState = "active" }
+                                    if ["task_complete", "turn_aborted"].contains(payload["type"] as? String ?? "") {
+                                        state.lastTurnState = recordedOutcome(payload).rawValue
+                                    }
+                                }
                             }
                         }
                         consumed = newline + 1
@@ -422,6 +451,18 @@ public actor LogCollector {
                 (states[id]?.isAuthority == false && nextStates[id]?.isAuthority == true) {
                 nextVisible[id]?.invalidate(reason: "source_changed")
             }
+        }
+        for event in pendingHooks where ["UserPromptSubmit", "PreToolUse", "PostToolUse"].contains(event.name) && !invalidHookStreams.contains(event.streamID) {
+            let matches = nextStates.filter { $0.value.sourceName == "rollout-log" && $0.value.threadID == event.sessionID }
+            guard matches.count == 1, let id = matches.first?.key, let state = nextStates[id],
+                  state.isAuthority == true, state.hookIdentityEligible == true, state.reconciliationPeer == nil,
+                  state.lastTurnState == nil || state.lastTurnState == "unknown",
+                  let monitor = nextMonitors[id], runningSessionFiles.contains(id),
+                  monitor.connectivity == .connected, monitor.activity == .unknown,
+                  let turn = state.turnID, turn == event.turnID else { continue }
+            nextMonitors[id] = try resumedMonitor(monitor, turn: turn, at: now)
+            nextStates[id]?.lastTurnState = "active"
+            nextStates[id]?.hasGap = true
         }
         let nextHooks = reconcileHooks(pendingHooks, states: nextStates, monitors: nextMonitors,
                                        seen: seen, invalidStreams: invalidHookStreams, now: now)
@@ -634,7 +675,10 @@ public actor LogCollector {
             return
         }
         if type == "turn_context" {
-            if let turn = identifier(payload["turn_id"]) { state.turnID = turn }
+            if let turn = identifier(payload["turn_id"]) {
+                if state.turnID != turn { state.lastTurnState = "unknown" }
+                state.turnID = turn
+            }
             state.cwd = metadataString(payload["cwd"]) ?? state.cwd
             state.model = metadataString(payload["model"]) ?? state.model
             consumeDetails("turn_context", payload: payload, state: &state)
@@ -715,6 +759,7 @@ public actor LogCollector {
         case "task_started":
             guard let turn = identifier(payload["turn_id"]) else { throw CollectorError.invalidRecord }
             state.turnID = turn
+            state.lastTurnState = "active"
             if !historical && monitor?.activeTurnID != turn {
                 if monitor?.activeTurnID != nil, let thread = state.threadID {
                     state.hasGap = true
@@ -726,9 +771,11 @@ public actor LogCollector {
             }
         case "task_complete", "turn_aborted":
             guard let turn = identifier(payload["turn_id"]) ?? state.turnID else { throw CollectorError.invalidRecord }
-            state.turnID = turn
-            let status = payload["status"] as? String
-            let outcome: TurnOutcome = status == "failed" ? .failed : (status == "interrupted" || event == "turn_aborted" ? .interrupted : .completed)
+            let outcome = recordedOutcome(payload)
+            if state.turnID == nil || state.turnID == turn {
+                state.turnID = turn
+                state.lastTurnState = outcome.rawValue
+            }
             if !historical {
                 try monitor?.finishTurn(turn, outcome: outcome, at: now)
                 if monitor?.activeTurnID == nil { visible.invalidate(reason: "no_active_turn", partial: false) }
@@ -862,6 +909,19 @@ public actor LogCollector {
     private func boolean(_ value: Any?) -> Bool? {
         guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
         return value.boolValue
+    }
+
+    private func resumedMonitor(_ monitor: ThreadMonitor, turn: String, at time: Double) throws -> ThreadMonitor {
+        var resumed = ThreadMonitor(key: monitor.key, counter: monitor.counter)
+        try resumed.setConnectivity(.connected, at: time)
+        try resumed.startTurn(turn, at: time)
+        try resumed.markGap(at: time)
+        return resumed
+    }
+
+    private func recordedOutcome(_ payload: [String: Any]) -> TurnOutcome {
+        let status = payload["status"] as? String
+        return status == "failed" ? .failed : (status == "interrupted" || payload["type"] as? String == "turn_aborted" ? .interrupted : .completed)
     }
 
     private func consumeDetails(_ type: String, payload: [String: Any], state: inout FileState) {

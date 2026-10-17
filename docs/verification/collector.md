@@ -271,3 +271,20 @@ bound, unavailable fields remain unavailable. S224 covers metadata persistence,
 quota-only events and distinct input/output/context values; S225 covers malformed
 metadata; S226 covers legacy backfill without fabricated activity or throughput.
 All 46 Core/Collector tests passed. This is focused evidence, not full QA approval.
+
+## Verified live activity reattachment
+
+App passes exact source file identities from native PID/start + writable inode
+or validated managed-controller matching to bindRunningSessions. Without that
+binding, historical lifecycle records remain Unknown as before. With binding,
+only the latest matching recorded turn state is restored: active becomes Working
+with a new baseline/window; a recorded outcome becomes Idle. Missing turn start
+can instead recover from a fresh same-home/same-session/same-turn Hook after
+binding; Stop/Interrupt remain completion candidates, not inferred Idle. Different
+or late turn completions cannot overwrite the newer turn's recorded state.
+
+S227 verifies no historical speed spike or fabricated turn average, and no window
+reset on repeated binding. S228 verifies Idle restoration requires live binding.
+S229 verifies fresh Hook recovery and native-binding requirement. S230 covers late
+old completion; S231 covers a new context not inheriting old Idle state. All 51
+Core/Collector tests passed; full QA is not claimed. No source log was changed.

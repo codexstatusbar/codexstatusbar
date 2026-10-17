@@ -179,3 +179,16 @@ app build passed. Missing metadata and unsupported Live estimates stay unavailab
 Official status-field reference: https://learn.chatgpt.com/docs/developer-commands
 Actual extraction uses the installed Codex rollout fields, without account/provider
 requests, config trust mutation or invented IDs. Full QA remains uncompleted.
+
+## Final process view follow-up
+
+Known session rows precede unmatched live processes. Summary is an explicit button
+opening the existing details page; the main row retains title/PID, model/effort,
+individual speed and activity only. Active rows sort before idle and Unknown.
+The user explicitly retained Live mode: Logs rows therefore show an unavailable
+Live rate and a managed-direct requirement notice. The earlier R90 fixture was
+synthetic reported throughput, never actual Live/provider evidence.
+
+All 51 Core/Collector tests, UI01–UI25, P01–P06 and final arm64 build passed in
+scope. Actual metadata was inspected for the running session; fake/fixture speeds
+are not promoted to actual measurement evidence. Full QA remains incomplete.

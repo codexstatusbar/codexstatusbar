@@ -24,3 +24,5 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 - **Process context**: the latest reported last_token_usage.total_tokens and model_context_window for the matched session, shown as used tokens / window. It is separate from cumulative lifetime input/output.
 - **Remaining usage**: 100 minus the reported used_percent for each available rate-limit window, with its actual window_minutes and reset time. No default 5-hour/weekly label or account lookup is inferred.
 - **Process input/output**: the selected authority's last reported cumulative input/output counter snapshot. Inherited/fork history can be included; these are not current-turn generation counters.
+
+- **Activity reattachment**: the app proves the current process owns the exact source file identity before the collector restores its recorded latest turn state. A fresh validated Hook can recover a matching turn whose start is unavailable. Reattachment clears the rate window and preserves an incomplete turn average; historical token deltas never become current throughput.

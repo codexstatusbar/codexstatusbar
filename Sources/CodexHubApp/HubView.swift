@@ -59,6 +59,10 @@ struct HubView: View {
         Group {
             Text("Observed CLI root subtotal").font(.headline)
             HStack { Text(model.measurementMode.label); Spacer(); Text(model.source) }.font(.system(size: 11))
+            if model.measurementMode == .live, !model.sessions.isEmpty,
+               model.sessions.allSatisfy({ ($0.observedSource ?? $0.monitor.counter.source) != .directRelay }) {
+                Text("Live unavailable · managed direct connection required").font(.system(size: 11))
+            }
             HStack(alignment: .firstTextBaseline) {
                 Text(model.summary).font(.system(size: model.summary.count > 12 ? 28 : 42, weight: .semibold)).monospacedDigit()
                 if model.aggregateRate != nil && model.error == nil { Text("tok/s") }

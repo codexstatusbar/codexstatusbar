@@ -186,7 +186,13 @@ import CodexHubCollector
             model.error = "Running Codex processes could not be inspected."
             return
         }
-        let rows = snapshot.sessions.compactMap { session -> SessionPresentation? in
+        let owned = Set(snapshot.sessions.compactMap { session -> String? in
+            let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil
+            return RunningCodexProcess.owner(of: session.id, controller: controller, in: running) == nil ? nil : session.id
+        })
+        let connected = try await collector?.bindRunningSessions(owned) ?? snapshot
+        guard generation == current else { return }
+        let rows = connected.sessions.compactMap { session -> SessionPresentation? in
             let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil
             guard let process = RunningCodexProcess.owner(of: session.id, controller: controller, in: running) else { return nil }
             return SessionPresentation(monitor: session.monitor, cwd: session.cwd, model: session.model,
