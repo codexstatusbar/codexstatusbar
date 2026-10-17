@@ -128,6 +128,7 @@ import CodexHubCollector
         model.doctorResult = "Not checked. Managed relay is experimental; G0 is unverified."
         model.hooksResult = "Not checked. Hook trust and runtime compatibility are unverified."
         model.busy = true
+        model.checkingConnection = true
         polling = Task { [weak self] in
             guard let self else { return }
             await previous?.stop()
@@ -142,6 +143,7 @@ import CodexHubCollector
                 collector = service
                 model.canManageMetadata = true
                 model.busy = false
+                model.checkingConnection = false
                 while !Task.isCancelled && generation == current {
                     if !model.busy {
                         model.busy = true
@@ -161,6 +163,7 @@ import CodexHubCollector
                 guard generation == current else { return }
                 collectionFailed(error)
                 model.busy = false
+                model.checkingConnection = false
             }
         }
     }
@@ -232,9 +235,10 @@ import CodexHubCollector
         guard !model.busy else { return }
         guard let collector else { connect(home: URL(fileURLWithPath: model.codexHome)); return }
         model.busy = true
+        model.checkingConnection = true
         let current = generation
         Task {
-            defer { if generation == current { model.busy = false } }
+            defer { if generation == current { model.busy = false; model.checkingConnection = false } }
             do {
                 let snapshot = try await collector.refresh()
                 guard generation == current else { return }

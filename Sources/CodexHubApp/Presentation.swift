@@ -123,6 +123,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var canManageMetadata = false
     var confirmClear = false
     var busy = false
+    var checkingConnection = false
     var helperPath: String?
     var codexPath: String?
     var chooseCodex: (() -> Void)?

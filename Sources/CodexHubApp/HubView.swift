@@ -180,8 +180,9 @@ struct HubView: View {
             Text("Keep your terminal.").font(.system(size: 24, weight: .semibold))
             Text("Logs compatibility mode observes saved metadata without restarting Codex.")
             Text(model.codexHome).font(.system(size: 11)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-            Button("Choose Codex home…") { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy || model.hooksBusy)
-            Button(model.busy ? "Checking…" : "Check connection") { model.refresh?() }.disabled(model.busy || model.refresh == nil)
+            Text("로그는 1초 간격으로 자동 수집합니다.").font(.system(size: 11))
+            Button("Codex 경로 선택…") { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy || model.hooksBusy)
+            Button(model.checkingConnection ? "연결 확인 중…" : "지금 확인") { model.refresh?() }.disabled(model.busy || model.refresh == nil)
             Divider()
             hooksControls
             Divider()

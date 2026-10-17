@@ -257,3 +257,11 @@ recovery, and fresh usage. Managed and Hook record limits remain fail-closed.
 The overview title now shares the close-button row, removing the empty header
 row and reducing the top inset. All 58 Core/Collector tests and UI01–UI36/P01–P06
 passed after these changes. Actual post-replacement verification is pending.
+
+
+Connection progress now uses an explicit foreground-check flag. The one-second
+background poll retains its serialization guard but no longer changes the button
+to Checking on every pass. The page explains the automatic collection interval.
+Initial connection and user-requested refresh still show progress and preserve
+errors. UI01–UI36/P01–P06 and the arm64 app/helper build passed for this follow-up;
+actual replacement UI remains to be checked with the user's opened popover.
