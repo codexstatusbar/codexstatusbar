@@ -122,8 +122,8 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         guard !sessions.isEmpty else { return "No sessions" }
         if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "Disconnected" }
         if let speed = aggregateRate { return Self.rate(speed, symbol: measurementMode.symbol) }
-        if sessions.allSatisfy({ $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "Idle" }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "Working" }
+        if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "Idle" }
         return "Unknown"
     }
     var menuTitle: String {

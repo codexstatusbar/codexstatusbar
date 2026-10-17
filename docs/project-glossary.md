@@ -15,3 +15,6 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 - **Coverage**: measured active runs / discovered active or activity-unknown runs. Confirmed idle runs are excluded. Parent/child overlap must be resolved by the adapter before marking scope verified.
 - **History**: finished turn metadata and reported output. Late usage can correct history without changing current activity or speed.
 - **Monotonic time**: caller-injected nonnegative finite seconds from one monotonic clock; never wall-clock timestamps. Adapters serialize calls.
+
+- **Idle**: an observed session has completed its current turn and is waiting for work. The Hub summary shows Idle when at least one connected session is observed idle and no connected session has an active turn; historical Unknown rows do not hide observed idle. Process existence or missing traffic alone does not prove a session is idle.
+- **Unknown**: current session activity has not been observed reliably. The summary uses Unknown only when there is no observed connected active or idle session. It does not mean Hook installation or log collection failed.

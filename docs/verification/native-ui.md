@@ -131,3 +131,17 @@ file cap; this does not explain every size diagnostic or prove those sources wer
 collected. No original logs were changed. Full-product QA is not complete:
 qa-verification is disabled in the global skill configuration and its enablement
 question is pending; no disabled skill workflow was loaded or bypassed.
+
+## Idle summary regression
+
+The summary previously required every discovered session to be connected/idle,
+so one historical Unknown row hid a freshly completed session's Idle state.
+Connected active turns now take priority, followed by any observed connected
+idle session. Individual Unknown rows, missing measurements and Partial coverage
+remain unchanged. Process existence or silence is not converted to idle.
+
+UI16 failed before the fix. UI01–UI19 then passed, including historical Unknown
+plus observed Idle, unchanged historical row labels, active-turn priority and no
+idle claim for disconnected work/unknown-only rows. All 43 Core/Collector tests
+and the arm64 app build passed. Evidence is in `.build/qa-idle-summary/`; this
+focused regression run does not claim the previously pending full QA gate.

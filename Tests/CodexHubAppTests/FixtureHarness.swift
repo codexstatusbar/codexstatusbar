@@ -66,6 +66,21 @@ import CodexHubCore
         try set([a,b], verified: [a.key,b.key])
         precondition(model.summary == "Idle" && model.frame?.tokensPerSecond == nil, "UI05 idle clears speed")
         try capture(model, "idle", output, dark: true)
+        var historical = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-history"), source: .rolloutLog, epoch: "historical")
+        try historical.setConnectivity(.connected, at: 0)
+        try set([a,historical], verified: [a.key])
+        precondition(model.summary == "Idle", "UI16 observed idle is not hidden by historical unknown sessions")
+        precondition(model.status(for: model.sessions[1]) == "Unknown", "UI17 unknown history is not relabeled idle")
+        try capture(model, "idle-with-history", output, dark: true)
+        var active = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-active"), source: .rolloutLog, epoch: "active")
+        try active.setConnectivity(.connected, at: 0)
+        try active.startTurn("active-turn", at: 1)
+        try set([a,historical,active], verified: [a.key])
+        precondition(model.summary == "Working", "UI18 active turn takes precedence over idle without numeric throughput")
+        try active.setConnectivity(.disconnected, at: 2)
+        try set([active,historical], verified: [])
+        precondition(model.summary == "Unknown", "UI19 disconnected work and unknown history cannot assert idle")
+        try set([a,b], verified: [a.key,b.key])
         model.hideIdle = true
         precondition(model.visibleSessions.isEmpty, "UI06 idle filtering")
         model.hideIdle = false
@@ -86,7 +101,7 @@ import CodexHubCore
         try set([], verified: [])
         precondition(model.summary == "No sessions", "UI10 empty discovery")
         try capture(model, "empty", output, dark: false)
-        print("PASS UI01–UI15; fixture PNGs: \(output)")
+        print("PASS UI01–UI19; fixture PNGs: \(output)")
     }
     @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 620) throws {
         let view = NSHostingView(rootView: HubView(model: model, height: height).environment(\.colorScheme, dark ? .dark : .light))
