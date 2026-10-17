@@ -1,0 +1,206 @@
+<p align="center"><a href="README.md">English</a> · <strong>한국어</strong></p>
+
+<div align="center">
+  <img src="Resources/AppIcon.png" alt="Tokloom 앱 아이콘" width="112" />
+  <h1>Tokloom</h1>
+  <p><strong>Codex 작업의 흐름을 메뉴바에서.</strong></p>
+  <p>지금 어떤 작업이 진행 중인지, 얼마나 출력했는지,<br />사용 한도가 얼마나 남았는지 한눈에 확인하세요.</p>
+  <p><sub>macOS 14+ · Apple Silicon · SwiftUI + AppKit · 한국어 / English</sub></p>
+  <p>
+    <a href="https://github.com/codexstatusbar/codexstatusbar/releases">다운로드</a> ·
+    <a href="#앱-화면">화면 둘러보기</a> ·
+    <a href="#빌드와-실행">직접 빌드</a> ·
+    <a href="#속도-계산과-표시">측정 방식</a>
+  </p>
+</div>
+
+---
+
+Tokloom은 Codex를 사용하는 개발자를 위한 네이티브 메뉴바 모니터입니다. 기존 터미널을 그대로 사용하면서, 실행 중인 프로세스의 활동 상태·출력 속도·토큰 사용량을 확인할 수 있습니다.
+
+- **작업 흐름 확인** — 메뉴바의 `t/s`·`t/m`, 프로세스별 작업·대기 상태와 개별 속도.
+- **30분 출력 기록** — 분 단위 관측 차트와 앱 재시작 후 기록 복원.
+- **세션 상세정보** — 모델·추론 강도, 컨텍스트 사용률, 입력·출력 토큰과 남은 사용 한도.
+- **macOS에 맞춘 화면** — 460pt 팝오버, 반투명 글래스 스타일, 다크·라이트 모드와 언어 설정.
+
+> 기본 속도는 **도구 실행·대기를 제외한 추정치**입니다. 서버의 순수 토큰 생성 속도를 의미하지 않습니다.
+
+## 앱 화면
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <h3>01 · 작업 한눈에 보기</h3>
+      <p>전체 속도, 실행 중인 프로세스,<br />최근 30분의 관측 출력량.</p>
+      <a href="docs/images/overview.png"><img src="docs/images/overview.png" alt="Tokloom 메인 화면: 전체 속도, 출력 차트와 프로세스별 상태" width="340" /></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <h3>02 · 세션 깊이 살펴보기</h3>
+      <p>모델과 추론 강도, 컨텍스트 사용률,<br />토큰 집계와 출력 추이.</p>
+      <a href="docs/images/details.png"><img src="docs/images/details.png" alt="Tokloom 상세정보: 모델, 컨텍스트 사용률, 토큰 사용량과 차트" width="340" /></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <h3>03 · 기존 터미널 그대로</h3>
+      <p>로그 경로와 수집 진단을 확인하고,<br />필요한 경우에만 훅과 관리형 연결 사용.</p>
+      <a href="docs/images/connection.png"><img src="docs/images/connection.png" alt="Tokloom 연결 화면: 로그 경로, 선택적 훅과 수집 진단" width="340" /></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <h3>04 · 내 방식으로 설정</h3>
+      <p>언어·속도 표시·로그인 시 실행부터<br />메타데이터 보관 기간까지.</p>
+      <a href="docs/images/settings.png"><img src="docs/images/settings.png" alt="Tokloom 설정 화면: 언어, 속도 단위, 실행 동작과 데이터 관리" width="340" /></a>
+    </td>
+  </tr>
+</table>
+
+<sub>현재 앱 UI를 샘플 데이터로 렌더링한 예시입니다. 실제 계정·프로젝트 정보나 성능 벤치마크가 아니며, 일부 동작 버튼은 샘플 상태에서 비활성화돼 있습니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+
+## 빌드와 실행
+
+macOS 14+ 대상이며, 빌드에는 Swift 6.4 Command Line Tools가 필요합니다. Xcode 프로젝트는 사용하지 않습니다.
+
+```sh
+./scripts/build-app.sh
+open '.build/Tokloom.app'
+# 개발용 Tokloom Debug 빌드와 실행
+./scripts/run-app.sh
+```
+
+`build-app.sh`의 기본값과 `package-app.sh`는 Release이며 `Tokloom.app`을 생성합니다. 개발용은 `./scripts/build-app.sh debug` 또는 `./scripts/run-app.sh`로 만들며 이름과 창 제목이 `Tokloom Debug`인 별도 번들을 생성합니다. 기존 설정과 관측 기록은 공유합니다.
+
+배포 번들은 arm64 release이며 로컬 ad-hoc 서명을 사용합니다. 배포 서명·공증은 되어 있지 않습니다. 첫 SwiftPM 빌드는 고정된 테스트 의존성을 내려받을 수 있습니다.
+
+앱의 **연결**에서 Codex 홈을 선택하세요. 기본값은 `CODEX_HOME` 또는 `~/.codex`입니다. 기존 Codex를 재시작할 필요 없이 원본 로그를 읽기 전용으로 관측합니다. 로그 수집 주기는 1초입니다.
+
+목록에는 현재 살아 있는 프로세스만 표시하며, PID·시작 시각과 정확한 로그 파일 ID로 세션을 연결합니다. 아직 세션을 식별하지 못한 프로세스는 확인 중으로 표시하고, 종료된 프로세스의 과거 이력은 목록에 넣지 않습니다. 앱 종료는 Codex 세션을 종료하지 않습니다.
+
+## GitHub Actions 번들
+
+[macOS bundle](.github/workflows/bundle.yml)은 `*.*.*` 패턴의 태그를 push할 때만 동작합니다(예: `1.2.3`). 브랜치 push·PR·수동 실행에서는 시작하지 않습니다. GitHub의 Xcode 27 arm64 프리뷰 러너(`xcode-27`)와 Xcode 27.0을 사용합니다. 러너 제공 범위는 [GitHub runner images](https://github.com/actions/runner-images#available-images)를 참고하세요.
+
+1. `test`: Core/Collector 자동 테스트.
+2. `verify`: 기존 합성 UI·격리된 프로세스 검증과 화면 증거 수집.
+3. `bundle`: 두 검증이 성공하면 arm64 앱을 빌드하고 서명·리소스를 확인한 뒤 ZIP 생성.
+
+저장소 **Actions → macOS bundle → 실행 결과 → Artifacts**에서
+`Tokloom-macos-arm64-<commit>`을 받으세요. 안에는 `Tokloom-macos-arm64.zip`과
+SHA-256 파일이 있습니다. 앱 ZIP에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
+아티팩트와 실행 로그는 14일간 보관합니다. 모든 검증과 번들 생성이 성공하면 태그 이름의 GitHub Release를 만들고 ZIP·SHA-256 파일을 업로드합니다. 같은 태그의 재실행은 릴리스 파일을 교체합니다.
+태그를 로컬에 생성한 것만으로는 실행되지 않으며, 해당 태그를 GitHub에 push해야 합니다.
+
+로컬에서도 같은 번들을 만들 수 있습니다.
+
+```sh
+./scripts/package-app.sh
+(cd .build/dist && shasum -a 256 -c Tokloom-macos-arm64.zip.sha256)
+```
+
+결과는 `.build/dist/`에 생성됩니다. 로컬 ad-hoc 서명이며 Apple 배포 서명·공증을
+추가하는 작업은 아닙니다. CI의 합성 검증도 실제 provider·훅 신뢰·전체 네이티브 QA를
+대신하지 않습니다.
+
+## 속도 계산과 표시
+
+설정에서 계산 방식과 표시 단위를 선택합니다.
+
+| 모드 | 표시하는 값 | 조건과 한계 |
+| --- | --- | --- |
+| 도구 제외 추정 · 기본 | 보고된 출력 토큰과 도구 실행·대기를 제외한 관측 구간으로 계산한 평균 | 새 사용량 로그가 들어올 때 갱신하고 다음 유효한 보고까지 유지합니다. 서버 응답 대기가 일부 포함될 수 있습니다. |
+| 실시간 추정 · 5초 | 완전하게 관측한 가시 응답 텍스트의 토큰 추정치 `≈` | 지원 모델의 관리형 직접 연결이 필요합니다. 일반 로그 연결에서는 제공하지 않습니다. |
+| 서버 타이밍 진단 | 원본 서버 타이밍·출력 이벤트 메타데이터 | 속도를 계산하지 않습니다. 설정에서 추정 모드로 전환할 수 있습니다. |
+
+`t/s`는 초당 토큰, `t/m`은 분당 토큰입니다. 분 단위 표시는 같은 속도의 60배이며 계산 구간을 1분으로 바꾸는 설정이 아닙니다. 워밍업·수집 공백·지원하지 않는 소스에서는 임의로 0을 만들지 않고 `—`를 표시합니다.
+
+메뉴바와 메인 합계는 같은 모드의 관측된 CLI root 중 독립 범위가 확인된 항목만 합산합니다. 같은 스레드의 direct/log는 하나의 권위만 사용합니다. 모든 자식·하위 에이전트 사용량을 포함하는 계정 전체 합계가 아니며, 범위와 제외 이유는 상세정보에서 확인합니다.
+
+## 프로세스별 표시
+
+작업 중인 프로세스는 대기 중인 항목보다 위에 표시됩니다. 상세정보에서 다음을 확인할 수 있습니다.
+
+- 모델·추론 강도, 작업 상태와 수집 방식, PID와 작업 경로.
+- 컨텍스트 사용률: 마지막 보고의 `last_token_usage.total_tokens / model_context_window`.
+- K/M/G 단위의 누적 입력·출력·캐시 토큰. 누적값에는 상속한 이전 이력이 포함될 수 있습니다.
+- **남은 사용 한도**: `100 - used_percent`와 갱신까지 남은 시간. 예를 들어 사용률이 43%이면 `57% 남음 · 6d 19h`로 표시합니다. 시간은 `resets_at`에서 계산하며 한도 창의 길이를 남은 시간으로 사용하지 않습니다.
+- 보고된 요청 티어와 Codex 홈의 기본 속도 설정. Fast/Ultrafast와 기본 설정을 구분하며, `priority`와 `fast`는 Fast로 표시합니다.
+
+사용 한도는 각 세션의 마지막 보고값이며 계정 한도를 합산하거나 서버에 별도로 조회하지 않습니다. 갱신 시각이 없으면 미확인, 이미 지났으면 갱신 대기로 표시합니다. 새 보고 없이 한도가 복구됐다고 가정하지 않습니다.
+
+프로필·CLI override와 실제 서버 응답 티어는 기본 설정과 다를 수 있습니다. 기록이 없으면 활성 여부는 미확인으로 남깁니다. 홈 설정의 단순 root-level `service_tier`만 읽으며 설정 파일을 변경하지 않습니다.
+
+## 차트와 로컬 저장
+
+메인과 상세정보의 차트는 최근 30분 동안 **새로 관측한 출력 토큰 증가분**을 매분 00초에서 시작하는 고정된 1분 구간으로 표시합니다. 새 기록이 없으면 기존 막대의 합계는 유지되고, 표시 구간은 분 단위로 이동합니다. 속도 그래프가 아니라 출력량 그래프이며, `t/s`와 `t/m` 설정에 영향을 받지 않습니다.
+
+관측값은 보호된 SQLite 메타데이터 DB에 저장합니다. 재시작·재부팅 후에는 저장 시각을 기준으로 최근 30분 기록을 복원합니다. 실시간 누적 카운터의 기준점은 복원하지 않으므로 앱이 꺼져 있던 동안의 증가분을 새 관측값으로 추가하지 않습니다. 메인 차트는 현재 연결된 독립 CLI root 범위만 표시하며 수집 오류 중에는 숨깁니다.
+
+설정에서 수집 메타데이터를 삭제하면 차트도 삭제됩니다. 원본 Codex 로그는 유지됩니다. 이전 버전의 저장 오류로 비어 있거나 저장되지 않은 차트는 복원할 수 없습니다.
+
+## 설정과 연결
+
+**설정**에는 언어, 속도 계산 방식·단위, 대기 세션 숨기기, 로그인 시 실행, 메타데이터 보관 기간과 삭제, 앱 종료가 있습니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다.
+
+**연결**에는 로그 경로 선택·복사, 즉시 연결 확인, 선택적 훅, 수집 진단과 실험적 관리형 실행 안내가 있습니다. 훅 설정은 이 화면에만 있습니다. 경로와 실행 명령은 각각의 복사 버튼으로 복사합니다.
+
+macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 사용합니다. 이전 macOS에서는 기본 테두리 버튼을 사용하며, ‘투명도 줄이기’를 켜면 불투명 시스템 배경을 사용합니다. 메뉴바 우클릭 메뉴에서 앱 열기·종료를 선택할 수 있습니다.
+
+### 선택적 Hook
+
+연결 화면의 훅 상태 확인·설치·제거는 내장 helper의 실제 `hooks status/install/uninstall`을 사용합니다. 설치·제거 전 네이티브 확인창에서 선택한 `CODEX_HOME/hooks.json` 경로, 기존 파일 백업과 수동 신뢰 절차를 안내합니다. 관련 없는 핸들러는 보존하며 기존 파일이 없으면 백업도 없습니다.
+
+앱은 훅을 자동 설치하거나 기능·신뢰를 자동 활성화하지 않습니다. 사용자가 Codex `/hooks`에서 정의를 직접 검토하고 신뢰해야 합니다. Installed 표시는 신뢰 또는 실행 호환성 검증을 뜻하지 않습니다. 실패·타임아웃 후에는 상태를 다시 확인하세요.
+
+훅은 **상태 보조 자료이며 토큰 사용량 소스가 아닙니다.** 정확한 세션/turn이 로그와 일치할 때만 상태에 반영하고, Stop 등은 완료 후보로 취급합니다.
+
+## 실험적 관리형 실행
+
+연결 화면에서 설치된 Codex 실행 파일을 선택하고 도우미 호환성을 확인합니다. 이는 제한 시간 내 버전 검사이며 실제 TUI·승인·provider 호환성을 검증하지 않습니다. 앱이 Codex 실행을 자동으로 시작하지는 않습니다.
+
+연결 화면의 명령을 복사하거나 아래 경로를 설치 위치에 맞춰 바꾸고, 작업할 프로젝트 디렉터리에서 실행하세요.
+
+```sh
+'/path/to/Tokloom.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'
+env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --server-timing --codex '/absolute/path/to/codex'
+```
+
+`--codex`를 생략하면 PATH에서 찾습니다. 현재 helper의 허용 버전은 `codex-cli 0.163.0`입니다. 임의 위치 인수·프롬프트·추가 플래그·프로필·resume/fork는 거부합니다. 기존 실행에 붙거나 재시작하지 않으며, 앱과 관리형 실행의 수명은 분리됩니다. 관리형 relay는 **실험적이며 G0 미검증**입니다.
+
+`--server-timing`은 새 관리형 실행에만 `runtime_metrics`와 전용 trace 대상을 활성화합니다. 전역 설정과 기존 프로세스에는 적용되지 않습니다. 수집된 원본값은 상세정보에 표시됩니다.
+
+기존 실제 응답 검증에서는 출력 토큰 수·출력 이벤트 수·이벤트 평균 간격과 `missing_harness_boundary`를 받았지만 순수 생성 시간 필드는 없었습니다. 이벤트 수는 토큰 수와 다르므로 이벤트 간격의 역수를 `t/s`로 변환하지 않습니다. 자세한 근거는 [서버 타이밍 기록](docs/verification/server-timing.md)에 있습니다.
+
+## 현재 범위
+
+Live 추정은 관리형 direct relay에서 처음부터 완전하게 관측한 가시 응답 텍스트만 공식 `o200k_base` 자산으로 계산합니다. 자산과 MIT 라이선스는 SwiftPM 리소스로 helper 옆에 포함되며 실행 중 내려받지 않습니다.
+
+관측된 provider 식별자가 정확히 `openai`이고 모델명이 `o1`, `o3`, `o4-mini`, `gpt-5`, `gpt-4.1`, `gpt-4o` 중 하나일 때만 지원합니다. 모델 정보 표시는 이 목록과 별개이며, 목록 밖 모델이 화면에 표시돼도 Live 추정을 지원한다는 뜻은 아닙니다. 다른 모델·provider, 누락된 정보, 불완전한 시작, 갭·오래된 관측은 미측정으로 남습니다. provider 식별자는 원격 서버 신원의 보증이 아닙니다.
+
+Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 포함하지 않습니다. `chars/4` 같은 대체 계산도 없습니다. 최대 4개 항목, 항목당 16 KiB, 정규식 구간 512바이트와 계산 시간·작업량 한계를 넘으면 추정을 중단합니다. 공식 tiktoken과의 동등성은 아직 검증하지 않았습니다.
+
+기존 설치의 설정·관측 기록을 유지하기 위해 앱 번들 식별자와 `CodexHub` 저장 경로, 내부 모듈·helper 이름은 그대로 사용합니다. 앱 표시 이름과 배포 파일명은 Tokloom입니다.
+
+## 구조와 저장
+
+| 모듈 | 역할 |
+| --- | --- |
+| `CodexHubCore` | 상태·누적 사용량·작업/관측 구간 평균 |
+| `CodexHubCollector` | 읽기 전용 로그/관리형 메타데이터 수집과 SQLite 체크포인트 |
+| `CodexHubApp` | SwiftUI 화면, AppKit 메뉴바, 사용자 설정과 차트 저장 |
+| `CodexHubHelper` | Swift 런처와 로컬 relay |
+
+프로덕션 구현은 Swift와 macOS 시스템 라이브러리를 사용합니다. Tokloom은 프롬프트·응답 원문을 저장하지 않습니다. 메타데이터는 `~/Library/Application Support/CodexHub/homes/<homeHash>`, 관리형 관측 파일은 같은 `CodexHub` 디렉터리의 `managed-runs/<homeHash>`에 분리합니다.
+
+삭제·보관 정책은 Tokloom 메타데이터에 적용합니다. 관리형 관측 파일은 종료·소유권·파일 정체성이 확인된 것만 정리하며, 실행 중이거나 판단이 불명확한 파일과 원본 Codex 로그는 유지합니다. 보류 사유는 연결 진단에 표시됩니다.
+
+## 검증 상태와 문서
+
+최근 완료한 범위는 Core/Collector 테스트 68개, UI01–UI82·P01–P06의 합성 UI/프로세스 검증 88개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
+
+전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기, Live tokenizer 동등성과 전체 훅·provider 실행 경로는 검증이 남아 있습니다. 사용자가 실제 설치한 훅의 존재와 자동화된 실행·신뢰 검증은 별개입니다.
+
+- [PRD](docs/Codex_Hub_PRD.md)
+- [네이티브 UI와 회귀 검증](docs/verification/native-ui.md)
+- [수집기 검증](docs/verification/collector.md)
+- [서버 타이밍 검증](docs/verification/server-timing.md)
+- [관리형 helper 계약](docs/managed-helper.md)
+- [Live estimator](docs/live-estimator.md) · [선택적 훅](docs/optional-hooks.md) · [수집 입력 계약](docs/collector-live-hooks.md)

@@ -68,6 +68,9 @@ import CodexHubCollector
         model.diagnostics = ["Fixture: logs directory readable", "No provider or Hook calls performed"]
         try capture(model, "connection", output, dark: false)
         try capture(model, "connection-full", output, dark: false, height: 900)
+        model.language = .english
+        try capture(model, "readme-connection-en", output, dark: false, height: 900)
+        model.language = .korean
         model.page = .overview
         try set([a,b], verified: [a.key])
         precondition(model.coverage == "2개 대상 중 1개 계산 가능" && model.summary == "150", "UI04 scope exclusion")
@@ -146,6 +149,7 @@ import CodexHubCollector
         precondition(model.text("/private/설정") == "/private/설정", "UI41 external text is preserved")
         model.page = .preferences
         try capture(model, "preferences-english", output, dark: false)
+        try capture(model, "readme-settings-en", output, dark: true, height: 900)
         model.page = .overview
         try capture(model, "overview-english", output, dark: false)
         model.language = .korean
@@ -236,6 +240,8 @@ import CodexHubCollector
         historyModel.notice = "Synthetic usage history · not live telemetry"
         precondition(historyModel.generatingProcessCount == 1 && chartSession.contextDescription == "57.9%", "UI60 generation status and context ring use observed values")
         try capture(historyModel, "graphics-detail-dark", output, dark: true, height: 900)
+        historyModel.language = .english
+        try capture(historyModel, "readme-details-en", output, dark: true, height: 900)
         historyModel.rateUnit = .minute
         historyModel.language = .english
         try capture(historyModel, "graphics-detail-light-minute", output, dark: false, height: 900)
@@ -247,6 +253,9 @@ import CodexHubCollector
         historyModel.language = .korean
         historyModel.page = .overview
         try capture(historyModel, "wide-overview-chart", output, dark: true)
+        historyModel.language = .english
+        try capture(historyModel, "readme-overview-en", output, dark: true)
+        historyModel.language = .korean
         historyModel.page = .detail(historyModel.sessions[0].id)
         try capture(historyModel, "wide-detail-full-dark", output, dark: true, height: 1600)
         historyModel.language = .english
