@@ -394,3 +394,14 @@ passed; wide dark/light, full-detail, root-chart and narrow fixtures were inspec
 Charts contain synthetic fixture observations, not provider performance evidence.
 Actual desktop placement, copy clicks and native resizing on small screens remain
 unverified. Full QA is not claimed.
+
+
+## Thirty-minute chart window
+
+At the user's request, both overview and detail charts now show the last thirty
+minutes in one-minute bins. Retention and chart geometry share the same window
+and bin constants; the in-memory cap is 3,600 points per current session. UI64
+checks that data survives beyond five minutes, and UI53 now checks thirty-minute
+expiry. This changes chart history only, not the throughput calculation or the
+tok/s versus tok/m display conversion. History remains observation-only and is
+not backfilled from cumulative counts after an app restart.

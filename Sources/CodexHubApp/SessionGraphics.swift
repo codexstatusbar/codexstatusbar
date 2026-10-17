@@ -174,11 +174,11 @@ struct SessionGraphics: View {
             HStack {
                 Text(model.text("관측 출력 토큰")).font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Text(model.text("최근 5분 · 10초 단위")).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(model.text("최근 30분 · 1분 단위")).font(.system(size: 10)).foregroundStyle(.secondary)
             }
             ObservedTokenChart(points: points, now: model.frame?.time ?? 0, emptyText: model.text("새 사용량 로그를 기다리는 중입니다"))
             HStack {
-                Text(model.text("5분 전"))
+                Text(model.text("30분 전"))
                 Spacer()
                 Text(model.text("지금"))
             }.font(.system(size: 10)).foregroundStyle(.secondary)
@@ -257,11 +257,11 @@ struct ObservedTokenChart: View {
     private struct Bin: Identifiable {
         let id: Int
         let tokens: Double
-        var offset: Double { Double(id) * 10 - 295 }
+        var offset: Double { (Double(id) + 0.5) * UsageHistoryPoint.binSeconds - UsageHistoryPoint.windowSeconds }
     }
     private var bins: [Bin] {
-        let groups = Dictionary(grouping: points.filter { $0.time > now - 300 && $0.time <= now }) {
-            min(29, max(0, Int(($0.time - now + 300) / 10)))
+        let groups = Dictionary(grouping: points.filter { $0.time > now - UsageHistoryPoint.windowSeconds && $0.time <= now }) {
+            min(Int(UsageHistoryPoint.windowSeconds / UsageHistoryPoint.binSeconds) - 1, max(0, Int(($0.time - now + UsageHistoryPoint.windowSeconds) / UsageHistoryPoint.binSeconds)))
         }
         return groups.keys.sorted().map { Bin(id: $0, tokens: groups[$0, default: []].reduce(0) { $0 + Double($1.outputTokens) }) }
     }
@@ -277,7 +277,7 @@ struct ObservedTokenChart: View {
                         .foregroundStyle(LinearGradient(colors: [.blue, .indigo], startPoint: .top, endPoint: .bottom))
                         .cornerRadius(2)
                 }
-                .chartXScale(domain: -300.0...0.0)
+                .chartXScale(domain: -UsageHistoryPoint.windowSeconds...0.0)
                 .chartXAxis(.hidden)
                 .chartYAxis { if !compact { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) } }
                 .frame(height: compact ? 56 : 110)

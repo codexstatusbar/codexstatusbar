@@ -16,7 +16,7 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
-        "Reported output · 5m": "보고 출력 · 5분",
+        "Reported output · 30m": "보고 출력 · 30분",
         "Waiting for reports": "새 로그 대기",
         "Summary": "요약",
         "Token usage": "토큰 사용량",
@@ -35,9 +35,9 @@ enum AppLanguage: String, CaseIterable {
         "Collection source": "수집 방식",
         "Usage summary": "사용량 요약",
         "Observed output tokens": "관측 출력 토큰",
-        "Last 5 minutes · 10s bins": "최근 5분 · 10초 단위",
+        "Last 30 minutes · 1m bins": "최근 30분 · 1분 단위",
         "Waiting for new usage reports": "새 사용량 로그를 기다리는 중입니다",
-        "5 min ago": "5분 전",
+        "30 min ago": "30분 전",
         "Now": "지금",
         "Observed since the app started. Historical cumulative usage is excluded.": "앱 실행 이후 관측값입니다. 과거 누적 사용량은 차트에 넣지 않습니다.",
         "Advanced measurement details": "고급 측정 정보",

@@ -200,8 +200,10 @@ import CodexHubCollector
         historyModel.recordUsageHistory([SessionPresentation(monitor: historyMonitor)], at: 4)
         precondition(historyModel.usageHistory[historyMonitor.key]?.count == 1, "UI52 collection gaps cannot produce catch-up bars")
         historyModel.recordUsageHistory([SessionPresentation(monitor: historyMonitor)], at: 305)
-        precondition(historyModel.usageHistory[historyMonitor.key]?.isEmpty == true, "UI53 chart history expires after five minutes")
-        historyModel.recordUsageHistory([], at: 306)
+        precondition(historyModel.usageHistory[historyMonitor.key]?.count == 1, "UI64 chart samples survive beyond five minutes")
+        historyModel.recordUsageHistory([SessionPresentation(monitor: historyMonitor)], at: 1805)
+        precondition(historyModel.usageHistory[historyMonitor.key]?.isEmpty == true, "UI53 chart history expires after thirty minutes")
+        historyModel.recordUsageHistory([], at: 1806)
         precondition(historyModel.usageHistory.isEmpty, "UI54 exited processes do not retain charts")
         precondition(historyModel.menuTitle.isEmpty, "UI55 unavailable speed uses an icon rather than status text")
         var newTurn = ThreadMonitor(key: historyMonitor.key, source: .rolloutLog, epoch: "new", verifiedEmptyThread: true)
@@ -252,7 +254,7 @@ import CodexHubCollector
         historyModel.error = "Synthetic collection error"
         precondition(historyModel.overviewUsageHistory.isEmpty, "UI63 failed collection cannot present a stale current-window overview chart")
         historyModel.error = nil
-        print("PASS UI01–UI63 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI64 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

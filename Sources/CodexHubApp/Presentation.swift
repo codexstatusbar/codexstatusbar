@@ -109,6 +109,9 @@ enum MeasurementMode: String, CaseIterable {
 }
 
 struct UsageHistoryPoint: Identifiable {
+    static let windowSeconds: Double = 1800
+    static let binSeconds: Double = 60
+    static let maximumPoints = 3600
     let time: Double
     let outputTokens: Int
     var id: Double { time }
@@ -190,7 +193,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         usageAnchors = usageAnchors.filter { keys.contains($0.key) }
         usageHistory = usageHistory.filter { keys.contains($0.key) }
         for row in rows {
-            usageHistory[row.id] = usageHistory[row.id, default: []].filter { $0.time > time - 300 }
+            usageHistory[row.id] = usageHistory[row.id, default: []].filter { $0.time > time - UsageHistoryPoint.windowSeconds }
             guard row.monitor.connectivity == .connected, row.measurement == .reported || row.measurement == .warmingUp,
                   let counter = row.monitor.counter.baseline else {
                 usageAnchors.removeValue(forKey: row.id)
@@ -201,7 +204,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
                previous.source == source, time > previous.time, time - previous.time <= 5,
                counter.outputTokens > previous.output {
                 usageHistory[row.id, default: []].append(UsageHistoryPoint(time: time, outputTokens: counter.outputTokens - previous.output))
-                usageHistory[row.id] = Array(usageHistory[row.id, default: []].suffix(600))
+                usageHistory[row.id] = Array(usageHistory[row.id, default: []].suffix(UsageHistoryPoint.maximumPoints))
             }
             usageAnchors[row.id] = UsageAnchor(time: time, output: counter.outputTokens, epoch: row.monitor.counter.epoch, source: source)
         }
