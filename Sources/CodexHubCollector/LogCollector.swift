@@ -51,6 +51,9 @@ public struct SessionSnapshot: Sendable {
     public let parentThreadID: String?
     public let usageDetails: SessionUsageDetails?
     public let serverTiming: ServerTiming?
+    public var provider: SessionProvider = .codex
+    /// Set only by providers that prove process ownership themselves.
+    public var process: ProcessIdentity?
 }
 
 public struct CollectorDiagnostic: Sendable, Equatable {
