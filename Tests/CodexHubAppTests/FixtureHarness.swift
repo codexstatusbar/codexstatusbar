@@ -301,7 +301,7 @@ import CodexHubCollector
         child.terminate(); child.waitUntilExit()
         precondition(RunningCodexProcess.inspect(child.processIdentifier) == nil, "P06 exited process disappears")
     }
-    @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 720, width: CGFloat = 680) throws {
+    @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 720, width: CGFloat = 520) throws {
         let view = NSHostingView(rootView: HubView(model: model, width: width, height: height).environment(\.colorScheme, dark ? .dark : .light))
         view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: width,height: height), styleMask: [.borderless], backing: .buffered, defer: false)

@@ -5,7 +5,7 @@ import CodexHubCore
 struct HubView: View {
     @Bindable var model: HubPresentation
     @Environment(\.colorScheme) private var colorScheme
-    var width: CGFloat = 680
+    var width: CGFloat = 520
     var height: CGFloat = 720
     private var dark: Bool { colorScheme == .dark }
     private var inset: Color { dark ? Color.white.opacity(0.045) : Color.black.opacity(0.035) }
@@ -118,9 +118,9 @@ struct HubView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(model.text("보고 출력 · 5분")).font(.system(size: 10)).foregroundStyle(secondary)
                     ObservedTokenChart(points: model.overviewUsageHistory, now: model.frame?.time ?? 0, emptyText: model.text("새 로그 대기"), compact: true)
-                }.frame(width: width >= 600 ? 240 : 110)
+                }.frame(width: width >= 600 ? 240 : width >= 480 ? 160 : 110)
                     .accessibilityLabel(model.text("관측 출력 토큰"))
-                if width >= 600 { VStack(spacing: 6) {
+                if width >= 480 { VStack(spacing: 6) {
                     Text(String(model.processCount)).font(.system(size: 20, weight: .semibold)).monospacedDigit()
                     Text(model.text("프로세스")).font(.system(size: 10)).foregroundStyle(secondary)
                 }.frame(width: 60, height: 72).background(inset, in: RoundedRectangle(cornerRadius: 8))

@@ -1,6 +1,6 @@
 # Codex Hub
 
-Apple Silicon macOS용 Swift 네이티브 메뉴바 모니터입니다. Codex 세션의 보고된 출력 토큰, 관리형 Live 가시 출력 추정, 활동 상태와 측정 범위를 보여줍니다. SwiftUI/AppKit 시스템 컨트롤, 시스템 반투명 배경과 기본 680pt 팝오버를 사용합니다.
+Apple Silicon macOS용 Swift 네이티브 메뉴바 모니터입니다. Codex 세션의 보고된 출력 토큰, 관리형 Live 가시 출력 추정, 활동 상태와 측정 범위를 보여줍니다. SwiftUI/AppKit 시스템 컨트롤, 시스템 반투명 배경과 기본 520pt 팝오버를 사용합니다.
 
 ## 빌드와 실행
 
