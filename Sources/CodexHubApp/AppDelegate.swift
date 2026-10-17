@@ -19,7 +19,7 @@ import CodexHubCollector
             guard let self else { return }
             language.save(to: defaults)
         }
-        model.measurementMode = defaults.string(forKey: "measurementModeV2").flatMap(MeasurementMode.init(rawValue:)) ?? .server
+        model.measurementMode = defaults.string(forKey: "measurementModeV2").flatMap(MeasurementMode.init(rawValue:)) ?? .reported
         model.updateMeasurementMode = { [weak self] mode in
             guard let self else { return }
             model.measurementMode = mode

@@ -29,8 +29,9 @@ The new server mode is separate from both estimates. It deliberately returns no
 numeric rate: neither 1000/TBT nor tokens/(inference-TTFT) is justified by the
 inspected public contract, and per-response token correlation is not implemented.
 Raw timing values appear in Details. Older estimates remain explicitly selectable.
-The measurementModeV2 preference defaults to server mode rather than silently
-reusing an earlier estimate selection.
+The measurementModeV2 preference now defaults to the usable tool-excluded
+estimate. Server timing is an explicitly selected diagnostic mode; it does not
+replace working throughput with an unavailable measurement.
 
 ## Verification and remaining work
 
@@ -39,8 +40,44 @@ size bounds and invalid numeric values. All 65 Core/Collector tests and
 UI01–UI44/P01–P06 fixture assertions passed. UI43 proves the server mode cannot
 reuse an existing estimated rate; UI44 checks the managed command opts into capture.
 
-Provider requests were explicitly not run. The native managed relay, actual
+At the original code-only checkpoint, provider requests were not run. The native managed relay, actual
 stderr formatting, server timing delivery and decode-rate semantics remain
 unverified. This is a partial implementation of the user's pure generation-speed
 goal, not a claim that pure generation tok/s now works. No fabricated producer,
 fake successful telemetry, or speculative TBT conversion was added.
+
+
+## Authorized real probe and remediation (2026-10-17)
+
+The user subsequently requested testing. One isolated ephemeral Codex inference
+was executed with gpt-6-astra, low reasoning, no tools, read-only sandbox, and
+per-invocation runtime_metrics. Global configuration and existing Codex sessions
+were not changed. A zero-engine warmup event was excluded. The inference exited
+successfully in about 8.8 seconds and reported 163 output tokens / 0 reasoning
+tokens. Raw identifiers and messages are excluded from this report.
+
+Actual server timing differed from the source fixture:
+
+- `num_sampled_tokens_total`: 163 (matches the completed response usage)
+- `websocket_output_text_delta_count`: 159
+- `websocket_output_text_delta_tbt_ms`: 16.467705253164556
+- `num_engine_calls`: 1
+- `critical_path.coverage`: `missing_harness_boundary`
+- Engine-service total, TTFT and TBT fields: absent
+
+C31 reproduced the real-schema rejection before the fix, then passed. The parser
+now retains the actual output-event metadata without inventing engine timing.
+The corrected parser was replayed against the original captured stderr in the
+private temporary probe directory: exactly one non-warmup sample was accepted,
+and its normalized metadata survived a Codable round trip. No second provider
+request was made. S236 checks normalized metadata through the real collector,
+wrong-turn rejection and gap invalidation; it also caught and fixed stale timing
+after markGap. All 67 Core/Collector tests and UI01–UI46/P01–P06 passed.
+
+The source-only change that made unavailable server mode the default caused the
+user's working processes to show no rate. The default and current app preference
+were restored to reported/tool-excluded estimate. UI45 prevents recurrence and
+UI46 prevents output events from being presented as token throughput. Native
+managed relay/TUI provider execution and pure decode timing remain unverified;
+only the CLI probe, actual-line parser replay, normalized collector replay, and
+synthetic presentation checks were completed. Full QA remains incomplete.

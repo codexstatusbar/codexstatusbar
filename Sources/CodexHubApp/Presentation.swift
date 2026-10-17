@@ -97,7 +97,7 @@ enum MeasurementMode: String, CaseIterable {
     case server, reported, live
     var label: String {
         switch self {
-        case .server: "서버 생성 속도"
+        case .server: "서버 타이밍 진단"
         case .reported: "도구 제외 추정"
         case .live: "실시간 추정 · 5초"
         }
@@ -111,7 +111,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var sessions: [SessionPresentation] = []
     var unattachedProcesses: [ProcessIdentity] = []
     var frame: ReportedFrame?
-    var measurementMode: MeasurementMode = .server
+    var measurementMode: MeasurementMode = .reported
     var updateMeasurementMode: ((MeasurementMode) -> Void)?
     var configuredServiceTier: ServiceTier?
     var language = AppLanguage.system

@@ -454,3 +454,15 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     }
     #expect(ServerTiming.parse(logLine: prefix + "not-json") == nil)
 }
+
+@Test func C31ActualServerStreamTimingSchemaIsPreservedWithoutInventingEngineTime() {
+    let payload = #"{"type":"responsesapi.websocket_timing","timing_metrics":{"timing_scope":"logical_turn","response_id":"response-fixture","websocket_output_text_delta_tbt_ms":16.467705253164556,"websocket_output_text_delta_count":159,"pre_inference_ms":235.108268,"client_tool_pause_total_ms":0,"num_engine_calls":1,"num_sampled_tokens_total":163,"critical_path":{"scope":"response","coverage":"missing_harness_boundary"}}}"#
+    let line = "TRACE codex_api::responses_websocket_timing: thread_id=thread-fixture turn_id=turn-fixture warmup=false payload=" + payload
+    let timing = ServerTiming.parse(logLine: line)
+    #expect(timing?.sampledTokens == 163)
+    #expect(timing?.outputDeltaCount == 159)
+    #expect(timing?.outputDeltaMeanMilliseconds == 16.467705253164556)
+    #expect(timing?.coverage == "missing_harness_boundary")
+    #expect(timing?.inferenceMilliseconds == nil && timing?.betweenTokenMilliseconds == nil)
+    #expect(timing?.responseID == "response-fixture")
+}

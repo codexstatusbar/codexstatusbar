@@ -543,6 +543,8 @@ public actor LogCollector {
         var nextStates = states
         for id in next.keys {
             nextStates[id]?.hasGap = true
+            nextStates[id]?.requestTiming = nil
+            nextStates[id]?.serverTiming = nil
             if let state = nextStates[id], let thread = state.threadID {
                 next[id] = try restoredMonitor(thread: thread, state: state, at: now)
                 try next[id]?.markGap(at: now)
@@ -746,8 +748,7 @@ public actor LogCollector {
                       let data = try? JSONSerialization.data(withJSONObject: raw),
                       let timing = try? JSONDecoder().decode(ServerTiming.self, from: data),
                       timing.threadID == state.threadID, timing.turnID == state.turnID,
-                      [timing.inferenceMilliseconds, timing.firstTokenMilliseconds, timing.betweenTokenMilliseconds].compactMap({ $0 }).allSatisfy({ $0.isFinite && $0 >= 0 }) else { return }
-                guard timing.inferenceMilliseconds != nil || timing.firstTokenMilliseconds != nil || timing.betweenTokenMilliseconds != nil else { return }
+                      timing.isValid else { return }
                 state.serverTiming = timing
                 return
             }

@@ -16,7 +16,12 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
-        "Server generation speed": "서버 생성 속도",
+        "Server output tokens": "서버 출력 토큰",
+        "Output event count": "출력 이벤트 수",
+        "Mean output event interval": "출력 이벤트 평균 간격",
+        "Server timing coverage": "서버 관측 범위",
+        "Output events are not individual tokens. Inverting the event interval is not tok/s.": "출력 이벤트 수는 토큰 수와 다릅니다. 이벤트 간격의 역수를 tok/s로 표시하지 않습니다.",
+        "Server timing diagnostics": "서버 타이밍 진단",
         "Server measurement required": "서버 측정 필요",
         "Generation timing unverified": "생성 시간 미검증",
         "Decode duration must be verified": "순수 생성 시간 확인 필요",

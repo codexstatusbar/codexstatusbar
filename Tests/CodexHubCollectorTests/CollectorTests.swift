@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Testing
 @testable import CodexHubCollector
 import CSQLite
@@ -573,4 +574,40 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(timing.sample(at: 15) == nil)
     #expect(timing.tool("tool", running: false, at: 16) == true)
     #expect(timing.sample(at: 18) == 2)
+}
+
+@Test func S236ServerTimingReachesSnapshotOnlyForMatchingLiveTurn() async throws {
+    let s = try Sandbox()
+    let managed = s.root.appendingPathComponent("managed")
+    let runID = UUID().uuidString
+    let run = managed.appendingPathComponent("sessions/" + runID)
+    try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    let log = run.appendingPathComponent(UUID().uuidString + ".jsonl")
+    var process = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    #expect(proc_pidinfo(getpid(), PROC_PIDTBSDINFO, 0, &process, size) == size)
+    let identity: [String: Any] = ["pid": getpid(), "start_seconds": process.pbi_start_tvsec, "start_microseconds": process.pbi_start_tvusec]
+    let homeID = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
+    func row(_ type: String, _ payload: [String: Any]) throws -> Data {
+        try JSONSerialization.data(withJSONObject: ["hub_schema_version": 1, "hub_source": "direct-relay", "run_id": runID, "codex_home_id": homeID, "thread_id": "session-a", "timestamp": ISO8601DateFormatter().string(from: Date()), "received_monotonic_ns": "100000000000", "type": type, "payload": payload]) + Data([10])
+    }
+    try row("session_meta", ["id": "session-a", "processes": ["tui": identity, "app_server": identity, "relay": identity]]).write(to: log)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: log.path)
+    let c = try LogCollector(codexHome: s.home, metadataDirectory: s.metadata, managedRunsDirectory: managed, monotonic: { 100 })
+    _ = try await c.refresh()
+    let handle = try FileHandle(forWritingTo: log)
+    defer { try? handle.close() }
+    try handle.seekToEnd()
+    try handle.write(contentsOf: row("event_msg", ["type": "task_started", "turn_id": "turn-a"]))
+    var timing: [String: Any] = ["threadID": "session-a", "turnID": "turn-a", "sampledTokens": 163, "outputDeltaCount": 159, "outputDeltaMeanMilliseconds": 16.467705253164556, "engineCalls": 1, "coverage": "missing_harness_boundary"]
+    try handle.write(contentsOf: row("event_msg", ["type": "hub_server_timing", "turn_id": "turn-a", "timing": timing]))
+    let snapshot = try await c.refresh()
+    #expect(snapshot.sessions.first?.serverTiming?.sampledTokens == 163)
+    #expect(snapshot.sessions.first?.serverTiming?.inferenceMilliseconds == nil)
+    timing["turnID"] = "wrong-turn"
+    timing["sampledTokens"] = 999
+    try handle.write(contentsOf: row("event_msg", ["type": "hub_server_timing", "turn_id": "wrong-turn", "timing": timing]))
+    #expect(try await c.refresh().sessions.first?.serverTiming?.sampledTokens == 163)
+    try await c.markGap()
+    #expect(await c.snapshot().sessions.first?.serverTiming == nil)
 }

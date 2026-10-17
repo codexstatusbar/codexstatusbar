@@ -8,6 +8,18 @@ public struct ServerTiming: Codable, Sendable {
     public let inferenceMilliseconds: Double?
     public let firstTokenMilliseconds: Double?
     public let betweenTokenMilliseconds: Double?
+    public let responseID: String?
+    public let sampledTokens: Int?
+    public let outputDeltaCount: Int?
+    public let outputDeltaMeanMilliseconds: Double?
+    public let engineCalls: Int?
+    public let coverage: String?
+
+    public var isValid: Bool {
+        let times = [inferenceMilliseconds, firstTokenMilliseconds, betweenTokenMilliseconds, outputDeltaMeanMilliseconds].compactMap { $0 }
+        let counts = [sampledTokens, outputDeltaCount, engineCalls].compactMap { $0 }
+        return (!times.isEmpty || !counts.isEmpty) && times.allSatisfy { $0.isFinite && $0 >= 0 } && counts.allSatisfy { $0 >= 0 }
+    }
 
     public static func parse(logLine: String) -> ServerTiming? {
         guard logLine.utf8.count <= 65_536,
@@ -48,11 +60,27 @@ public struct ServerTiming: Codable, Sendable {
                   value.doubleValue.isFinite, value.doubleValue >= 0 else { return nil }
             return value.doubleValue
         }
+        func count(_ key: String) -> Int? {
+            guard let value = metrics[key] as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(),
+                  let integer = Int(value.stringValue), integer >= 0 else { return nil }
+            return integer
+        }
+        func identifier(_ value: Any?) -> String? {
+            guard let value = value as? String, !value.isEmpty, value.utf8.count <= 128,
+                  value.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95 }) else { return nil }
+            return value
+        }
         let inference = number("engine_service_total_ms")
         let first = number("engine_service_ttft_total_ms")
         let between = number("engine_service_tbt_across_engine_calls_ms")
-        guard inference != nil || first != nil || between != nil else { return nil }
-        return ServerTiming(threadID: thread, turnID: turn, inferenceMilliseconds: inference,
-                            firstTokenMilliseconds: first, betweenTokenMilliseconds: between)
+        let result = ServerTiming(threadID: thread, turnID: turn, inferenceMilliseconds: inference,
+                                  firstTokenMilliseconds: first, betweenTokenMilliseconds: between,
+                                  responseID: identifier(metrics["response_id"]),
+                                  sampledTokens: count("num_sampled_tokens_total"),
+                                  outputDeltaCount: count("websocket_output_text_delta_count"),
+                                  outputDeltaMeanMilliseconds: number("websocket_output_text_delta_tbt_ms"),
+                                  engineCalls: count("num_engine_calls"),
+                                  coverage: identifier((metrics["critical_path"] as? [String: Any])?["coverage"]))
+        return result.isValid ? result : nil
     }
 }

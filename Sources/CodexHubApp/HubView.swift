@@ -11,7 +11,7 @@ struct HubView: View {
                 if model.page != .overview {
                     Button(model.text("뒤로")) { model.page = .overview }.keyboardShortcut("[", modifiers: .command)
                 }
-                Text(model.text(model.page == .overview ? (model.measurementMode == .server ? "서버 생성 속도" : model.measurementMode == .reported ? "도구 제외 추정 합계" : "실시간 추정 합계") : title))
+                Text(model.text(model.page == .overview ? (model.measurementMode == .server ? "서버 타이밍 진단" : model.measurementMode == .reported ? "도구 제외 추정 합계" : "실시간 추정 합계") : title))
                     .font(.system(size: model.page == .overview ? 13 : 17, weight: .semibold)).lineLimit(1)
                 Spacer()
                 Button { model.close?() } label: {
@@ -126,6 +126,11 @@ struct HubView: View {
                     value("서버 추론 시간", timing.inferenceMilliseconds.map { "\($0) ms" } ?? "—")
                     value("서버 첫 토큰 시간", timing.firstTokenMilliseconds.map { "\($0) ms" } ?? "—")
                     value("서버 TBT 원본", timing.betweenTokenMilliseconds.map { "\($0) ms" } ?? "—")
+                    value("서버 출력 토큰", timing.sampledTokens.map(String.init) ?? "—")
+                    value("출력 이벤트 수", timing.outputDeltaCount.map(String.init) ?? "—")
+                    value("출력 이벤트 평균 간격", timing.outputDeltaMeanMilliseconds.map { "\($0.formatted(.number.precision(.fractionLength(0...2)))) ms" } ?? "—")
+                    value("서버 관측 범위", timing.coverage ?? "—")
+                    Text(model.text("출력 이벤트 수는 토큰 수와 다릅니다. 이벤트 간격의 역수를 tok/s로 표시하지 않습니다.")).font(.system(size: 11))
                 }
             }
             if model.measurementMode == .live, let reason = session.liveUnavailableReason {
