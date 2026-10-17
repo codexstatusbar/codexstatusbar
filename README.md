@@ -1,13 +1,58 @@
-# Tokloom
+<div align="center">
+  <img src="Resources/AppIcon.png" alt="Tokloom 앱 아이콘" width="112" />
+  <h1>Tokloom</h1>
+  <p><strong>Codex 작업의 흐름을 메뉴바에서.</strong></p>
+  <p>지금 어떤 작업이 진행 중인지, 얼마나 출력했는지,<br />사용 한도가 얼마나 남았는지 한눈에 확인하세요.</p>
+  <p><sub>macOS 14+ · Apple Silicon · SwiftUI + AppKit · 한국어 / English</sub></p>
+  <p>
+    <a href="https://github.com/codexstatusbar/codexstatusbar/releases">다운로드</a> ·
+    <a href="#앱-화면">화면 둘러보기</a> ·
+    <a href="#빌드와-실행">직접 빌드</a> ·
+    <a href="#속도-계산과-표시">측정 방식</a>
+  </p>
+</div>
 
-Codex를 사용하는 개발자를 위한 Apple Silicon macOS 메뉴바 모니터입니다. 실행 중인 프로세스의 활동 상태와 출력 속도, 모델·토큰 사용량, 남은 사용 한도를 한곳에서 확인합니다.
+---
 
-- 메뉴바에는 측정 가능한 속도만 `t/s` 또는 `t/m`으로 표시하고, 미측정 상태에서는 작은 아이콘을 표시합니다.
-- 메인에는 프로세스별 속도와 최근 30분 출력량 차트가 표시됩니다. 행을 누르면 상세정보를 엽니다.
-- 차트 관측값은 로컬에 저장하며 앱 재시작 후 최근 30분 데이터를 복원합니다.
-- SwiftUI/AppKit 기반의 460pt 팝오버와 반투명 글래스 스타일을 사용합니다. 한국어·영어·시스템 언어를 지원합니다.
+Tokloom은 Codex를 사용하는 개발자를 위한 네이티브 메뉴바 모니터입니다. 기존 터미널을 그대로 사용하면서, 실행 중인 프로세스의 활동 상태·출력 속도·토큰 사용량을 확인할 수 있습니다.
 
-**기본 속도는 도구 실행·대기를 제외한 추정치입니다. 서버의 순수 토큰 생성 속도는 아직 지원하지 않습니다.**
+- **작업 흐름 확인** — 메뉴바의 `t/s`·`t/m`, 프로세스별 작업·대기 상태와 개별 속도.
+- **30분 출력 기록** — 분 단위 관측 차트와 앱 재시작 후 기록 복원.
+- **세션 상세정보** — 모델·추론 강도, 컨텍스트 사용률, 입력·출력 토큰과 남은 사용 한도.
+- **macOS에 맞춘 화면** — 460pt 팝오버, 반투명 글래스 스타일, 다크·라이트 모드와 언어 설정.
+
+> 기본 속도는 **도구 실행·대기를 제외한 추정치**입니다. 서버의 순수 토큰 생성 속도를 의미하지 않습니다.
+
+## 앱 화면
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <h3>01 · 작업 한눈에 보기</h3>
+      <p>전체 속도, 실행 중인 프로세스,<br />최근 30분의 관측 출력량.</p>
+      <a href="docs/images/overview.png"><img src="docs/images/overview.png" alt="Tokloom 메인 화면: 전체 속도, 출력 차트와 프로세스별 상태" width="340" /></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <h3>02 · 세션 깊이 살펴보기</h3>
+      <p>모델과 추론 강도, 컨텍스트 사용률,<br />토큰 집계와 출력 추이.</p>
+      <a href="docs/images/details.png"><img src="docs/images/details.png" alt="Tokloom 상세정보: 모델, 컨텍스트 사용률, 토큰 사용량과 차트" width="340" /></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <h3>03 · 기존 터미널 그대로</h3>
+      <p>로그 경로와 수집 진단을 확인하고,<br />필요한 경우에만 훅과 관리형 연결 사용.</p>
+      <a href="docs/images/connection.png"><img src="docs/images/connection.png" alt="Tokloom 연결 화면: 로그 경로, 선택적 훅과 수집 진단" width="340" /></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <h3>04 · 내 방식으로 설정</h3>
+      <p>언어·속도 표시·로그인 시 실행부터<br />메타데이터 보관 기간까지.</p>
+      <a href="docs/images/settings.png"><img src="docs/images/settings.png" alt="Tokloom 설정 화면: 언어, 속도 단위, 실행 동작과 데이터 관리" width="340" /></a>
+    </td>
+  </tr>
+</table>
+
+<sub>현재 앱 UI를 샘플 데이터로 렌더링한 예시입니다. 실제 계정·프로젝트 정보나 성능 벤치마크가 아니며, 일부 동작 버튼은 샘플 상태에서 비활성화돼 있습니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
 ## 빌드와 실행
 
