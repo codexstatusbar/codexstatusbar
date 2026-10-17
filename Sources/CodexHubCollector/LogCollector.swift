@@ -49,6 +49,7 @@ public struct SessionSnapshot: Sendable {
     /// Exact CLI root provenance only; descendant coverage and PID ownership are not proven.
     public let observedCLIRoot: Bool
     public let usageDetails: SessionUsageDetails?
+    public let serverTiming: ServerTiming?
 }
 
 public struct CollectorDiagnostic: Sendable, Equatable {
@@ -85,6 +86,7 @@ struct FileState: Codable, Sendable {
     var turnID: String?
     var lastTurnState: String?
     var requestTiming: RequestTiming?
+    var serverTiming: ServerTiming?
     var cwd: String?
     var model: String?
     var usageDetails: SessionUsageDetails?
@@ -206,7 +208,7 @@ public actor LogCollector {
                                    liveUnavailableReason: reason ?? (live.measurement(at: lastFrame) == .partial ? "invalid_window" : nil),
                                    observedCLIRoot: roots.contains(monitor.key.threadID) &&
                                        (state.usageSource == .rolloutLog || state.managedValidated == true),
-                                   usageDetails: context?.usageDetails)
+                                   usageDetails: context?.usageDetails, serverTiming: monitor.connectivity == .connected && state.reconciliationPeer == nil && state.observationStopped != true ? state.serverTiming : nil)
         }.sorted { $0.id < $1.id }
         let grouped = Dictionary(grouping: allSessions, by: { $0.monitor.key.threadID })
         let sessions = grouped.values.compactMap { group in
@@ -314,6 +316,7 @@ public actor LogCollector {
                     state.hasGap = true
                     state.requestTiming = nil
                     monitor = nil
+                    state.serverTiming = nil
                     visible.invalidate(reason: "observation_gap")
                 }
                 let changedBoundary = try state.offset > 0 && (state.offset > info.st_size || boundary(fd, offset: state.offset) != state.boundaryHash)
@@ -397,6 +400,7 @@ public actor LogCollector {
                         state.discardingOversizedLine = false
                         state.hasGap = true
                         state.requestTiming = nil
+                        state.serverTiming = nil
                         try monitor?.markGap(at: now)
                         visible.invalidate(reason: "oversized_record")
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
@@ -420,6 +424,7 @@ public actor LogCollector {
                         state.hasGap = true
                         visible.invalidate(reason: "invalid_record")
                         state.requestTiming = nil
+                        state.serverTiming = nil
                         try monitor?.markGap(at: now)
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .invalidRecord))
                     }
@@ -432,6 +437,7 @@ public actor LogCollector {
                     state.discardingOversizedLine = true
                     state.hasGap = true
                     state.requestTiming = nil
+                    state.serverTiming = nil
                     try monitor?.markGap(at: now)
                     visible.invalidate(reason: "oversized_record")
                     diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
@@ -489,6 +495,7 @@ public actor LogCollector {
             nextStates[id]?.lastTurnState = "active"
             nextStates[id]?.hasGap = true
             nextStates[id]?.requestTiming = nil
+            nextStates[id]?.serverTiming = nil
         }
         let nextHooks = reconcileHooks(pendingHooks, states: nextStates, monitors: nextMonitors,
                                        seen: seen, invalidStreams: invalidHookStreams, now: now)
@@ -734,12 +741,23 @@ public actor LogCollector {
         guard type == "event_msg", let event = payload["type"] as? String else { return }
         guard monitor != nil else { throw CollectorError.invalidRecord }
         if state.usageSource == .directRelay {
+            if event == "hub_server_timing" {
+                guard !historical, let raw = payload["timing"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: raw),
+                      let timing = try? JSONDecoder().decode(ServerTiming.self, from: data),
+                      timing.threadID == state.threadID, timing.turnID == state.turnID,
+                      [timing.inferenceMilliseconds, timing.firstTokenMilliseconds, timing.betweenTokenMilliseconds].compactMap({ $0 }).allSatisfy({ $0.isFinite && $0 >= 0 }) else { return }
+                guard timing.inferenceMilliseconds != nil || timing.firstTokenMilliseconds != nil || timing.betweenTokenMilliseconds != nil else { return }
+                state.serverTiming = timing
+                return
+            }
             if event == "measurement_gap" {
                 guard let reason = payload["reason"] as? String,
                       ["observer_queue_overflow", "frame_bound", "upgrade_bound", "unsupported_upgrade", "unsupported_frame", "unsupported_message", "invalid_json", "invalid_identifier", "invalid_usage", "metadata_bound", "thread_bound", "metadata_unavailable", "connection_closed"].contains(reason) else { throw CollectorError.invalidRecord }
                 visible.invalidate(reason: "observation_gap")
                 state.observationStopped = true
                 state.hasGap = true
+                state.serverTiming = nil
                 state.requestTiming = nil
                 if let thread = state.threadID {
                     monitor = try restoredMonitor(thread: thread, state: state, at: now)
@@ -823,6 +841,7 @@ public actor LogCollector {
                     state.hasGap = true
                     monitor = try restoredMonitor(thread: thread, state: state, at: now)
                     state.requestTiming = nil
+                    state.serverTiming = nil
                     try monitor?.markGap(at: now)
                 }
                 visible = VisibleWindow()

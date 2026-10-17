@@ -20,7 +20,7 @@ enum HelperConnection {
     static func shellQuote(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
     static func command(home: String, codex: String, helper: String) -> String {
-        "env CODEX_HOME=" + shellQuote(home) + " " + shellQuote(helper) + " run --experimental --codex " + shellQuote(codex)
+        "env CODEX_HOME=" + shellQuote(home) + " " + shellQuote(helper) + " run --experimental --server-timing --codex " + shellQuote(codex)
     }
 
     static func configuredServiceTier(home: String) -> ServiceTier? {

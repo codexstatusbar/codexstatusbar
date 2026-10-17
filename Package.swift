@@ -11,7 +11,7 @@ let package = Package(
     dependencies: [.package(url: "https://github.com/swiftlang/swift-testing.git", exact: "6.2.4")],
     targets: [
         .target(name: "CodexHubCore"),
-        .executableTarget(name: "CodexHubHelper", resources: [.copy("Resources")]),
+        .executableTarget(name: "CodexHubHelper", dependencies: ["CodexHubCore"], resources: [.copy("Resources")]),
         .executableTarget(name: "CodexHubApp", dependencies: ["CodexHubCore", "CodexHubCollector"]),
         .systemLibrary(name: "CSQLite"),
         .target(name: "CodexHubCollector", dependencies: ["CodexHubCore", "CSQLite"]),

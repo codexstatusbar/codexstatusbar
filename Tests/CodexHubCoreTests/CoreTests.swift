@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 import CodexHubCore
 
 @Test func C01FirstSnapshotAndRepeatedSnapshotAreNotNewOutput() throws {
@@ -427,4 +428,29 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(try m.workAverageRate(at: 220) == 25)
     try m.observeUsage(TokenUsage(outputTokens: 180), turnID: "turn", source: .rolloutLog, epoch: "e", at: 230, rateInterval: .excludingTools(2))
     #expect(try m.workAverageRate(at: 240) == 20)
+}
+
+@Test func C29ServerTimingParsesMetadataWithoutInventingDecodeRate() {
+    let payload = #"{"type":"responsesapi.websocket_timing","timing_metrics":{"engine_service_total_ms":450,"engine_service_ttft_total_ms":340,"engine_service_tbt_across_engine_calls_ms":260}}"#
+    let line = "TRACE codex_api::responses_websocket_timing: thread_id=thread-1 turn_id=turn-1 warmup=false payload=" + payload
+    let timing = ServerTiming.parse(logLine: line)
+    #expect(timing?.threadID == "thread-1")
+    #expect(timing?.inferenceMilliseconds == 450)
+    #expect(timing?.firstTokenMilliseconds == 340)
+    #expect(timing?.betweenTokenMilliseconds == 260)
+    #expect(ServerTiming.parse(logLine: line.replacingOccurrences(of: "warmup=false", with: "warmup=true")) == nil)
+    #expect(ServerTiming.parse(logLine: line.replacingOccurrences(of: "thread_id=thread-1", with: "thread_id=")) == nil)
+    #expect(ServerTiming.parse(logLine: String(repeating: "x", count: 65_537)) == nil)
+}
+
+
+@Test func C30ServerTimingRejectsInvalidFieldsAndAcceptsQuotedTracePayload() throws {
+    let payload = #"{"type":"responsesapi.websocket_timing","timing_metrics":{"engine_service_total_ms":12.5}}"#
+    let quoted = String(data: try JSONEncoder().encode(payload), encoding: .utf8)!
+    let prefix = "TRACE codex_api::responses_websocket_timing: thread_id=\"thread-1\" turn_id=\"turn-1\" warmup=false payload="
+    #expect(ServerTiming.parse(logLine: prefix + quoted)?.inferenceMilliseconds == 12.5)
+    for invalid in ["-1", "true", "null", "\"12.5\""] {
+        #expect(ServerTiming.parse(logLine: prefix + payload.replacingOccurrences(of: "12.5", with: invalid)) == nil)
+    }
+    #expect(ServerTiming.parse(logLine: prefix + "not-json") == nil)
 }

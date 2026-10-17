@@ -1,6 +1,7 @@
 import Foundation
 import CoreFoundation
 import Darwin
+import CodexHubCore
 
 // Only this serial queue owns framing and metadata. Forwarders never wait for it.
 final class Observation: @unchecked Sendable {
@@ -17,6 +18,8 @@ final class Observation: @unchecked Sendable {
     }
     private var files: [String: Int32] = [:]
     private var emittedBytes = 0
+    private var timingBuffer = Data()
+    private var droppingTimingLine = false
     private let directory: Int32
     private let run: String
     private let home: String
@@ -45,6 +48,30 @@ final class Observation: @unchecked Sendable {
 
     func submit(_ bytes: Data) { submit(bytes, client: false) }
     func submitClient(_ bytes: Data) { submit(bytes, client: true) }
+
+    func submitTiming(_ bytes: Data) {
+        guard slots.wait(timeout: .now()) == .success else { return }
+        queue.async {
+            defer { self.slots.signal() }
+            guard !self.disabled else { return }
+            for byte in bytes {
+                if byte == 10 {
+                    if !self.droppingTimingLine,
+                       let line = String(data: self.timingBuffer, encoding: .utf8),
+                       let timing = ServerTiming.parse(logLine: line),
+                       let data = try? JSONEncoder().encode(timing),
+                       let fields = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        self.emit(thread: timing.threadID, payload: ["type": "hub_server_timing", "turn_id": timing.turnID, "timing": fields], received: DispatchTime.now().uptimeNanoseconds)
+                    }
+                    self.timingBuffer.removeAll(keepingCapacity: true)
+                    self.droppingTimingLine = false
+                } else if !self.droppingTimingLine {
+                    if self.timingBuffer.count < 65_536 { self.timingBuffer.append(byte) }
+                    else { self.timingBuffer.removeAll(keepingCapacity: true); self.droppingTimingLine = true }
+                }
+            }
+        }
+    }
 
     private func submit(_ bytes: Data, client: Bool) {
         let received = DispatchTime.now().uptimeNanoseconds

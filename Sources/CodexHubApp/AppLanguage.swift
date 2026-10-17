@@ -16,6 +16,17 @@ enum AppLanguage: String, CaseIterable {
         return Self.englishTranslations[value] ?? value
     }
     private static let translations: [String: String] = [
+        "Server generation speed": "서버 생성 속도",
+        "Server measurement required": "서버 측정 필요",
+        "Generation timing unverified": "생성 시간 미검증",
+        "Decode duration must be verified": "순수 생성 시간 확인 필요",
+        "Unverified generation timing is never replaced with an estimate": "순수 생성 시간이 확인되지 않으면 추정값으로 대체하지 않습니다",
+        "Managed runs collect server timing. TBT scope and per-request token correlation must be verified before converting to tok/s.": "서버 타이밍은 관리형 실행에서 수집합니다. TBT 집계 범위와 요청별 토큰 대응이 검증되기 전에는 tok/s로 변환하지 않습니다.",
+        "Server inference time": "서버 추론 시간",
+        "Server time to first token": "서버 첫 토큰 시간",
+        "Raw server TBT": "서버 TBT 원본",
+        "Server timing launch command": "서버 타이밍 수집 실행 명령",
+        "Applies only to new managed Codex runs. Global settings and existing processes are unchanged.": "새 관리형 Codex 실행에만 적용됩니다. 전역 설정은 바꾸지 않으며 기존 프로세스에는 소급 적용되지 않습니다.",
         "Calculation": "계산 기준",
         "Output delta / report interval excluding tools": "사용량 증가량 ÷ 도구 시간을 뺀 보고 구간",
         "Login item change failed. Check System Settings → Login Items.": "로그인 항목 변경에 실패했습니다. 시스템 설정 → 로그인 항목을 확인하세요.",

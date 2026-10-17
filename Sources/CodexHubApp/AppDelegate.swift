@@ -19,11 +19,11 @@ import CodexHubCollector
             guard let self else { return }
             language.save(to: defaults)
         }
-        model.measurementMode = defaults.string(forKey: "measurementMode").flatMap(MeasurementMode.init(rawValue:)) ?? .reported
+        model.measurementMode = defaults.string(forKey: "measurementModeV2").flatMap(MeasurementMode.init(rawValue:)) ?? .server
         model.updateMeasurementMode = { [weak self] mode in
             guard let self else { return }
             model.measurementMode = mode
-            defaults.set(mode.rawValue, forKey: "measurementMode")
+            defaults.set(mode.rawValue, forKey: "measurementModeV2")
         }
         model.hookAction = { [weak self] action in self?.runHooks(action) }
         model.hideIdle = defaults.bool(forKey: "hideIdle")
@@ -223,7 +223,7 @@ import CodexHubCollector
                                 observationStopped: session.observationStopped,
                                 observedActivity: session.activity, hookCompletionCandidate: session.hookCompletionCandidate,
                                 liveRate: session.liveRate, liveMeasurement: session.liveMeasurement,
-                                liveUnavailableReason: session.liveUnavailableReason, usageDetails: session.usageDetails)
+                                liveUnavailableReason: session.liveUnavailableReason, usageDetails: session.usageDetails, serverTiming: session.serverTiming)
         }
         let represented = Set(rows.flatMap { [$0.process, $0.server].compactMap { $0 } })
         model.unattachedProcesses = running.map(\.identity).filter { !represented.contains($0) }

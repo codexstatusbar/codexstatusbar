@@ -11,7 +11,7 @@ struct HubView: View {
                 if model.page != .overview {
                     Button(model.text("뒤로")) { model.page = .overview }.keyboardShortcut("[", modifiers: .command)
                 }
-                Text(model.text(model.page == .overview ? (model.measurementMode == .reported ? "도구 제외 추정 합계" : "실시간 추정 합계") : title))
+                Text(model.text(model.page == .overview ? (model.measurementMode == .server ? "서버 생성 속도" : model.measurementMode == .reported ? "도구 제외 추정 합계" : "실시간 추정 합계") : title))
                     .font(.system(size: model.page == .overview ? 13 : 17, weight: .semibold)).lineLimit(1)
                 Spacer()
                 Button { model.close?() } label: {
@@ -65,7 +65,7 @@ struct HubView: View {
                 Text(model.text(model.summary)).font(.system(size: model.summary.count > 12 ? 28 : 42, weight: .semibold)).monospacedDigit()
                 if model.aggregateRate != nil && model.error == nil { Text(model.text("tok/s")) }
             }.accessibilityElement(children: .combine)
-            Text(model.text(model.measurementMode == .reported ? "도구 실행·대기 제외 · 서버 응답 대기는 포함될 수 있음" : "최근 5초 동안 관측한 화면 출력의 추정 속도")).font(.system(size: 11))
+            Text(model.text(model.measurementMode == .server ? "순수 생성 시간이 확인되지 않으면 추정값으로 대체하지 않습니다" : model.measurementMode == .reported ? "도구 실행·대기 제외 · 서버 응답 대기는 포함될 수 있음" : "최근 5초 동안 관측한 화면 출력의 추정 속도")).font(.system(size: 11))
             if model.sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .approvalWait }) {
                 Text(model.text("Approval is waiting in Codex. Respond in the original terminal; Hub never approves commands."))
             }
@@ -114,11 +114,19 @@ struct HubView: View {
             Text(session.title).font(.headline)
             value("작업 상태 / 수집 방식", "\(model.status(for: session)) · \(session.source)")
             value(model.measurementMode.label, model.rate(for: session) + " tok/s")
-            if let last {
+            if let last, model.measurementMode != .server {
                 value(last.isObservedAveragePartial ? "직전 관측 구간 평균 · 도구 포함" : "직전 작업 평균 · 도구 포함", last.workAverage.map { $0.formatted(.number.precision(.fractionLength(0...1))) + " tok/s" } ?? "미확인")
             }
             if model.measurementMode == .reported {
                 value(model.text("계산 기준"), model.text("사용량 증가량 ÷ 도구 시간을 뺀 보고 구간"))
+            }
+            if model.measurementMode == .server {
+                Text(model.text("서버 타이밍은 관리형 실행에서 수집합니다. TBT 집계 범위와 요청별 토큰 대응이 검증되기 전에는 tok/s로 변환하지 않습니다.")).font(.system(size: 11))
+                if let timing = session.serverTiming {
+                    value("서버 추론 시간", timing.inferenceMilliseconds.map { "\($0) ms" } ?? "—")
+                    value("서버 첫 토큰 시간", timing.firstTokenMilliseconds.map { "\($0) ms" } ?? "—")
+                    value("서버 TBT 원본", timing.betweenTokenMilliseconds.map { "\($0) ms" } ?? "—")
+                }
             }
             if model.measurementMode == .live, let reason = session.liveUnavailableReason {
                 Text(model.text("Live: " + reason)).font(.system(size: 11)).textSelection(.enabled)
@@ -204,7 +212,8 @@ struct HubView: View {
             Button(model.text(model.doctorBusy ? "Checking version…" : "Check helper compatibility")) { model.runDoctor?() }
                 .disabled(model.runDoctor == nil || model.helperPath == nil || model.codexPath == nil || model.doctorBusy)
             Text(model.text(model.doctorResult)).font(.system(size: 11))
-            copyValue("Experimental terminal command", model.managedCommand)
+            copyValue("서버 타이밍 수집 실행 명령", model.managedCommand)
+            Text(model.text("새 관리형 Codex 실행에만 적용됩니다. 전역 설정은 바꾸지 않으며 기존 프로세스에는 소급 적용되지 않습니다.")).font(.system(size: 11))
             Text(model.text("Run from your intended project directory. Additional flags, prompts, profiles and resume commands are not supported.")).font(.system(size: 11))
             Text(model.text("Live estimates require a managed direct run with supported model metadata and complete visible-text observation. Unsupported models and missing evidence remain unavailable."))
             Text(model.text("A collection error does not mean your Codex task failed. Check the original terminal for task status.")).font(.system(size: 11))

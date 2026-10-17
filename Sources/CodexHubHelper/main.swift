@@ -9,7 +9,7 @@ private func currentEnvironment() -> UnsafeMutablePointer<UnsafeMutablePointer<U
 let help = """
 Usage: codex-hub help
        codex-hub doctor [--codex /absolute/path/to/codex]
-       codex-hub run --experimental [--codex /absolute/path/to/codex]
+       codex-hub run --experimental [--server-timing] [--codex /absolute/path/to/codex]
        codex-hub hooks install|uninstall|status --home /absolute/CODEX_HOME [--consent]
 
 Experimental managed run: Codex 0.163.0 only; G0 and real TUI semantics UNVERIFIED.
@@ -20,6 +20,9 @@ accepted: their argument routing has not been verified. Configure Codex normally
 Live estimates use bundled tokenization for supported OpenAI model mappings;
 unknown models remain unavailable. Optional hooks require
 explicit consent for mutation and manual /hooks trust; runtime unverified.
+--server-timing opts this managed invocation into runtime_metrics and local,
+metadata-only server timing capture; no global config or provider request is
+made by installing the app. Raw TBT is not a verified decode-rate contract.
 Doctor checks executable version only; it does not start a session or prove G0.
 """
 
@@ -74,7 +77,7 @@ func execTUI(_ executable: String, socket: String) throws -> Never {
     throw HelperError("TUI exec failed (errno \(errno))")
 }
 
-func launch(_ executable: String) throws -> Never {
+func launch(_ executable: String, serverTiming: Bool) throws -> Never {
     let run = UUID().uuidString.lowercased()
     var template = Array("/private/tmp/codex-hub-XXXXXXXX".utf8CString)
     guard let created = mkdtemp(&template) else { throw HelperError("Cannot create runtime directory") }
@@ -99,7 +102,7 @@ func launch(_ executable: String) throws -> Never {
     }
     try systemCheck(posix_spawn_file_actions_addclose(&actions, ready.fileHandleForReading.fileDescriptor) == 0, "spawn close")
     guard let helper = Bundle.main.executableURL?.path else { throw HelperError("Cannot resolve helper executable") }
-    let strings = [helper, "_serve", executable, runtime, metadata, run, homeID, String(getpid())]
+    let strings = [helper, "_serve", executable, runtime, metadata, run, homeID, String(getpid()), serverTiming ? "timing" : "none"]
     let argv = strings.map { strdup($0) } + [nil]
     defer { argv.forEach { free($0) } }
     var attributes: posix_spawnattr_t?
@@ -126,7 +129,7 @@ func launch(_ executable: String) throws -> Never {
 }
 
 func serve(_ arguments: [String]) throws {
-    guard arguments.count == 6, let tuiPID = Int32(arguments[5]), tuiPID == getppid(),
+    guard arguments.count == 7, ["timing", "none"].contains(arguments[6]), let tuiPID = Int32(arguments[5]), tuiPID == getppid(),
           UUID(uuidString: arguments[3]) != nil else { throw HelperError("Internal helper must be started by launcher") }
     let executable = arguments[0], runtime = arguments[1], metadata = arguments[2], run = arguments[3], home = arguments[4]
     var info = stat()
@@ -146,8 +149,17 @@ func serve(_ arguments: [String]) throws {
     server.arguments = ["app-server", "--listen", "unix://" + serverPath]
     server.standardInput = FileHandle.nullDevice
     server.standardOutput = FileHandle.nullDevice
-    server.standardError = FileHandle.nullDevice
+    let timingPipe = arguments[6] == "timing" ? Pipe() : nil
+    if let timingPipe {
+        server.arguments?.append(contentsOf: ["--enable", "runtime_metrics"])
+        var environment = ProcessInfo.processInfo.environment
+        environment["RUST_LOG"] = "off,codex_api::responses_websocket_timing=trace"
+        environment["NO_COLOR"] = "1"
+        server.environment = environment
+        server.standardError = timingPipe
+    } else { server.standardError = FileHandle.nullDevice }
     try server.run()
+    timingPipe?.fileHandleForWriting.closeFile()
     let signals = [SIGTERM, SIGINT, SIGHUP].map { number -> DispatchSourceSignal in
         signal(number, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
@@ -173,7 +185,16 @@ func serve(_ arguments: [String]) throws {
     let directory = try privateDirectory(metadata, createFrom: root)
     let identities: [String: Any] = ["tui": tuiIdentity, "app_server": try processIdentity(server.processIdentifier), "relay": try processIdentity(getpid())]
     let observer = try Observation(directory: directory, run: run, home: home, processes: identities)
-    defer { observer.finish() }
+    timingPipe?.fileHandleForReading.readabilityHandler = { handle in
+        let data = handle.availableData
+        if data.isEmpty { handle.readabilityHandler = nil }
+        else { observer.submitTiming(data) }
+    }
+    defer {
+        timingPipe?.fileHandleForReading.readabilityHandler = nil
+        timingPipe?.fileHandleForReading.closeFile()
+        observer.finish()
+    }
     let deadline = DispatchTime.now().uptimeNanoseconds + 10_000_000_000
     var upstream: Int32 = -1
     while server.isRunning && DispatchTime.now().uptimeNanoseconds < deadline {
@@ -247,11 +268,12 @@ func main() throws {
         print(help); return
     }
     guard ["doctor", "run"].contains(command) else { throw HelperError("Unsupported command; use codex-hub help") }
-    var explicit: String?, experimental = false
+    var explicit: String?, experimental = false, serverTiming = false
     while !arguments.isEmpty {
         let option = arguments.removeFirst()
         if option == "--codex", explicit == nil, !arguments.isEmpty { explicit = arguments.removeFirst() }
         else if option == "--experimental", command == "run", !experimental { experimental = true }
+        else if option == "--server-timing", command == "run", !serverTiming { serverTiming = true }
         else { throw HelperError("Unsupported or unverified option; no arguments were forwarded") }
     }
     if command == "run" && !experimental { throw HelperError("Managed run requires --experimental; G0 is unverified") }
@@ -264,7 +286,7 @@ func main() throws {
     }
     guard supported else { throw HelperError("Managed run supports only the investigated codex-cli 0.163.0") }
     FileHandle.standardError.write(Data("Experimental managed relay; G0/TUI behavior unverified.\n".utf8))
-    try launch(executable)
+    try launch(executable, serverTiming: serverTiming)
 }
 
 do { try main() }

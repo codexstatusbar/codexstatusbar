@@ -13,6 +13,7 @@ import CodexHubCollector
         try verifyRunningProcesses()
         let model = HubPresentation()
         model.language = .korean
+        model.measurementMode = .reported
         var a = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-a"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
         try a.setConnectivity(.connected, at: 0)
         try a.startTurn("fixture-turn", at: 1)
@@ -151,7 +152,13 @@ import CodexHubCollector
         precondition(model.text("Settings") == "설정" && model.menuTitle == "실행 없음", "UI42 switch back immediately")
         model.page = .preferences
         try capture(model, "preferences-korean", output, dark: false)
-        print("PASS UI01–UI42 and P01–P06; fixture PNGs: \(output)")
+        try set([a,b], verified: [a.key,b.key])
+        model.measurementMode = .server
+        precondition(model.aggregateRate == nil && model.rate(for: model.sessions[0]) == "—", "UI43 server mode cannot reuse reported estimates")
+        precondition(HelperConnection.command(home: "/tmp/home", codex: "/tmp/codex", helper: "/tmp/helper").contains("--server-timing"), "UI44 timing is opt-in per managed invocation")
+        model.page = .overview
+        try capture(model, "server-unavailable", output, dark: false)
+        print("PASS UI01–UI44 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
