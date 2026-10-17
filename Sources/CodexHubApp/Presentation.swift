@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import CodexHubCore
+import CodexHubCollector
 
 struct SessionPresentation: Identifiable {
     let monitor: ThreadMonitor
@@ -19,6 +20,7 @@ struct SessionPresentation: Identifiable {
     var liveRate: Double?
     var liveMeasurement: CodexHubCore.Measurement = .unavailable
     var liveUnavailableReason: String?
+    var usageDetails: SessionUsageDetails?
     var activity: Activity { observedActivity ?? monitor.activity }
     var measurement: CodexHubCore.Measurement { sourceMeasurement ?? monitor.measurement }
     var id: ThreadKey { monitor.key }
@@ -28,6 +30,27 @@ struct SessionPresentation: Identifiable {
         case .rolloutLog: "Logs"
         case .directRelay: "Direct · experimental"
         case .sharedServer: "Shared server"
+        }
+    }
+    var modelDescription: String {
+        [model, usageDetails?.reasoningEffort].compactMap { $0 }.joined(separator: " · ")
+    }
+    var contextDescription: String {
+        guard let details = usageDetails, let used = details.contextTokens, let window = details.contextWindow else { return "Unavailable" }
+        return "\(used.formatted()) / \(window.formatted()) tokens"
+    }
+    var tokenDescription: String {
+        guard let total = monitor.counter.baseline else { return "In — · Out —" }
+        return "In \(total.inputTokens.formatted()) · Out \(total.outputTokens.formatted())"
+    }
+    var limitDescriptions: [String] {
+        (usageDetails?.limits ?? []).map { limit in
+            let window: String
+            if let minutes = limit.windowMinutes {
+                window = minutes % 1440 == 0 ? "\(minutes / 1440)d" : minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes)m"
+            } else { window = limit.name.capitalized }
+            let remaining = limit.remainingPercent.formatted(.number.precision(.fractionLength(0...1)))
+            return "\(window) left \(remaining)%" + (limit.resetsAt.map { " · resets " + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) } ?? "")
         }
     }
     var identity: String { process.map { "PID \($0.pid)" } ?? "Session only" }
@@ -49,7 +72,12 @@ struct SessionPresentation: Identifiable {
     }
     var priority: Int {
         if activity == .approvalWait || monitor.connectivity != .connected { return 0 }
-        return activity == .idle ? 2 : 1
+        switch activity {
+        case .working, .generating, .toolRunning: return 1
+        case .idle: return 2
+        case .unknown: return 3
+        case .approvalWait: return 0
+        }
     }
     func rate(at time: Double) -> String {
         guard measurement == .reported else { return "—" }

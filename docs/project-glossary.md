@@ -20,3 +20,7 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 - **Unknown**: current session activity has not been observed reliably. The summary uses Unknown only when there is no observed connected active or idle session. It does not mean Hook installation or log collection failed.
 
 - **Running process list**: current same-user Codex executables verified by PID and OS start time. A session attaches only through an exact writable file device/inode or validated managed controller identity. Stored transcripts alone are history. Unmatched live processes remain explicit and contribute no fabricated session or usage.
+
+- **Process context**: the latest reported last_token_usage.total_tokens and model_context_window for the matched session, shown as used tokens / window. It is separate from cumulative lifetime input/output.
+- **Remaining usage**: 100 minus the reported used_percent for each available rate-limit window, with its actual window_minutes and reset time. No default 5-hour/weekly label or account lookup is inferred.
+- **Process input/output**: the selected authority's last reported cumulative input/output counter snapshot. Inherited/fork history can be included; these are not current-turn generation counters.

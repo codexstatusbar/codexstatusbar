@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import CodexHubCollector
+import CSQLite
 
 @Test func S201InitialIndexNeverInventsCurrentActivity() async throws {
     let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
@@ -338,4 +339,81 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(snapshot.diagnostics.contains { $0.error == .unsafePath })
     #expect(!snapshot.diagnostics.contains { $0.error == .invalidRecord })
     #expect(try String(contentsOf: source, encoding: .utf8) == "not a managed record\n")
+}
+
+@Test func S224ReportedProcessDetailsPersistAndQuotaOnlyEventsUpdate() async throws {
+    let s = try Sandbox()
+    try s.write(meta.replacingOccurrences(of: "\"cwd\"", with: "\"source\":\"cli\",\"cwd\"") + """
+    {"type":"turn_context","payload":{"turn_id":"t","model":"gpt-6.1-sol","effort":"high"}}
+    {"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":500,"output_tokens":100},"last_token_usage":{"total_tokens":600},"model_context_window":1000},"rate_limits":{"primary":{"used_percent":21.0,"window_minutes":10080,"resets_at":1800000000},"secondary":null}}}
+
+    """)
+    var c: LogCollector? = try s.collector()
+    let first = try #require(try await c?.refresh().sessions.first)
+    #expect(first.model == "gpt-6.1-sol")
+    #expect(first.usageDetails?.reasoningEffort == "high")
+    #expect(first.usageDetails?.contextTokens == 600)
+    #expect(first.usageDetails?.contextWindow == 1000)
+    #expect(first.usageDetails?.limits?.first?.remainingPercent == 79)
+    #expect(first.usageDetails?.limits?.first?.windowMinutes == 10080)
+    #expect(first.monitor.counter.baseline?.inputTokens == 500)
+    #expect(first.monitor.counter.baseline?.outputTokens == 100)
+    try s.append("{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":null,\"rate_limits\":{\"primary\":{\"used_percent\":25.5,\"window_minutes\":300}}}}\n")
+    let updated = try #require(try await c?.refresh().sessions.first)
+    #expect(updated.usageDetails?.limits?.first?.remainingPercent == 74.5)
+    #expect(updated.usageDetails?.contextTokens == 600)
+    #expect(updated.monitor.counter.baseline?.outputTokens == 100)
+    c = nil
+    let restored = try s.collector()
+    let result = try await restored.refresh()
+    #expect(result.sessions[0].usageDetails?.reasoningEffort == "high")
+    #expect(result.sessions[0].usageDetails?.limits?.first?.remainingPercent == 74.5)
+}
+
+@Test func S225MalformedProcessDetailsStayUnavailableWithoutInventingUsage() async throws {
+    let s = try Sandbox()
+    try s.write(meta + """
+    {"type":"turn_context","payload":{"turn_id":"t","effort":true}}
+    {"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":10},"last_token_usage":{"total_tokens":true},"model_context_window":-1},"rate_limits":{"primary":{"used_percent":true},"secondary":{"used_percent":101}}}}
+
+    """)
+    let c = try s.collector()
+    let snapshot = try await c.refresh()
+    let details = try #require(snapshot.sessions.first?.usageDetails)
+    #expect(details.reasoningEffort == nil)
+    #expect(details.contextTokens == nil)
+    #expect(details.contextWindow == nil)
+    #expect(details.limits?.isEmpty == true)
+    #expect(snapshot.sessions[0].monitor.counter.baseline?.outputTokens == 10)
+}
+
+@Test func S226LegacyCheckpointBackfillsDetailsWithoutReplayingUsageOrActivity() async throws {
+    let s = try Sandbox()
+    try s.write(meta + """
+    {"type":"turn_context","payload":{"turn_id":"t","model":"gpt-6.1-sol","effort":"high"}}
+    {"type":"event_msg","payload":{"type":"task_started","turn_id":"t"}}
+    {"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":100},"last_token_usage":{"total_tokens":300},"model_context_window":1000}}}
+
+    """)
+    var c: LogCollector? = try s.collector(); _ = try await c?.refresh(); c = nil
+    var database: OpaquePointer?
+    #expect(sqlite3_open(s.metadata.appendingPathComponent("metadata.sqlite").path, &database) == SQLITE_OK)
+    defer { sqlite3_close(database) }
+    var query: OpaquePointer?
+    #expect(sqlite3_prepare_v2(database, "SELECT state FROM files", -1, &query, nil) == SQLITE_OK)
+    #expect(sqlite3_step(query) == SQLITE_ROW)
+    let bytes = try #require(sqlite3_column_blob(query, 0))
+    var legacy = try #require(JSONSerialization.jsonObject(with: Data(bytes: bytes, count: Int(sqlite3_column_bytes(query, 0)))) as? [String: Any])
+    sqlite3_finalize(query)
+    legacy.removeValue(forKey: "usageDetails")
+    let hex = try JSONSerialization.data(withJSONObject: legacy).map { String(format: "%02x", $0) }.joined()
+    #expect(sqlite3_exec(database, "UPDATE files SET state=X'\(hex)'", nil, nil, nil) == SQLITE_OK)
+    sqlite3_close(database); database = nil
+    let restored = try s.collector()
+    let snapshot = try await restored.refresh()
+    #expect(snapshot.sessions[0].usageDetails?.reasoningEffort == "high")
+    #expect(snapshot.sessions[0].usageDetails?.contextTokens == 300)
+    #expect(snapshot.sessions[0].monitor.counter.baseline?.outputTokens == 100)
+    #expect(snapshot.sessions[0].monitor.activity == .unknown)
+    #expect(try snapshot.sessions[0].monitor.reportedRate(at: 100) == nil)
 }

@@ -13,6 +13,21 @@ public struct RetentionPolicy: Sendable, Equatable {
     }
 }
 
+public struct SessionUsageDetails: Codable, Sendable {
+    public var reasoningEffort: String?
+    public var contextTokens: Int?
+    public var contextWindow: Int?
+    public var limits: [UsageLimit]?
+}
+
+public struct UsageLimit: Codable, Sendable {
+    public let name: String
+    public let usedPercent: Double
+    public let windowMinutes: Int?
+    public let resetsAt: Double?
+    public var remainingPercent: Double { 100 - usedPercent }
+}
+
 public struct SessionSnapshot: Sendable {
     public let id: String
     public let cwd: String?
@@ -32,6 +47,7 @@ public struct SessionSnapshot: Sendable {
     public var measurement: CodexHubCore.Measurement { sourceReconciliationPending || observationStopped ? .partial : monitor.measurement }
     /// Exact CLI root provenance only; descendant coverage and PID ownership are not proven.
     public let observedCLIRoot: Bool
+    public let usageDetails: SessionUsageDetails?
 }
 
 public struct CollectorDiagnostic: Sendable, Equatable {
@@ -67,6 +83,7 @@ struct FileState: Codable, Sendable {
     var turnID: String?
     var cwd: String?
     var model: String?
+    var usageDetails: SessionUsageDetails?
     var counts: [String: Int]?
     var updated: Double
     var hasGap = false
@@ -170,7 +187,10 @@ public actor LogCollector {
             let reason = state.usageSource != .directRelay ? "direct_source_required" :
                 (monitor.activeTurnID == nil ? "no_active_turn" :
                     (liveBlocked ? "source_unavailable" : live.unavailableReason))
-            return SessionSnapshot(id: id, cwd: state.cwd, model: state.model,
+            let context = state.usageSource == .rolloutLog ? state : transcripts[monitor.key.threadID].flatMap { files in
+                files.count == 1 && files.first?.value.turnID == state.turnID ? files.first?.value : nil
+            }
+            return SessionSnapshot(id: id, cwd: state.cwd, model: context?.model ?? state.model,
                                    monitor: monitor, lastObserved: state.updated, hasGap: state.hasGap,
                                    source: state.usageSource, processes: state.processes ?? [],
                                    sourceReconciliationPending: state.reconciliationPeer != nil,
@@ -180,7 +200,8 @@ public actor LogCollector {
                                    liveMeasurement: liveBlocked ? .unavailable : live.measurement(at: lastFrame),
                                    liveUnavailableReason: reason ?? (live.measurement(at: lastFrame) == .partial ? "invalid_window" : nil),
                                    observedCLIRoot: roots.contains(monitor.key.threadID) &&
-                                       (state.usageSource == .rolloutLog || state.managedValidated == true))
+                                       (state.usageSource == .rolloutLog || state.managedValidated == true),
+                                   usageDetails: context?.usageDetails)
         }.sorted { $0.id < $1.id }
         let grouped = Dictionary(grouping: allSessions, by: { $0.monitor.key.threadID })
         let sessions = grouped.values.compactMap { group in
@@ -293,6 +314,34 @@ public actor LogCollector {
                        let payload = object["payload"] as? [String: Any],
                        let thread = identifier(payload["id"]), thread == state.threadID {
                         state.hookIdentityEligible = payload["source"] as? String == "cli"
+                    }
+                }
+                if !input.managed && !input.hook, state.usageDetails == nil, state.offset > 0 {
+                    // Upgrade old checkpoints using bounded display metadata only; never replay activity/counters.
+                    state.usageDetails = SessionUsageDetails()
+                    let start = max(0, state.offset - Int64(maximumRead))
+                    var bytes = [UInt8](repeating: 0, count: Int(state.offset - start))
+                    let count = pread(fd, &bytes, bytes.count, off_t(start))
+                    guard count >= 0 else { throw CollectorError.inaccessibleSource }
+                    let tail = Data(bytes.prefix(count))
+                    var consumed = start == 0 ? 0 : (tail.firstIndex(of: 10).map { $0 + 1 } ?? tail.count)
+                    var turn: String?
+                    while consumed < tail.count, let newline = tail[consumed...].firstIndex(of: 10) {
+                        if newline - consumed <= maximumLine,
+                           let object = try? JSONSerialization.jsonObject(with: tail[consumed..<newline]) as? [String: Any],
+                           let payload = object["payload"] as? [String: Any] {
+                            if object["type"] as? String == "turn_context" {
+                                turn = identifier(payload["turn_id"])
+                                if let expected = state.turnID, turn == expected {
+                                    state.model = metadataString(payload["model"]) ?? state.model
+                                    consumeDetails("turn_context", payload: payload, state: &state)
+                                }
+                            } else if object["type"] as? String == "event_msg", payload["type"] as? String == "token_count",
+                                      let expected = state.turnID, turn == expected {
+                                consumeDetails("token_count", payload: payload, state: &state)
+                            }
+                        }
+                        consumed = newline + 1
                     }
                 }
                 if monitor == nil, let thread = state.threadID {
@@ -588,6 +637,7 @@ public actor LogCollector {
             if let turn = identifier(payload["turn_id"]) { state.turnID = turn }
             state.cwd = metadataString(payload["cwd"]) ?? state.cwd
             state.model = metadataString(payload["model"]) ?? state.model
+            consumeDetails("turn_context", payload: payload, state: &state)
             return
         }
         guard type == "event_msg", let event = payload["type"] as? String else { return }
@@ -684,6 +734,7 @@ public actor LogCollector {
                 if monitor?.activeTurnID == nil { visible.invalidate(reason: "no_active_turn", partial: false) }
             }
         case "token_count":
+            consumeDetails("token_count", payload: payload, state: &state)
             guard let info = payload["info"] as? [String: Any] else { return }
             guard let raw = info["total_token_usage"] as? [String: Any] else { throw CollectorError.invalidRecord }
             var counts: [String: Int] = [:]
@@ -811,6 +862,32 @@ public actor LogCollector {
     private func boolean(_ value: Any?) -> Bool? {
         guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
         return value.boolValue
+    }
+
+    private func consumeDetails(_ type: String, payload: [String: Any], state: inout FileState) {
+        if state.usageDetails == nil { state.usageDetails = SessionUsageDetails() }
+        if type == "turn_context" {
+            state.usageDetails?.reasoningEffort = identifier(payload["effort"]).flatMap { $0.utf8.count <= 32 ? $0 : nil }
+            return
+        }
+        if let rawLimits = payload["rate_limits"] as? [String: Any] {
+            state.usageDetails?.limits = ["primary", "secondary"].compactMap { name in
+                guard let raw = rawLimits[name] as? [String: Any],
+                      let used = finiteNumber(raw["used_percent"]), (0...100).contains(used) else { return nil }
+                let minutes = integer(raw["window_minutes"]).flatMap { $0 > 0 && $0 <= Int.max ? Int($0) : nil }
+                let reset = integer(raw["resets_at"]).flatMap { (0...253_402_300_799).contains($0) ? Double($0) : nil }
+                return UsageLimit(name: name, usedPercent: used, windowMinutes: minutes, resetsAt: reset)
+            }
+        }
+        guard let info = payload["info"] as? [String: Any] else { return }
+        state.usageDetails?.contextWindow = integer(info["model_context_window"]).flatMap { $0 > 0 && $0 <= Int.max ? Int($0) : nil }
+        let last = info["last_token_usage"] as? [String: Any]
+        state.usageDetails?.contextTokens = integer(last?["total_tokens"]).flatMap { $0 >= 0 && $0 <= Int.max ? Int($0) : nil }
+    }
+
+    private func finiteNumber(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else { return nil }
+        return number.doubleValue
     }
 
     private func integer(_ value: Any?) -> Int64? {

@@ -253,3 +253,21 @@ sources. The historical NOT RUN tables above describe the earlier handoff only.
 
 This is focused QA, not full-product or independent acceptance. The global
 qa-verification skill remains disabled pending explicit enablement.
+
+## Reported process metadata
+
+SessionSnapshot.usageDetails carries only allowlisted reasoning effort, last
+context token count/window and up to two reported limit windows. Counts reject
+booleans/fractions/negative values; limit percentages require finite 0...100;
+reset timestamps are bounded. Limits may update even when token_count.info is
+null. Existing counter authority, rates and baselines are unchanged. Direct rows
+may borrow display metadata only from one exact same-thread transcript at the
+same recorded turn, never its secondary usage counter.
+
+Legacy checkpoints without usageDetails reread at most 1 MiB before the stored
+offset, accepting bounded metadata for the exact checkpoint turn only. Activity,
+counters and rate samples are not replayed. If the needed context is outside this
+bound, unavailable fields remain unavailable. S224 covers metadata persistence,
+quota-only events and distinct input/output/context values; S225 covers malformed
+metadata; S226 covers legacy backfill without fabricated activity or throughput.
+All 46 Core/Collector tests passed. This is focused evidence, not full QA approval.

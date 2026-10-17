@@ -162,3 +162,20 @@ missing/ambiguous mappings, mismatched PID start identity and disappearance afte
 exit. No actual Codex process/provider is launched or stopped by these fixtures.
 The 43 Core/Collector tests and arm64 app build passed. The mode picker now exists
 only in Preferences and uses the shorter Live / 5s label. Full QA remains pending.
+
+## Process metadata and compact header
+
+Matched live process rows show model/reasoning effort and individual speed. The
+Summary button opens the existing detail page for context usage/window, reported
+cumulative input/output, and remaining percentage/reset time for each limit window.
+Active rows precede idle and unknown rows (UI25); unmatched processes are last. UI21–UI24 validate formatting and distinguish current
+context from cumulative usage. Captures are in `.build/qa-process-metadata/`,
+including `process-metadata.png`, `detail.png` and `preferences.png`. UI01–UI25 and native
+P01–P06 passed. Main has no mode picker or Codex Hub brand heading; Preferences
+owns the short Reported / Live picker, and Close is an xmark button with accessible
+name, tooltip and Escape shortcut. The 46 Core/Collector tests and final arm64
+app build passed. Missing metadata and unsupported Live estimates stay unavailable.
+
+Official status-field reference: https://learn.chatgpt.com/docs/developer-commands
+Actual extraction uses the installed Codex rollout fields, without account/provider
+requests, config trust mutation or invented IDs. Full QA remains uncompleted.

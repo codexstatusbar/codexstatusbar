@@ -11,10 +11,12 @@ struct HubView: View {
                 if model.page != .overview {
                     Button("Back") { model.page = .overview }.keyboardShortcut("[", modifiers: .command)
                 }
-                Text(title).font(.system(size: 17, weight: .semibold)).lineLimit(1)
+                if model.page != .overview { Text(title).font(.system(size: 17, weight: .semibold)).lineLimit(1) }
                 Spacer()
-                Button("Close") { model.close?() }.keyboardShortcut(.cancelAction)
-            }.padding(20)
+                Button { model.close?() } label: {
+                    Image(systemName: "xmark").frame(width: 24, height: 24).contentShape(Rectangle())
+                }.buttonStyle(.borderless).accessibilityLabel("Close").help("Close").keyboardShortcut(.cancelAction)
+            }.padding(.horizontal, 16).padding(.vertical, 10)
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -73,31 +75,30 @@ struct HubView: View {
                 Text("Check the configured Codex home and collection diagnostics.")
                 Button("Check connection") { model.page = .connection; model.refresh?() }.disabled(model.busy || model.refresh == nil)
             } else if !model.sessions.isEmpty && model.visibleSessions.isEmpty { Text("Idle sessions are hidden. Change this in Settings.") }
-            ForEach(model.unattachedProcesses, id: \.self) { process in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Codex · PID \(process.pid)").fontWeight(.medium)
-                    Text("Running · waiting for session identification").font(.system(size: 11))
-                }
-                Divider()
-            }
             ForEach(model.visibleSessions) { session in
-                Button { model.page = .detail(session.id) } label: {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(session.title).fontWeight(.medium).lineLimit(1)
                             Text("\(session.identity) · \(session.source)").font(.system(size: 11))
-                            if model.measurementMode == .live {
-                                Text(session.liveMeasurement.rawValue + (session.liveUnavailableReason.map { " · " + $0 } ?? "")).font(.system(size: 11))
-                            }
-                            Text(session.rootObserved ? "CLI root · child scope unknown" : "Excluded from subtotal · root unverified").font(.system(size: 11))
+                            Text(session.modelDescription.isEmpty ? "Model unavailable" : session.modelDescription).font(.system(size: 11))
                         }
                         Spacer(minLength: 8)
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(model.rate(for: session) + (model.rate(for: session) == "—" ? "" : " tok/s")).monospacedDigit()
                             Text(model.status(for: session)).font(.system(size: 11))
+                            Button("Summary") { model.page = .detail(session.id) }
+                                .accessibilityLabel("Summary for \(session.title), \(session.identity)")
                         }
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel("\(session.title), \(session.identity), \(session.source), \(model.status(for: session)), \(model.measurementMode.label) \(model.rate(for: session))")
+                    }
+                }.padding(.vertical, 6)
+                Divider()
+            }
+            ForEach(model.unattachedProcesses, id: \.self) { process in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Codex · PID " + String(process.pid)).fontWeight(.medium)
+                    Text("Running · waiting for session identification").font(.system(size: 11))
+                }
                 Divider()
             }
         }
@@ -117,7 +118,12 @@ struct HubView: View {
             if session.hookCompletionCandidate { Text("Hook completion candidate · awaiting authoritative session state") }
             if session.sourceReconciliationPending { Text("Partial · source reconciliation pending") }
             if session.observationStopped { Text("Observation stopped · a fresh measurement baseline is required.") }
-            value("Model", session.model ?? "Unavailable")
+            value("Model / reasoning", session.modelDescription.isEmpty ? "Unavailable" : session.modelDescription)
+            value("Context", session.contextDescription)
+            value("Reported cumulative tokens", session.tokenDescription)
+            value("Cached input", baseline.map { $0.cachedInputTokens.formatted() } ?? "Unavailable")
+            ForEach(session.limitDescriptions, id: \.self) { value("Usage remaining", $0) }
+            Text("Token totals can include inherited history. Context and limits are the last reported values.").font(.system(size: 11))
             value("Controller PID", session.process.map { String($0.pid) } ?? "Session only")
             value("Server PID", session.server.map { String($0.pid) } ?? "Unavailable")
             if let process = session.process { value("Controller start identity", process.osStartTime) }

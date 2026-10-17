@@ -199,7 +199,7 @@ import CodexHubCollector
                                 observationStopped: session.observationStopped,
                                 observedActivity: session.activity, hookCompletionCandidate: session.hookCompletionCandidate,
                                 liveRate: session.liveRate, liveMeasurement: session.liveMeasurement,
-                                liveUnavailableReason: session.liveUnavailableReason)
+                                liveUnavailableReason: session.liveUnavailableReason, usageDetails: session.usageDetails)
         }
         let represented = Set(rows.flatMap { [$0.process, $0.server].compactMap { $0 } })
         model.unattachedProcesses = running.map(\.identity).filter { !represented.contains($0) }
