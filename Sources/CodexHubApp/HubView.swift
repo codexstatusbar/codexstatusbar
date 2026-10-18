@@ -255,16 +255,6 @@ struct HubView: View {
 
     private var preferences: some View {
         VStack(alignment: .leading, spacing: 22) {
-            settingsSection("Log connection", subtitle: "Logs are read as saved metadata; Codex is never restarted.") {
-                copyValue("Codex home", model.codexHome)
-                copyValue("Claude home", model.claudeHome)
-                connectionNote(model.quotas.contains { $0.provider == .claude } ? "Claude usage limits: a Claude Code login was found." : "Claude usage limits: no Claude Code login found yet.")
-                connectionNote("로그는 1초 간격으로 자동 수집합니다.")
-                HStack {
-                    Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy)
-                    Button(model.text(model.checkingConnection ? "연결 확인 중…" : "지금 확인")) { model.refresh?() }.disabled(model.busy || model.refresh == nil)
-                }.buttonStyle(.bordered)
-            }
             settingsSection("General settings", subtitle: "Choose the app language and speed display.") {
                 settingsRow("Language") {
                 Picker(model.text("Language"), selection: $model.language) {
@@ -345,6 +335,16 @@ struct HubView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+            }
+            settingsSection("Log connection", subtitle: "Logs are read as saved metadata; Codex is never restarted.") {
+                copyValue("Codex home", model.codexHome)
+                copyValue("Claude home", model.claudeHome)
+                connectionNote(model.quotas.contains { $0.provider == .claude } ? "Claude usage limits: a Claude Code login was found." : "Claude usage limits: no Claude Code login found yet.")
+                connectionNote("로그는 1초 간격으로 자동 수집합니다.")
+                HStack {
+                    Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy)
+                    Button(model.text(model.checkingConnection ? "연결 확인 중…" : "지금 확인")) { model.refresh?() }.disabled(model.busy || model.refresh == nil)
+                }.buttonStyle(.bordered)
             }
             settingsSection("Privacy and data", subtitle: "Manage how long collected metadata is kept.") {
                 settingsRow("Metadata retention") {

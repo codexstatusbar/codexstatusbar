@@ -141,7 +141,7 @@ Clearing collected metadata also clears chart history. Original Codex logs remai
 
 ## Settings
 
-**Settings** starts with **Log connection** (Codex home selection and copying, an immediate check, the Claude Code home with whether a Claude Code login was found, and collection diagnostics when there are any), then provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
+**Settings** provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it. **Log connection**, below the diagnostics, holds the Codex home selection and copying, an immediate check, the Claude Code home with whether a Claude Code login was found, and collection diagnostics when there are any.
 
 Paths have individual copy buttons.
 
