@@ -163,7 +163,7 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - **Same measurement** — each message's `output_tokens` (including thinking) divided by the time from the last user/tool-result entry to the message's last block. Tool execution falls between those entries, so it is excluded, as for Codex. Server queue and prefill time remain included.
 - **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview shows a column per provider with its own speed and chart.
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
-- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged) and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
+- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged). Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
 - Collection starts only after the Codex home connects. The 60-minute chart history of Claude sessions is saved and restored with the Codex history.
 
 ## Account usage limits
@@ -183,20 +183,20 @@ The bundle identifier, `CodexHub` storage paths, and internal module names are r
 | Module | Responsibility |
 | --- | --- |
 | `CodexHubCore` | Activity, cumulative usage, and work/observation averages |
-| `CodexHubCollector` | Read-only log/managed-metadata collection and SQLite checkpoints |
+| `CodexHubCollector` | Read-only log collection and SQLite checkpoints |
 | `CodexHubApp` | SwiftUI views, AppKit menu bar, preferences, and chart persistence |
 
-Production code uses Swift and macOS system libraries. Tokloom does not store raw prompts or responses. Metadata lives under `~/Library/Application Support/CodexHub/homes/<homeHash>`; managed observations are separate under `managed-runs/<homeHash>` in the same `CodexHub` directory.
+Production code uses Swift and macOS system libraries. Tokloom does not store raw prompts or responses. Metadata lives under `~/Library/Application Support/CodexHub/homes/<homeHash>`. Leftover `managed-runs` folders from earlier versions are no longer read and can be deleted.
 
-Deletion and retention apply to Tokloom metadata. Managed files are cleaned up only after termination, ownership, and file identity are confirmed. Running or ambiguous files and original Codex logs are preserved; deferred cleanup reasons appear in Connection diagnostics.
+Deletion and retention apply to Tokloom metadata only; original Codex logs are never modified.
 
 ## Verification and documentation
 
-Completed checks include 85 Core/Collector tests, 114 synthetic UI/process checks (UI01–UI108 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 83 Core/Collector tests, 108 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 
 - [Original design PRD (archived; the product has since moved to log collection and Claude Code support)](docs/Codex_Hub_PRD.md)
 - [Native UI and regression checks](docs/verification/native-ui.md)
 - [Collector verification](docs/verification/collector.md)
-- [Collector input contract](docs/collector-live-hooks.md)
+- [Collector input contract](docs/collector-inputs.md)

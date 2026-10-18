@@ -62,13 +62,11 @@ struct SessionGraphics: View {
             section("프로세스 / 연결 정보", icon: "terminal") {
                 columns {
                     information("Controller PID", session.process.map { String($0.pid) })
-                    information("Server PID", session.server.map { String($0.pid) })
                     information("Controller start identity", session.process?.osStartTime)
-                    if let server = session.server { information("Server start identity", server.osStartTime) }
                     information("Working directory", session.cwd, copyable: true)
                 } right: {
                     information("작업 상태 / 수집 방식", sourceStatus)
-                    information("실행 방식", session.observedSource == .directRelay ? model.text("Managed direct") : session.rootObserved ? "CLI" : nil)
+                    information("실행 방식", session.rootObserved ? "CLI" : nil)
                     information("요청 속도 모드", session.usageDetails?.serviceTier?.displayName)
                     information("기본 속도 설정", model.configuredServiceTier?.displayName)
                 }
@@ -77,7 +75,6 @@ struct SessionGraphics: View {
             section("고급 측정 정보", icon: "waveform.path.ecg") {
                 columns {
                     information("Thread ID", session.id.threadID, copyable: true)
-                    information("Run ID", session.id.runID, copyable: true)
                     information("Current turn ID", session.monitor.activeTurnID, copyable: true)
                 } right: {
                     information("속도 계산 범위", model.coverage)
@@ -140,7 +137,6 @@ struct SessionGraphics: View {
     private var measurementNotes: some View {
         VStack(alignment: .leading, spacing: 6) {
             if session.sourceReconciliationPending { note("수집 원본의 사용량을 대조하는 중입니다.") }
-            if session.observationStopped { note("수집이 중단되어 새로운 사용량 기준이 필요합니다.") }
         }
     }
 

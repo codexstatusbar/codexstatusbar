@@ -96,8 +96,8 @@ struct RunningCodexProcess: Sendable {
         return (Array(strings.prefix(count)), environment)
     }
 
-    static func owner(of fileID: String, controller: ProcessIdentity?, in processes: [Self]) -> ProcessIdentity? {
-        let matches = processes.filter { $0.writableFileIDs.contains(fileID) || $0.identity == controller }
+    static func owner(of fileID: String, in processes: [Self]) -> ProcessIdentity? {
+        let matches = processes.filter { $0.writableFileIDs.contains(fileID) }
         return matches.count == 1 ? matches[0].identity : nil
     }
 }

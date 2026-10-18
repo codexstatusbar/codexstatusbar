@@ -36,12 +36,9 @@ public struct SessionSnapshot: Sendable {
     public let monitor: ThreadMonitor
     public let lastObserved: Double
     public let hasGap: Bool
-    public let source: UsageSource
-    public let processes: [ManagedProcessInfo]
     public let sourceReconciliationPending: Bool
-    public let observationStopped: Bool
     public let activity: Activity
-    public var measurement: CodexHubCore.Measurement { sourceReconciliationPending || observationStopped ? .partial : monitor.measurement }
+    public var measurement: CodexHubCore.Measurement { sourceReconciliationPending ? .partial : monitor.measurement }
     /// Exact CLI root provenance only; descendant coverage and PID ownership are not proven.
     public let observedCLIRoot: Bool
     public let parentThreadID: String?
@@ -65,18 +62,11 @@ public struct CollectorSnapshot: Sendable {
 
 struct FileState: Codable, Sendable {
     var path: String
-    var sourceName: String?
-    var runID: String?
-    var processes: [ManagedProcessInfo]?
     var isAuthority: Bool?
     var reconciliationPeer: String?
-    var sourceDisconnected: Bool?
-    var observationStopped: Bool?
-    var managedValidated: Bool?
     // Persisted session_meta source == cli proof, used for the root subtotal.
     var cliSource: Bool?
     var parentThreadID: String?
-    var usageSource: UsageSource { sourceName == "direct-relay" ? .directRelay : .rolloutLog }
     var offset: Int64 = 0
     var historicalUntil: Int64
     var discardingOversizedLine: Bool?
@@ -100,7 +90,6 @@ struct FileState: Codable, Sendable {
 public actor LogCollector {
     private let source: SafeDirectory
     private let streamStarts: StreamStartLog
-    private let managedRunsDirectory: URL?
     private let homeHash: String
     private let homePath: String
     private let store: MetadataStore
@@ -118,7 +107,7 @@ public actor LogCollector {
     private let maximumLine = 262_144
     private let maximumFile: Int64 = 268_435_456
 
-    public init(codexHome: URL, metadataDirectory: URL, managedRunsDirectory: URL? = nil,
+    public init(codexHome: URL, metadataDirectory: URL,
                 monotonic: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
                 wallTime: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) throws {
         source = try SafeDirectory(codexHome)
@@ -130,9 +119,9 @@ public actor LogCollector {
         let scope = SHA256.hash(data: Data(home.utf8)).map { String(format: "%02x", $0) }.joined()
         self.homePath = home
         self.homeHash = scope
-        self.managedRunsDirectory = managedRunsDirectory
         store = try MetadataStore(directoryURL: metadataDirectory, sourceScope: scope)
-        states = try store.load()
+        // States of the removed managed-run source are dropped; they can no longer be refreshed.
+        states = try store.load().filter { !$0.key.hasPrefix("direct:") }
         recovering = Set(states.keys)
         policy = try store.retention()
         self.monotonic = monotonic
@@ -152,9 +141,7 @@ public actor LogCollector {
     public func stop() { polling?.cancel(); polling = nil }
 
     public func snapshot() -> CollectorSnapshot {
-        let transcripts = Dictionary(grouping: states.filter {
-            $0.value.sourceName == "rollout-log" && $0.value.threadID != nil
-        }, by: { $0.value.threadID! })
+        let transcripts = Dictionary(grouping: states.filter { $0.value.threadID != nil }, by: { $0.value.threadID! })
         let roots = Set(transcripts.compactMap { thread, files -> String? in
             guard files.count == 1, let file = files.first,
                   file.value.cliSource == true,
@@ -163,19 +150,13 @@ public actor LogCollector {
         })
         let allSessions = states.compactMap { id, state -> SessionSnapshot? in
             guard state.isAuthority == true, let monitor = monitors[id] else { return nil }
-            let context = state.usageSource == .rolloutLog ? state : transcripts[monitor.key.threadID].flatMap { files in
-                files.count == 1 && files.first?.value.turnID == state.turnID ? files.first?.value : nil
-            }
-            return SessionSnapshot(id: id, cwd: state.cwd, model: context?.model ?? state.model,
+            return SessionSnapshot(id: id, cwd: state.cwd, model: state.model,
                                    monitor: monitor, lastObserved: state.updated, hasGap: state.hasGap,
-                                   source: state.usageSource, processes: state.processes ?? [],
                                    sourceReconciliationPending: state.reconciliationPeer != nil,
-                                   observationStopped: state.observationStopped == true,
                                    activity: monitor.activity,
-                                   observedCLIRoot: roots.contains(monitor.key.threadID) &&
-                                       (state.usageSource == .rolloutLog || state.managedValidated == true),
-                                   parentThreadID: state.usageSource == .rolloutLog ? state.parentThreadID : transcripts[monitor.key.threadID].flatMap { $0.count == 1 ? $0.first?.value.parentThreadID : nil },
-                                   usageDetails: context?.usageDetails)
+                                   observedCLIRoot: roots.contains(monitor.key.threadID),
+                                   parentThreadID: state.parentThreadID,
+                                   usageDetails: state.usageDetails)
         }.sorted { $0.id < $1.id }
         let grouped = Dictionary(grouping: allSessions, by: { $0.monitor.key.threadID })
         let sessions = grouped.values.compactMap { group in
@@ -184,12 +165,11 @@ public actor LogCollector {
         return CollectorSnapshot(sessions: sessions, diagnostics: diagnostics, observedAt: lastFrame)
     }
 
-    /// The caller must prove a current process owns the exact transcript or managed controller identity.
+    /// The caller must prove a current process owns the exact transcript.
     public func bindRunningSessions(_ files: Set<String>) throws -> CollectorSnapshot {
         runningSessionFiles = files
         for (id, state) in states {
-            guard state.isAuthority == true, state.reconciliationPeer == nil,
-                  state.observationStopped != true, var monitor = monitors[id],
+            guard state.isAuthority == true, state.reconciliationPeer == nil, var monitor = monitors[id],
                   files.contains(id), monitor.connectivity == .connected,
                   monitor.activity == .unknown, let turn = state.turnID else { continue }
             if state.lastTurnState == "active" {
@@ -213,55 +193,32 @@ public actor LogCollector {
         func diagnose(_ diagnostic: CollectorDiagnostic) {
             if nextDiagnostics.count < 100 { nextDiagnostics.append(diagnostic) }
         }
-        var roots: [(directory: SafeDirectory, managed: Bool)] = [(source, false)]
-        if let url = managedRunsDirectory {
-            var info = stat()
-            if lstat(url.path, &info) == 0 {
-                do { roots.append((try SafeDirectory(url, requirePrivate: true), true)) }
-                catch { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
-            } else if errno != ENOENT { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
-        }
-        var inputs: [(directory: SafeDirectory, managed: Bool, path: String)] = []
-        for root in roots {
-            do {
-                let listing = try root.directory.logPaths(subdirectory: "sessions")
-                if listing.rejected { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
-                inputs += listing.paths.map { (root.directory, root.managed, $0) }
-            } catch {
-                var sessions = stat()
-                let missing = fstatat(root.directory.fd, "sessions", &sessions, AT_SYMLINK_NOFOLLOW) != 0 && errno == ENOENT
-                if !root.managed || !missing { diagnose(CollectorDiagnostic(fileIdentity: nil, error: (error as? CollectorError) ?? .inaccessibleSource)) }
-            }
+        var inputs: [String] = []
+        do {
+            let listing = try source.logPaths(subdirectory: "sessions")
+            if listing.rejected { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
+            inputs = listing.paths
+        } catch {
+            diagnose(CollectorDiagnostic(fileIdentity: nil, error: (error as? CollectorError) ?? .inaccessibleSource))
         }
         var seen: Set<String> = []
-        for input in inputs {
-            let relative = input.path
+        for relative in inputs {
             var identity: String?
             do {
-                let components = relative.split(separator: "/")
-                if input.managed {
-                    if components.last == "run-events.jsonl" { continue }
-                    guard components.count == 3, UUID(uuidString: String(components[1])) != nil,
-                          UUID(uuidString: String(components[2].dropLast(6))) != nil else { throw CollectorError.invalidRecord }
-                }
-                let fd = try input.directory.openFile(relative)
+                let fd = try source.openFile(relative)
                 defer { close(fd) }
                 var info = stat()
                 guard fstat(fd, &info) == 0 else { throw CollectorError.inaccessibleSource }
-                let id = "\(input.managed ? "direct:" : "")\(info.st_dev):\(info.st_ino)"
+                let id = "\(info.st_dev):\(info.st_ino)"
                 identity = id
                 seen.insert(id)
                 // Rollouts can grow indefinitely; maximumRead and maximumLine bound each pass.
-                if input.managed {
-                    guard info.st_size <= maximumFile else { throw CollectorError.oversizedRecord }
-                }
                 let modified = min(wall, Double(info.st_mtimespec.tv_sec))
                 guard modified >= wall - Double(policy.days) * 86400 else {
-                    if input.managed, nextStates[id]?.managedValidated != true { diagnose(CollectorDiagnostic(fileIdentity: id, error: .cleanupDeferred)) }
                     nextStates.removeValue(forKey: id); nextMonitors.removeValue(forKey: id)
                     continue
                 }
-                let replacedIDs = nextStates.filter { $0.key != id && $0.value.path == relative && ($0.value.usageSource == .directRelay) == input.managed }.map(\.key)
+                let replacedIDs = nextStates.filter { $0.key != id && $0.value.path == relative }.map(\.key)
                 for replaced in replacedIDs { nextStates.removeValue(forKey: replaced); nextMonitors.removeValue(forKey: replaced) }
                 var state = nextStates[id] ?? FileState(path: relative, historicalUntil: info.st_size, updated: modified, hasGap: !replacedIDs.isEmpty)
                 var monitor = nextMonitors[id]
@@ -277,9 +234,7 @@ public actor LogCollector {
                     monitor = nil
                 }
                 state.path = relative
-                state.sourceName = input.managed ? "direct-relay" : "rollout-log"
-                if input.managed { state.runID = state.runID ?? String(components[1]) }
-                if !input.managed, state.offset > 0,
+                if state.offset > 0,
                    state.cliSource == nil || recovering.contains(id) {
                     // Old checkpoints contain usage, not root proof; never infer origin from a path.
                     var header = [UInt8](repeating: 0, count: min(maximumLine + 1, Int(info.st_size)))
@@ -296,7 +251,7 @@ public actor LogCollector {
                         state.parentThreadID = parentThreadID(payload, thread: thread)
                     }
                 }
-                if !input.managed, state.offset > 0, state.usageDetails == nil || state.lastTurnState == nil {
+                if state.offset > 0, state.usageDetails == nil || state.lastTurnState == nil {
                     // Recover bounded context/lifecycle markers; activity still requires an exact live-process binding.
                     if state.usageDetails == nil { state.usageDetails = SessionUsageDetails() }
                     if state.lastTurnState == nil { state.lastTurnState = "unknown" }
@@ -335,7 +290,7 @@ public actor LogCollector {
                 if monitor == nil, let thread = state.threadID {
                     monitor = try restoredMonitor(thread: thread, state: state, at: now)
                 }
-                if state.sourceDisconnected != true && state.observationStopped != true && monitor?.connectivity != .connected { try monitor?.setConnectivity(.connected, at: now) }
+                if monitor?.connectivity != .connected { try monitor?.setConnectivity(.connected, at: now) }
                 if info.st_size - state.offset > maximumRead {
                     state.historicalUntil = info.st_size
                 }
@@ -347,7 +302,6 @@ public actor LogCollector {
                 var consumed = 0
                 while let newline = data[consumed...].firstIndex(of: 10) {
                     if state.discardingOversizedLine == true || newline - consumed > maximumLine {
-                        guard !input.managed else { throw CollectorError.oversizedRecord }
                         state.discardingOversizedLine = false
                         state.hasGap = true
                         state.requestTiming = nil
@@ -360,8 +314,7 @@ public actor LogCollector {
                     do {
                         try consume(Data(data[consumed..<newline]), state: &state, monitor: &monitor, historical: historical, now: now)
                     } catch {
-                        if input.managed { state.managedValidated = false }
-                            state.hasGap = true
+                        state.hasGap = true
                         state.requestTiming = nil
                         try monitor?.markGap(at: now)
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .invalidRecord))
@@ -370,7 +323,6 @@ public actor LogCollector {
                     if consumed == data.count { break }
                 }
                 if state.discardingOversizedLine == true || data.count - consumed > maximumLine {
-                    guard !input.managed else { throw CollectorError.oversizedRecord }
                     // Persist bounded discard progress so a large transcript record cannot pin the cursor.
                     state.discardingOversizedLine = true
                     state.hasGap = true
@@ -387,31 +339,26 @@ public actor LogCollector {
                 state.offset += Int64(consumed)
                 state.boundaryHash = try boundary(fd, offset: state.offset)
                 if consumed > 0 { state.updated = modified }
-                if input.managed, state.sourceDisconnected != true, state.observationStopped != true {
-                    let connection = state.processes?.first(where: { $0.role == .relay })?.connectivity ?? .unknown
-                    if connection != .connected { try monitor?.setConnectivity(connection, at: now) }
-                }
                 nextStates[id] = state
                 if let monitor { nextMonitors[id] = monitor }
             } catch {
                 diagnose(CollectorDiagnostic(fileIdentity: identity, error: (error as? CollectorError) ?? .inaccessibleSource))
                 if let id = identity {
-                    if !input.managed { nextStates[id]?.cliSource = false }
-                    try? nextMonitors[id]?.setConnectivity(.degraded, at: now)                }
+                    nextStates[id]?.cliSource = false
+                    try? nextMonitors[id]?.setConnectivity(.degraded, at: now)
+                }
             }
         }
         for id in nextMonitors.keys where !seen.contains(id) { try nextMonitors[id]?.setConnectivity(.disconnected, at: now) }
         for id in try selectAuthorities(states: &nextStates, monitors: &nextMonitors, at: now) {
             diagnose(CollectorDiagnostic(fileIdentity: id, error: .ambiguousSource))
         }
-        let beforeRetention = states.merging(nextStates) { _, new in new }
         nextStates = retained(nextStates, wall: wall, policy: policy)
         nextMonitors = nextMonitors.filter { nextStates[$0.key] != nil }
         do { try store.save(nextStates, retention: policy) } catch {
             diagnostics = [CollectorDiagnostic(fileIdentity: nil, error: .database)]
             throw error
         }
-        nextDiagnostics += cleanupManaged(beforeRetention.filter { nextStates[$0.key] == nil }, reportUntracked: false)
         states = nextStates
         monitors = nextMonitors
         recovering.removeAll()
@@ -425,8 +372,7 @@ public actor LogCollector {
 
     public func clearMetadata() throws {
         try store.save([:], retention: policy, clearChartHistory: true)
-        let cleanup = cleanupManaged(states, reportUntracked: true)
-        states.removeAll(); monitors.removeAll(); recovering.removeAll(); diagnostics = cleanup
+        states.removeAll(); monitors.removeAll(); recovering.removeAll(); diagnostics = []
     }
 
     public func updateRetention(_ policy: RetentionPolicy) throws {
@@ -434,7 +380,7 @@ public actor LogCollector {
         guard wall.isFinite else { throw CollectorError.invalidSettings }
         let kept = retained(states, wall: wall, policy: policy)
         try store.save(kept, retention: policy)
-        diagnostics = cleanupManaged(states.filter { kept[$0.key] == nil }, reportUntracked: false)
+        diagnostics = []
         self.policy = policy
         states = kept
         monitors = monitors.filter { kept[$0.key] != nil }
@@ -458,63 +404,17 @@ public actor LogCollector {
         recovering = Set(states.keys)
     }
 
-    private func cleanupManaged(_ candidates: [String: FileState], reportUntracked: Bool) -> [CollectorDiagnostic] {
-        let managed = candidates.filter { $0.value.usageSource == .directRelay }
-        guard let url = managedRunsDirectory, reportUntracked || !managed.isEmpty else { return [] }
-        var rootInfo = stat()
-        if lstat(url.path, &rootInfo) != 0 && errno == ENOENT { return [] }
-        var result: [CollectorDiagnostic] = []
-        do {
-            let root = try SafeDirectory(url, requirePrivate: true)
-            var removed: Set<String> = []
-            for (id, state) in managed {
-                do {
-                    guard state.managedValidated == true, state.threadID != nil,
-                          state.processes?.first(where: { $0.role == .relay })?.connectivity == .disconnected else { throw CollectorError.cleanupDeferred }
-                    let fd = try root.openFile(state.path)
-                    defer { close(fd) }
-                    var info = stat()
-                    guard fstat(fd, &info) == 0, id == "direct:\(info.st_dev):\(info.st_ino)",
-                          info.st_size == state.offset, state.offset > 0,
-                          try boundary(fd, offset: state.offset) == state.boundaryHash else { throw CollectorError.cleanupDeferred }
-                    var bytes = [UInt8](repeating: 0, count: min(maximumLine + 1, Int(info.st_size)))
-                    let count = pread(fd, &bytes, bytes.count, 0)
-                    guard count > 0, let newline = bytes.prefix(count).firstIndex(of: 10) else { throw CollectorError.cleanupDeferred }
-                    var checked = state
-                    checked.threadID = nil; checked.processes = nil; checked.managedValidated = nil
-                    var monitor: ThreadMonitor?
-                    try consume(Data(bytes[..<newline]), state: &checked, monitor: &monitor, historical: true, now: lastFrame)
-                    guard checked.threadID == state.threadID, checked.managedValidated == true, checked.processes == state.processes, checked.processes?.first(where: { $0.role == .relay })?.connectivity == .disconnected else { throw CollectorError.cleanupDeferred }
-                    try root.removeManagedFile(state.path, matching: fd)
-                    removed.insert(state.path)
-                } catch {
-                    if result.count < 100 { result.append(CollectorDiagnostic(fileIdentity: id, error: .cleanupDeferred)) }
-                }
-            }
-            let remaining = try root.logPaths()
-            if remaining.rejected || remaining.paths.contains(where: { path in
-                reportUntracked || removed.contains(where: { $0.split(separator: "/").dropLast() == path.split(separator: "/").dropLast() })
-            }) {
-                if result.count < 100 { result.append(CollectorDiagnostic(fileIdentity: nil, error: .cleanupDeferred)) }
-            }
-        } catch { result.append(CollectorDiagnostic(fileIdentity: nil, error: .cleanupDeferred)) }
-        return Array(result.prefix(100))
-    }
-
     private func selectAuthorities(states next: inout [String: FileState], monitors current: inout [String: ThreadMonitor], at now: Double) throws -> [String] {
         var ambiguous: [String] = []
         let groups = Dictionary(grouping: current.keys, by: { current[$0]!.key.threadID })
         for ids in groups.values {
             let thread = current[ids[0]]!.key.threadID
             let previous = states.first { $0.value.threadID == thread && $0.value.isAuthority == true }?.key
-                ?? states.first { $0.value.threadID == thread && $0.value.isAuthority == nil && $0.value.usageSource == .rolloutLog }?.key
+                ?? states.first { $0.value.threadID == thread && $0.value.isAuthority == nil }?.key
             let selected = ids.sorted { a, b in
-                let aAvailable = current[a]?.connectivity == .connected && next[a]?.observationStopped != true
-                let bAvailable = current[b]?.connectivity == .connected && next[b]?.observationStopped != true
+                let aAvailable = current[a]?.connectivity == .connected
+                let bAvailable = current[b]?.connectivity == .connected
                 if aAvailable != bAvailable { return aAvailable }
-                let aDirect = next[a]?.usageSource == .directRelay
-                let bDirect = next[b]?.usageSource == .directRelay
-                if aDirect != bDirect { return aDirect }
                 if a == previous || b == previous { return a == previous }
                 return (next[a]?.updated ?? 0) == (next[b]?.updated ?? 0) ? a < b : (next[a]?.updated ?? 0) > (next[b]?.updated ?? 0)
             }[0]
@@ -535,7 +435,7 @@ public actor LogCollector {
                 }
                 try current[selected]?.markGap(at: now)
             }
-            let sameSource = ids.filter { next[$0]?.usageSource == next[selected]?.usageSource && current[$0]?.connectivity == .connected }
+            let sameSource = ids.filter { current[$0]?.connectivity == .connected }
             if sameSource.count > 1 {
                 ambiguous.append(selected)
                 next[selected]?.hasGap = true
@@ -561,17 +461,17 @@ public actor LogCollector {
     }
 
     private func restoredMonitor(thread: String, state: FileState, at now: Double) throws -> ThreadMonitor {
-        let key = ThreadKey(homeID: homePath, runID: state.runID, threadID: thread)
+        let key = ThreadKey(homeID: homePath, runID: nil, threadID: thread)
         let counter: UsageCounter
         if let counts = state.counts {
-            counter = try UsageCounter(source: state.usageSource, epoch: state.epoch, baseline: usage(counts),
+            counter = try UsageCounter(source: .rolloutLog, epoch: state.epoch, baseline: usage(counts),
                                        lastKnownReasoningOutputTokens: state.lastKnownReasoningOutputTokens,
                                        lastKnownTotalTokens: state.lastKnownTotalTokens, isPartial: state.partial)
         } else {
-            counter = UsageCounter(source: state.usageSource, epoch: state.epoch)
+            counter = UsageCounter(source: .rolloutLog, epoch: state.epoch)
         }
         var monitor = ThreadMonitor(key: key, counter: counter)
-        try monitor.setConnectivity(state.sourceDisconnected == true ? .disconnected : (state.observationStopped == true ? .degraded : .connected), at: now)
+        try monitor.setConnectivity(.connected, at: now)
         return monitor
     }
 
@@ -587,35 +487,13 @@ public actor LogCollector {
         guard !data.isEmpty else { return }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = object["type"] as? String, let payload = object["payload"] as? [String: Any] else { throw CollectorError.invalidRecord }
-        if state.usageSource == .directRelay {
-            guard integer(object["hub_schema_version"]) == 1,
-                  object["hub_source"] as? String == "direct-relay",
-                  object["codex_home_id"] as? String == homeHash,
-                  let run = object["run_id"] as? String, let runUUID = UUID(uuidString: run),
-                  let expectedRun = state.runID, UUID(uuidString: expectedRun) == runUUID,
-                  let thread = identifier(object["thread_id"]),
-                  state.threadID == nil || state.threadID == thread,
-                  let timestamp = object["timestamp"] as? String, timestamp.utf8.count <= 64,
-                  ISO8601DateFormatter().date(from: timestamp) != nil,
-                  let monotonic = object["received_monotonic_ns"] as? String,
-                  !monotonic.isEmpty, monotonic.utf8.allSatisfy({ (48...57).contains($0) }), UInt64(monotonic) != nil,
-                  type == "session_meta" || type == "event_msg" else { throw CollectorError.invalidRecord }
-            if type == "session_meta" { guard payload["id"] as? String == thread else { throw CollectorError.invalidRecord } }
-            state.runID = run
-        }
         if type == "session_meta" {
-            if state.usageSource == .rolloutLog { state.cliSource = false }
+            state.cliSource = false
             guard let id = identifier(payload["id"]) else { throw CollectorError.invalidRecord }
             guard state.threadID == nil || state.threadID == id else { throw CollectorError.invalidRecord }
-            if state.usageSource == .directRelay {
-                state.processes = try processMetadata(payload["processes"])
-                if state.managedValidated == nil { state.managedValidated = true }
-            }
             state.threadID = id
-            if state.usageSource == .rolloutLog {
-                state.cliSource = payload["source"] as? String == "cli"
-                state.parentThreadID = parentThreadID(payload, thread: id)
-            }
+            state.cliSource = payload["source"] as? String == "cli"
+            state.parentThreadID = parentThreadID(payload, thread: id)
             state.cwd = metadataString(payload["cwd"])
             if monitor == nil { monitor = try restoredMonitor(thread: id, state: state, at: now) }
             return
@@ -630,7 +508,7 @@ public actor LogCollector {
             consumeDetails("turn_context", payload: payload, state: &state)
             return
         }
-        if type == "response_item", state.usageSource == .rolloutLog, !historical {
+        if type == "response_item", !historical {
             let kind = payload["type"] as? String
             let starts = kind == "function_call" || kind == "custom_tool_call"
             let ends = kind == "function_call_output" || kind == "custom_tool_call_output"
@@ -645,82 +523,6 @@ public actor LogCollector {
         }
         guard type == "event_msg", let event = payload["type"] as? String else { return }
         guard monitor != nil else { throw CollectorError.invalidRecord }
-        if state.usageSource == .directRelay {
-            // Emitted by older managed relays; the app no longer uses server timing.
-            if event == "hub_server_timing" { return }
-            if event == "measurement_gap" {
-                guard let reason = payload["reason"] as? String,
-                      ["observer_queue_overflow", "frame_bound", "upgrade_bound", "unsupported_upgrade", "unsupported_frame", "unsupported_message", "invalid_json", "invalid_identifier", "invalid_usage", "metadata_bound", "thread_bound", "metadata_unavailable", "connection_closed"].contains(reason) else { throw CollectorError.invalidRecord }
-                state.observationStopped = true
-                state.hasGap = true
-                state.requestTiming = nil
-                if let thread = state.threadID {
-                    monitor = try restoredMonitor(thread: thread, state: state, at: now)
-                    try monitor?.setConnectivity(.degraded, at: now)
-                }
-                return
-            }
-            if event == "hub_connection" {
-                guard payload["state"] as? String == "disconnected" else { throw CollectorError.invalidRecord }
-                state.sourceDisconnected = true
-                try monitor?.setConnectivity(.disconnected, at: now)
-                return
-            }
-            guard state.observationStopped != true, state.sourceDisconnected != true else { throw CollectorError.invalidRecord }
-            if event == "visible_count" || event == "visible_unavailable" {
-                guard let turn = identifier(payload["turn_id"]), identifier(payload["item_id"]) != nil else { throw CollectorError.invalidRecord }
-                guard !historical, monitor?.activeTurnID == turn else { return }
-                guard let received = object["received_monotonic_ns"] as? String, let ns = UInt64(received),
-                      Double(ns) / 1_000_000_000 <= now, now - Double(ns) / 1_000_000_000 <= 2 else {
-                    return
-                }
-                if event == "visible_unavailable" {
-                    guard let reason = payload["reason"] as? String,
-                          ["model_changed", "turn_boundary", "duplicate_start", "missing_turn_start", "unsupported_mapping", "message_bound", "nonempty_start", "missing_item_start", "tokenizer_unavailable", "work_bound"].contains(reason) else { throw CollectorError.invalidRecord }
-                    return
-                }
-                guard let count = integer(payload["count"]), count >= 0, count <= Int.max,
-                      boolean(payload["complete_from_start"]) != nil, boolean(payload["final"]) != nil,
-                      boolean(payload["corrected"]) != nil, boolean(payload["text_mismatch"]) != nil,
-                      let model = identifier(payload["model"]),
-                      ["o1", "o3", "o4-mini", "gpt-5", "gpt-4.1", "gpt-4o"].contains(model),
-                      payload["encoding"] as? String == "o200k_base" else { throw CollectorError.invalidRecord }
-                state.model = model
-                if count > 0 { try monitor?.setGenerating(true, turnID: turn, at: now) }
-                return
-            }
-            if event == "hub_tool_started" || event == "hub_tool_completed" {
-                guard let turn = identifier(payload["turn_id"]), let item = identifier(payload["item_id"]),
-                      let kind = payload["tool_kind"] as? String,
-                      ["commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "collabAgentToolCall", "webSearch", "imageGeneration"].contains(kind) else { throw CollectorError.invalidRecord }
-                if !historical {
-                    if let time = recordTime(object) {
-                        if state.requestTiming?.tool(item, running: event == "hub_tool_started", at: time) != true { state.requestTiming = nil }
-                    } else { state.requestTiming = nil }
-                    try monitor?.setTool(item, running: event == "hub_tool_started", turnID: turn, at: now)
-                }
-                return
-            }
-            if event == "hub_approval_requested" || event == "hub_approval_resolved" {
-                let request = try requestKey(payload["request_id"])
-                if !historical {
-                    if let time = recordTime(object) {
-                        if state.requestTiming?.tool("approval:" + request, running: event == "hub_approval_requested", at: time) != true { state.requestTiming = nil }
-                    } else { state.requestTiming = nil }
-                }
-                if event == "hub_approval_requested" {
-                    guard let turn = identifier(payload["turn_id"]) else { throw CollectorError.invalidRecord }
-                    if !historical { try monitor?.setApproval(request, waiting: true, turnID: turn, at: now) }
-                } else if !historical, let current = monitor, current.approvalIDs.contains(request), let turn = current.activeTurnID {
-                    try monitor?.setApproval(request, waiting: false, turnID: turn, at: now)
-                }
-                return
-            }
-            if let status = payload["status"] {
-                guard let status = status as? String, ["inProgress", "completed", "interrupted", "failed"].contains(status) else { throw CollectorError.invalidRecord }
-            }
-            guard ["task_started", "task_complete", "token_count"].contains(event), identifier(payload["turn_id"]) != nil else { throw CollectorError.invalidRecord }
-        }
         switch event {
         case "task_started":
             guard let turn = identifier(payload["turn_id"]) else { throw CollectorError.invalidRecord }
@@ -760,11 +562,8 @@ public actor LogCollector {
                     counts[key] = integer
                 }
             }
-            if state.usageSource == .directRelay {
-                guard ["input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens"].allSatisfy({ counts[$0] != nil }) else { throw CollectorError.invalidRecord }
-            }
             let total = try usage(counts)
-            if let turn = state.usageSource == .directRelay ? identifier(payload["turn_id"]) : state.turnID {
+            if let turn = state.turnID {
                 var duration: Double?
                 if !historical, total.outputTokens != monitor?.counter.baseline?.outputTokens {
                     if let time = recordTime(object) {
@@ -782,11 +581,11 @@ public actor LogCollector {
                         if state.requestTiming == nil { state.requestTiming = RequestTiming(at: time) }
                     } else { state.requestTiming = nil }
                 }
-                try monitor?.observeUsage(total, turnID: turn, source: state.usageSource, epoch: state.epoch, at: now, historical: historical, rateInterval: .excludingTools(duration))
+                try monitor?.observeUsage(total, turnID: turn, source: .rolloutLog, epoch: state.epoch, at: now, historical: historical, rateInterval: .excludingTools(duration))
             } else {
                 if let current = monitor {
                     var counter = current.counter
-                    _ = counter.observe(total, source: state.usageSource, epoch: state.epoch)
+                    _ = counter.observe(total, source: .rolloutLog, epoch: state.epoch)
                     monitor = ThreadMonitor(key: current.key, counter: counter)
                     try monitor?.setConnectivity(.connected, at: now)
                 }
@@ -805,11 +604,6 @@ public actor LogCollector {
                               inputTokens: counts["input_tokens"] ?? 0, cachedInputTokens: counts["cached_input_tokens"] ?? 0,
                               cacheWriteInputTokens: counts["cache_write_input_tokens"] ?? 0, totalTokens: counts["total_tokens"])
     }
-    private func boolean(_ value: Any?) -> Bool? {
-        guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
-        return value.boolValue
-    }
-
     private func resumedMonitor(_ monitor: ThreadMonitor, turn: String, at time: Double) throws -> ThreadMonitor {
         var resumed = ThreadMonitor(key: monitor.key, counter: monitor.counter)
         try resumed.setConnectivity(.connected, at: time)
@@ -853,23 +647,6 @@ public actor LogCollector {
     private func integer(_ value: Any?) -> Int64? {
         guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil }
         return Int64(value.stringValue)
-    }
-
-    private func requestKey(_ value: Any?) throws -> String {
-        if let value = identifier(value) { return "string:" + value }
-        if let value = integer(value) { return "integer:" + String(value) }
-        throw CollectorError.invalidRecord
-    }
-
-    private func processMetadata(_ value: Any?) throws -> [ManagedProcessInfo] {
-        guard let roles = value as? [String: Any] else { throw CollectorError.invalidRecord }
-        return try [ManagedProcessInfo.Role.tui, .appServer, .relay].map { role in
-            guard let fields = roles[role.rawValue] as? [String: Any],
-                  let pid = integer(fields["pid"]), pid > 0, pid <= Int32.max,
-                  let seconds = integer(fields["start_seconds"]), seconds >= 0,
-                  let micros = integer(fields["start_microseconds"]), (0..<1_000_000).contains(micros) else { throw CollectorError.invalidRecord }
-            return ManagedProcessInfo(role: role, pid: Int32(pid), startSeconds: UInt64(seconds), startMicroseconds: UInt64(micros))
-        }
     }
 
     private func parentThreadID(_ payload: [String: Any], thread: String) -> String? {

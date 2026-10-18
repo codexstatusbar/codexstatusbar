@@ -165,7 +165,7 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 - **같은 측정 방식** — 메시지별 `output_tokens`(생각 토큰 포함)를 마지막 user/tool_result 항목부터 그 메시지의 마지막 블록까지의 시간으로 나눕니다. 도구 실행은 그 항목들 사이에 있으므로 Codex처럼 제외됩니다. 서버 대기와 prefill 시간은 남아 있습니다.
 - **하나의 통합 속도** — 메뉴바와 개요는 Codex와 Claude의 관측된 CLI 루트를 합산합니다. 둘 다 있으면 개요에 제공자별 열로 각자의 속도와 차트를 표시합니다.
 - 스트림으로 반복 기록된 블록은 `message.id`당 한 번만 셉니다. 입력은 캐시 읽기/쓰기를 포함해 Codex와 같은 의미로 맞춥니다.
-- **Claude 세션별로 제공하지 않는 항목**: 남은 사용 한도, 컨텍스트 사용률(창 크기가 기록되지 않음), 관리형 실행. 서브에이전트(sidechain) 출력은 카운터와 통합 속도에서 제외되며, CLI 세션만 통합 속도에 포함됩니다.
+- **Claude 세션별로 제공하지 않는 항목**: 남은 사용 한도, 컨텍스트 사용률(창 크기가 기록되지 않음). 서브에이전트(sidechain) 출력은 카운터와 통합 속도에서 제외되며, CLI 세션만 통합 속도에 포함됩니다.
 - 수집은 Codex 홈이 연결된 뒤에 시작됩니다. Claude 세션의 최근 60분 차트 기록은 Codex 기록과 함께 저장·복원됩니다.
 
 ## 계정 사용 한도
@@ -188,17 +188,17 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 | `CodexHubCollector` | 읽기 전용 로그/관리형 메타데이터 수집과 SQLite 체크포인트 |
 | `CodexHubApp` | SwiftUI 화면, AppKit 메뉴바, 사용자 설정과 차트 저장 |
 
-프로덕션 구현은 Swift와 macOS 시스템 라이브러리를 사용합니다. Tokloom은 프롬프트·응답 원문을 저장하지 않습니다. 메타데이터는 `~/Library/Application Support/CodexHub/homes/<homeHash>`, 관리형 관측 파일은 같은 `CodexHub` 디렉터리의 `managed-runs/<homeHash>`에 분리합니다.
+프로덕션 구현은 Swift와 macOS 시스템 라이브러리를 사용합니다. Tokloom은 프롬프트·응답 원문을 저장하지 않습니다. 메타데이터는 `~/Library/Application Support/CodexHub/homes/<homeHash>`. 이전 버전이 남긴 `managed-runs` 폴더는 더 이상 읽지 않으며 삭제해도 됩니다.
 
-삭제·보관 정책은 Tokloom 메타데이터에 적용합니다. 관리형 관측 파일은 종료·소유권·파일 정체성이 확인된 것만 정리하며, 실행 중이거나 판단이 불명확한 파일과 원본 Codex 로그는 유지합니다. 보류 사유는 연결 진단에 표시됩니다.
+삭제·보관 정책은 Tokloom 메타데이터에만 적용하며 원본 Codex 로그는 수정하지 않습니다.
 
 ## 검증 상태와 문서
 
-최근 완료한 범위는 Core/Collector 테스트 85개, UI01–UI108·P01–P07의 합성 UI/프로세스 검증 114개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
+최근 완료한 범위는 Core/Collector 테스트 83개, UI·P 항목의 합성 UI/프로세스 검증 108개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
 
 전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기와 전체 provider 실행 경로는 검증이 남아 있습니다.
 
 - [초기 설계 PRD (보관; 현재 제품은 로그 수집과 Claude Code 지원으로 구현됨)](docs/Codex_Hub_PRD.md)
 - [네이티브 UI와 회귀 검증](docs/verification/native-ui.md)
 - [수집기 검증](docs/verification/collector.md)
-- [수집 입력 계약](docs/collector-live-hooks.md)
+- [수집 입력 계약](docs/collector-inputs.md)

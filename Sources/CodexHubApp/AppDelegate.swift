@@ -110,8 +110,7 @@ import CodexHubCollector
             do {
                 let homeID = SHA256.hash(data: Data(canonicalHome.path.utf8)).map { String(format: "%02x", $0) }.joined()
                 let directory = try metadataDirectory(homeID: homeID)
-                let managed = directory.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("managed-runs/" + homeID, isDirectory: true)
-                let service = try LogCollector(codexHome: canonicalHome, metadataDirectory: directory, managedRunsDirectory: managed, monotonic: { ProcessInfo.processInfo.systemUptime }, wallTime: { Date().timeIntervalSince1970 })
+                let service = try LogCollector(codexHome: canonicalHome, metadataDirectory: directory, monotonic: { ProcessInfo.processInfo.systemUptime }, wallTime: { Date().timeIntervalSince1970 })
                 try await service.updateRetention(RetentionPolicy(days: model.retentionDays, maximumSessions: 1000))
                 guard generation == current, !Task.isCancelled else { return }
                 collector = service
@@ -183,8 +182,7 @@ import CodexHubCollector
             return
         }
         let owned = Set(snapshot.sessions.compactMap { session -> String? in
-            let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil
-            return RunningCodexProcess.owner(of: session.id, controller: controller, in: running) == nil ? nil : session.id
+            RunningCodexProcess.owner(of: session.id, in: running) == nil ? nil : session.id
         })
         let connected = try await collector?.bindRunningSessions(owned) ?? snapshot
         guard generation == current else { return }
@@ -192,25 +190,22 @@ import CodexHubCollector
             SessionPresentation(monitor: session.monitor, cwd: session.cwd, model: session.model,
                                 lastObserved: Date(timeIntervalSince1970: session.lastObserved),
                                 process: process,
-                                server: session.processes.first(where: { $0.role == .appServer })?.identity,
                                 rootObserved: session.observedCLIRoot, parentThreadID: session.parentThreadID,
-                                observedSource: session.source, sourceMeasurement: session.measurement,
+                                sourceMeasurement: session.measurement,
                                 sourceReconciliationPending: session.sourceReconciliationPending,
-                                observationStopped: session.observationStopped,
                                 observedActivity: session.activity,
-                                                                usageDetails: session.usageDetails,
+                                usageDetails: session.usageDetails,
                                 provider: session.provider)
         }
         let rows = connected.sessions.compactMap { session -> SessionPresentation? in
-            let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil
-            guard let process = RunningCodexProcess.owner(of: session.id, controller: controller, in: running) else { return nil }
+            guard let process = RunningCodexProcess.owner(of: session.id, in: running) else { return nil }
             return presentation(session, process: process)
         }
         // Claude shares the Codex frame time so one clock orders every monitor.
         let claude = await claudeCollector?.refresh(at: snapshot.observedAt)
         let claudeRows = (claude?.sessions ?? []).compactMap { session in session.process.map { presentation(session, process: $0) } }
         let allRows = rows + claudeRows
-        let represented = Set(rows.flatMap { [$0.process, $0.server].compactMap { $0 } })
+        let represented = Set(rows.compactMap(\.process))
         model.unattachedProcesses = running.filter { !represented.contains($0.identity) && !$0.isAppServer }.map(\.identity)
         let frame = try ReportedFrame(monitors: allRows.map(\.monitor), verifiedIndependentThreads: Set(allRows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
         model.recordUsageHistory(allRows, at: snapshot.observedAt)
@@ -278,7 +273,7 @@ import CodexHubCollector
                 let snapshot = await collector.snapshot()
                 guard generation == current else { return }
                 try await apply(snapshot)
-                model.notice = "Tokloom metadata cleared. Original Codex logs were preserved." + (snapshot.diagnostics.isEmpty ? "" : " Some managed files were retained; see Connection diagnostics.")
+                model.notice = "Tokloom metadata cleared. Original Codex logs were preserved."
             } catch { if generation == current { model.notice = "Metadata could not be cleared." } }
         }
     }
@@ -298,7 +293,7 @@ import CodexHubCollector
                 try await apply(snapshot)
                 model.retentionDays = days
                 defaults.set(days, forKey: "retentionDays")
-                model.notice = "Metadata retention updated." + (snapshot.diagnostics.isEmpty ? "" : " Some managed files were retained; see Connection diagnostics.")
+                model.notice = "Metadata retention updated."
             } catch { if generation == current { model.notice = "Metadata retention could not be updated." } }
         }
     }

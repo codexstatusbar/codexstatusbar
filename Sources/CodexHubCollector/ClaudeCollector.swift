@@ -358,8 +358,7 @@ public actor ClaudeCollector {
 
     private func snapshot(_ t: Tracked) -> SessionSnapshot {
         SessionSnapshot(id: "claude:" + t.id, cwd: t.cwd, model: t.model, monitor: t.monitor, lastObserved: t.updated,
-                        hasGap: t.hasGap, source: .rolloutLog, processes: [], sourceReconciliationPending: false,
-                        observationStopped: false, activity: t.monitor.activity,
+                        hasGap: t.hasGap, sourceReconciliationPending: false, activity: t.monitor.activity,
                         observedCLIRoot: t.root, parentThreadID: nil,
                         usageDetails: SessionUsageDetails(reasoningEffort: t.effort, serviceTier: t.tier),
                         provider: .claude, process: t.process)

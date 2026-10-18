@@ -338,23 +338,6 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     #expect(try next.sessions[0].monitor.reportedRate(at: 100) == 2)
 }
 
-@Test func S223PrivateManagedSourceHardlinkRemainsRejected() async throws {
-    let s = try Sandbox(); try s.write(meta + usage(10))
-    let managed = s.root.appendingPathComponent("managed")
-    let run = managed.appendingPathComponent("sessions/" + UUID().uuidString)
-    try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-    let source = s.root.appendingPathComponent("private-source")
-    try Data("not a managed record\n".utf8).write(to: source)
-    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: source.path)
-    try FileManager.default.linkItem(at: source, to: run.appendingPathComponent(UUID().uuidString + ".jsonl"))
-    let c = try LogCollector(codexHome: s.home, metadataDirectory: s.metadata, managedRunsDirectory: managed)
-    let snapshot = try await c.refresh()
-    #expect(snapshot.sessions.count == 1)
-    #expect(snapshot.diagnostics.contains { $0.error == .unsafePath })
-    #expect(!snapshot.diagnostics.contains { $0.error == .invalidRecord })
-    #expect(try String(contentsOf: source, encoding: .utf8) == "not a managed record\n")
-}
-
 @Test func S224ReportedProcessDetailsPersistAndQuotaOnlyEventsUpdate() async throws {
     let s = try Sandbox()
     try s.write(meta.replacingOccurrences(of: "\"cwd\"", with: "\"source\":\"cli\",\"cwd\"") + """
@@ -631,40 +614,6 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     #expect(timing.sample(at: 18) == 2)
 }
 
-@Test func S236LegacyServerTimingEventsAreIgnoredWithoutBreakingCollection() async throws {
-    let s = try Sandbox()
-    let managed = s.root.appendingPathComponent("managed")
-    let runID = UUID().uuidString
-    let run = managed.appendingPathComponent("sessions/" + runID)
-    try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-    let log = run.appendingPathComponent(UUID().uuidString + ".jsonl")
-    var process = proc_bsdinfo()
-    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-    #expect(proc_pidinfo(getpid(), PROC_PIDTBSDINFO, 0, &process, size) == size)
-    let identity: [String: Any] = ["pid": getpid(), "start_seconds": process.pbi_start_tvsec, "start_microseconds": process.pbi_start_tvusec]
-    let homeID = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
-    func row(_ type: String, _ payload: [String: Any]) throws -> Data {
-        try JSONSerialization.data(withJSONObject: ["hub_schema_version": 1, "hub_source": "direct-relay", "run_id": runID, "codex_home_id": homeID, "thread_id": "session-a", "timestamp": ISO8601DateFormatter().string(from: Date()), "received_monotonic_ns": "100000000000", "type": type, "payload": payload]) + Data([10])
-    }
-    try row("session_meta", ["id": "session-a", "processes": ["tui": identity, "app_server": identity, "relay": identity]]).write(to: log)
-    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: log.path)
-    let c = try LogCollector(codexHome: s.home, metadataDirectory: s.metadata, managedRunsDirectory: managed, monotonic: { 100 })
-    _ = try await c.refresh()
-    let handle = try FileHandle(forWritingTo: log)
-    defer { try? handle.close() }
-    try handle.seekToEnd()
-    try handle.write(contentsOf: row("event_msg", ["type": "task_started", "turn_id": "turn-a"]))
-    var timing: [String: Any] = ["threadID": "session-a", "turnID": "turn-a", "sampledTokens": 163, "outputDeltaCount": 159, "outputDeltaMeanMilliseconds": 16.467705253164556, "engineCalls": 1, "coverage": "missing_harness_boundary"]
-    try handle.write(contentsOf: row("event_msg", ["type": "hub_server_timing", "turn_id": "turn-a", "timing": timing]))
-    let snapshot = try await c.refresh()
-    #expect(snapshot.sessions.count == 1 && snapshot.diagnostics.isEmpty && snapshot.sessions.first?.hasGap == false)
-    timing["sampledTokens"] = 999
-    try handle.write(contentsOf: row("event_msg", ["type": "hub_server_timing", "turn_id": "wrong-turn", "timing": timing]))
-    let later = try await c.refresh()
-    #expect(later.sessions.count == 1 && later.diagnostics.isEmpty && later.sessions.first?.hasGap == false)
-}
-
-
 @Test func S237ChartHistoryPersistsAcrossCollectorRestartAndClearsWithMetadata() async throws {
     let s = try Sandbox(); try s.write(meta + usage(10))
     let original = try Data(contentsOf: s.log)
@@ -726,13 +675,17 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     #expect(try finalStore.load()[key]?.offset == Int64(314_572_800))
 }
 
-@Test func S240NonRolloutCheckpointStillRejectsOversizedOffsets() throws {
-    let s = try Sandbox()
-    let store = try MetadataStore(directoryURL: s.metadata, sourceScope: "fixture")
-    var state = FileState(path: "sessions/direct.jsonl", historicalUntil: 314_572_800, updated: 1)
-    state.sourceName = "direct-relay"
-    try store.save(["direct:fixture": state], retention: RetentionPolicy(days: 7, maximumSessions: 1000))
-    #expect(throws: CollectorError.database) { try store.load() }
+@Test func S251StatesOfTheRemovedManagedSourceAreDroppedOnStart() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(10))
+    let scope = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
+    var store: MetadataStore? = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
+    try store?.save(["direct:fixture": FileState(path: "sessions/run/direct.jsonl", historicalUntil: 10, updated: 1)], retention: RetentionPolicy(days: 7, maximumSessions: 1000))
+    store = nil
+    var collector: LogCollector? = try s.collector()
+    #expect(try await collector?.refresh().sessions.count == 1)
+    collector = nil
+    let check = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
+    #expect(try check.load()["direct:fixture"] == nil)
 }
 
 @Test func S241SubagentParentMetadataPersistsAndLegacyCheckpointRecovers() async throws {

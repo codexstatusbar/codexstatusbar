@@ -9,13 +9,10 @@ struct SessionPresentation: Identifiable {
     var model: String?
     var lastObserved: Date?
     var process: ProcessIdentity?
-    var server: ProcessIdentity?
     var rootObserved = false
     var parentThreadID: String?
-    var observedSource: UsageSource?
     var sourceMeasurement: CodexHubCore.Measurement?
     var sourceReconciliationPending = false
-    var observationStopped = false
     var observedActivity: Activity?
     var usageDetails: SessionUsageDetails?
     var provider = SessionProvider.codex
@@ -23,13 +20,7 @@ struct SessionPresentation: Identifiable {
     var measurement: CodexHubCore.Measurement { sourceMeasurement ?? monitor.measurement }
     var id: ThreadKey { monitor.key }
     var title: String { cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Session \(id.threadID.prefix(8))" }
-    var source: String {
-        switch observedSource ?? monitor.counter.source {
-        case .rolloutLog: provider == .claude ? "Claude logs" : "Logs"
-        case .directRelay: "Direct · experimental"
-        case .sharedServer: "Shared server"
-        }
-    }
+    var source: String { provider == .claude ? "Claude logs" : "Logs" }
     var modelDescription: String {
         [model, usageDetails?.reasoningEffort, usageDetails?.serviceTier?.displayName].compactMap { $0 }.joined(separator: " · ")
     }
@@ -196,7 +187,7 @@ enum MenuWindows: String, CaseIterable {
         sessions.filter {
             $0.rootObserved && $0.monitor.connectivity == .connected &&
             !$0.monitor.counter.isPartial &&
-            !$0.sourceReconciliationPending && !$0.observationStopped
+            !$0.sourceReconciliationPending
         }
     }
     var overviewUsageHistory: [UsageHistoryPoint] {
@@ -263,7 +254,7 @@ enum MenuWindows: String, CaseIterable {
                 usageAnchors.removeValue(forKey: row.id)
                 continue
             }
-            let source = row.observedSource ?? row.monitor.counter.source
+            let source = row.monitor.counter.source
             if let previous = usageAnchors[row.id], previous.epoch == row.monitor.counter.epoch,
                previous.source == source, time > previous.time, time - previous.time <= 5,
                counter.outputTokens > previous.output {

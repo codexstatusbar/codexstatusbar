@@ -471,7 +471,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI108 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI108 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -511,14 +511,12 @@ import CodexHubCollector
         } while Date() < deadline
         precondition(observed?.writableFileIDs.contains(fileID) == true, "P01 live writer is mapped by exact file identity")
         let process = observed!
-        precondition(RunningCodexProcess.owner(of: fileID, controller: nil, in: [process]) == process.identity, "P02 open transcript identifies its owner")
-        precondition(RunningCodexProcess.owner(of: "missing", controller: nil, in: [process]) == nil, "P03 past transcript cannot match by name or cwd")
-        let reused = ProcessIdentity(pid: process.identity.pid, osStartTime: "different-start")
-        precondition(RunningCodexProcess.owner(of: "direct:fixture", controller: reused, in: [process]) == nil, "P04 reused PID cannot match managed identity")
+        precondition(RunningCodexProcess.owner(of: fileID, in: [process]) == process.identity, "P02 open transcript identifies its owner")
+        precondition(RunningCodexProcess.owner(of: "missing", in: [process]) == nil, "P03 past transcript cannot match by name or cwd")
         let conflicting = RunningCodexProcess(identity: ProcessIdentity(pid: 123, osStartTime: "fixture"), writableFileIDs: [fileID])
-        precondition(RunningCodexProcess.owner(of: fileID, controller: nil, in: [process, conflicting]) == nil, "P05 ambiguous owners remain unattached")
+        precondition(RunningCodexProcess.owner(of: fileID, in: [process, conflicting]) == nil, "P04 ambiguous owners remain unattached")
         child.terminate(); child.waitUntilExit()
-        precondition(RunningCodexProcess.inspect(child.processIdentifier) == nil, "P06 exited process disappears")
+        precondition(RunningCodexProcess.inspect(child.processIdentifier) == nil, "P05 exited process disappears")
         let host = Process()
         let hostInput = Pipe()
         host.executableURL = executable
@@ -535,7 +533,7 @@ import CodexHubCollector
             if hostObserved?.isAppServer == true { break }
             RunLoop.main.run(until: Date().addingTimeInterval(0.01))
         } while Date() < hostDeadline
-        precondition(hostObserved?.isAppServer == true && observed?.isAppServer == false, "P07 app-server hosts are told apart from terminal sessions")
+        precondition(hostObserved?.isAppServer == true && observed?.isAppServer == false, "P06 app-server hosts are told apart from terminal sessions")
     }
     @MainActor static func capture(_ model: HubPresentation, _ name: String, _ output: String, dark: Bool, height: CGFloat = 720, width: CGFloat = 460) throws {
         let view = NSHostingView(rootView: HubView(model: model, width: width, height: height).environment(\.colorScheme, dark ? .dark : .light))

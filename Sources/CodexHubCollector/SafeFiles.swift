@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 public enum CollectorError: Error, Equatable, Sendable {
-    case unsafePath, inaccessibleSource, database, invalidSettings, invalidRecord, oversizedRecord, sourceMismatch, cleanupDeferred, ambiguousSource
+    case unsafePath, inaccessibleSource, database, invalidSettings, invalidRecord, oversizedRecord, sourceMismatch, ambiguousSource
 
     public var message: String {
         switch self {
@@ -13,7 +13,6 @@ public enum CollectorError: Error, Equatable, Sendable {
         case .invalidSettings: "The retention settings or clock value is invalid."
         case .invalidRecord: "A log record or session identity could not be safely interpreted."
         case .oversizedRecord: "A source exceeded the collector size or traversal limit."
-        case .cleanupDeferred: "Some managed metadata was retained because ownership, completeness, or stopped-process identity could not be established."
         case .sourceMismatch: "This metadata directory belongs to another Codex home; use a separate directory."
         }
     }
@@ -101,28 +100,6 @@ final class SafeDirectory: @unchecked Sendable {
         }
         try walk(sessions, prefix: subdirectory, depth: 0)
         return (paths.sorted(), rejected)
-    }
-
-    func removeManagedFile(_ relative: String, matching file: Int32) throws {
-        guard requirePrivate else { throw CollectorError.unsafePath }
-        let parts = relative.split(separator: "/")
-        guard parts.count == 3, parts[0] == "sessions", UUID(uuidString: String(parts[1])) != nil,
-              UUID(uuidString: String(parts[2].dropLast(6))) != nil else { throw CollectorError.unsafePath }
-        var parent = dup(fd)
-        guard parent >= 0 else { throw CollectorError.unsafePath }
-        defer { close(parent) }
-        for component in parts.dropLast() {
-            let next = openat(parent, String(component), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-            guard next >= 0 else { throw CollectorError.unsafePath }
-            var info = stat()
-            guard fstat(next, &info) == 0, info.st_uid == getuid(), info.st_mode & 0o077 == 0 else { close(next); throw CollectorError.unsafePath }
-            close(parent); parent = next
-        }
-        var opened = stat(), named = stat()
-        guard fstat(file, &opened) == 0, fstatat(parent, String(parts[2]), &named, AT_SYMLINK_NOFOLLOW) == 0,
-              opened.st_dev == named.st_dev, opened.st_ino == named.st_ino,
-              named.st_mode & S_IFMT == S_IFREG, named.st_uid == getuid(), named.st_nlink == 1,
-              named.st_mode & 0o077 == 0, unlinkat(parent, String(parts[2]), 0) == 0 else { throw CollectorError.unsafePath }
     }
 
     func validateMetadataFiles() throws {

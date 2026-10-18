@@ -100,9 +100,7 @@ final class MetadataStore: @unchecked Sendable {
             let size = Int(sqlite3_column_bytes(statement, 1))
             guard size <= 16_384 else { throw CollectorError.database }
             guard let state = try? JSONDecoder().decode(FileState.self, from: Data(bytes: bytes, count: size)) else { throw CollectorError.database }
-            let isRollout = state.sourceName == "rollout-log"
             guard state.offset >= 0, state.historicalUntil >= 0,
-                  isRollout || (state.offset <= 268_435_456 && state.historicalUntil <= 268_435_456),
                   state.path.utf8.count <= 4096, state.updated.isFinite else { throw CollectorError.database }
             result[String(cString: id)] = state
             code = sqlite3_step(statement)
