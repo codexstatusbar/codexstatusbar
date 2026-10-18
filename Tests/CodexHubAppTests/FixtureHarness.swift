@@ -218,6 +218,9 @@ import CodexHubCollector
         try newTurn.observeUsage(TokenUsage(outputTokens: 50), turnID: "fresh", source: .rolloutLog, epoch: "new", at: 2)
         historyModel.recordUsageHistory([SessionPresentation(monitor: newTurn)], at: 2)
         precondition(historyModel.usageHistory[newTurn.key]?.map(\.outputTokens) == [50], "UI56 known warmup baseline retains the first fresh output")
+        var spreadHistory: [UsageHistoryPoint] = []
+        HubPresentation.spread(10, endingAt: 100, seconds: 4, into: &spreadHistory)
+        precondition(spreadHistory.map(\.time) == [97, 98, 99, 100] && spreadHistory.map(\.outputTokens) == [2, 2, 3, 3], "UI56 a response is spread over its generation seconds without changing the total")
         historyModel.sessions = [SessionPresentation(monitor: newTurn)]
         historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 2)
         historyModel.rateUnit = .minute

@@ -74,6 +74,8 @@ public enum UsageRateInterval: Sendable {
 
 public struct ThreadMonitor: Sendable {
     public let key: ThreadKey
+    /// Generation time behind the latest tool-excluded delta; nil when the last delta carried no such interval.
+    public private(set) var latestGenerationSeconds: Double?
     public private(set) var counter: UsageCounter
     public private(set) var connectivity: Connectivity = .unknown
     public private(set) var activeTurnID: String?
@@ -236,6 +238,7 @@ public struct ThreadMonitor: Sendable {
         case .regression, .suspended:
             invalidateWindow()
         case .delta(let delta):
+            latestGenerationSeconds = nil
             var record = turns[turnID] ?? TurnRecord(isComplete: false)
             record.outputTokens += delta
             if historical || needsBaseline {
@@ -259,6 +262,7 @@ public struct ThreadMonitor: Sendable {
                     if delta > 0, let seconds, seconds.isFinite, seconds > 0 {
                         let estimate = Double(delta) / seconds
                         rate = estimate.isFinite ? estimate : nil
+                        if rate != nil { latestGenerationSeconds = seconds }
                     } else { rate = nil }
                 }
                 if let rate {

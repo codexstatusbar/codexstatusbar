@@ -207,6 +207,25 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         usageHistory = history
     }
 
+    /// Adds `tokens` as one-second points ending at `time`, covering the tool-excluded generation time when the monitor reports one.
+    static func spread(_ tokens: Int, endingAt time: Double, seconds generation: Double?, into history: inout [UsageHistoryPoint]) {
+        var seconds = 1
+        if let generation, generation.isFinite, generation > 0 { seconds = Int(min(max(generation.rounded(), 1), 600)) }
+        seconds = max(1, min(seconds, tokens))
+        let base = tokens / seconds, extra = tokens % seconds
+        for index in 0..<seconds {
+            // The last `extra` seconds carry one more token so the total is exact.
+            let amount = base + (index >= seconds - extra ? 1 : 0)
+            let at = time - Double(seconds - 1 - index)
+            if let existing = history.firstIndex(where: { $0.time == at }) {
+                history[existing] = UsageHistoryPoint(time: at, outputTokens: history[existing].outputTokens + amount)
+            } else {
+                history.append(UsageHistoryPoint(time: at, outputTokens: amount))
+            }
+        }
+        history.sort { $0.time < $1.time }
+    }
+
     func recordUsageHistory(_ rows: [SessionPresentation], at time: Double) {
         guard time.isFinite, time >= 0 else { return }
         let keys = Set(rows.map(\.id))
@@ -226,8 +245,12 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
             if let previous = usageAnchors[row.id], previous.epoch == row.monitor.counter.epoch,
                previous.source == source, time > previous.time, time - previous.time <= 5,
                counter.outputTokens > previous.output {
-                usageHistory[row.id, default: []].append(UsageHistoryPoint(time: time, outputTokens: counter.outputTokens - previous.output))
-                usageHistory[row.id] = Array(usageHistory[row.id, default: []].suffix(UsageHistoryPoint.maximumPoints))
+                let delta = counter.outputTokens - previous.output
+                // Logs report a whole response at once; spread it back over the time it took to generate.
+                let seconds = row.monitor.latestGenerationSeconds
+                var history = usageHistory[row.id, default: []]
+                Self.spread(delta, endingAt: time, seconds: seconds, into: &history)
+                usageHistory[row.id] = Array(history.suffix(UsageHistoryPoint.maximumPoints))
             }
             usageAnchors[row.id] = UsageAnchor(time: time, output: counter.outputTokens, epoch: row.monitor.counter.epoch, source: source)
         }
