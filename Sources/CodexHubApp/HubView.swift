@@ -102,7 +102,7 @@ struct HubView: View {
             Divider()
             HStack(alignment: .top, spacing: 10) {
                 ForEach(model.visibleProviders, id: \.self) { providerColumn($0) }
-            }
+            }.fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -133,7 +133,7 @@ struct HubView: View {
                 }.accessibilityElement(children: .combine)
                     .accessibilityLabel(model.quotaText(quota) + " " + model.text("left"))
             }
-        }.padding(10).frame(maxWidth: .infinity, alignment: .topLeading)
+        }.padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(inset, in: RoundedRectangle(cornerRadius: 8))
     }
 
