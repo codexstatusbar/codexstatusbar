@@ -903,12 +903,9 @@ public actor LogCollector {
                     if let time = recordTime(object) {
                         if state.requestTiming?.accepts(time) == false { state.requestTiming = nil }
                         let earliest = state.requestTiming?.baselineTime ?? time - 600
-                        duration = state.requestTiming?.sample(at: time)
                         // Generation starts at the response headers; time before them is request latency.
-                        if let thread = state.threadID,
-                           let start = streamStarts.streamStart(thread: thread, earliest: earliest, latest: time), time > start {
-                            duration = min(duration ?? time - start, time - start)
-                        }
+                        let start = state.threadID.flatMap { streamStarts.streamStart(thread: $0, earliest: earliest, latest: time) }
+                        duration = state.requestTiming?.sample(at: time, streamStart: start) ?? start.map { time - $0 }.flatMap { $0 > 0 ? $0 : nil }
                         if state.requestTiming == nil { state.requestTiming = RequestTiming(at: time) }
                     } else { state.requestTiming = nil }
                 }

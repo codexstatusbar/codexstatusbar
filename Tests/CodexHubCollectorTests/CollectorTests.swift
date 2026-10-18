@@ -575,6 +575,30 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(try snapshot.sessions[0].monitor.workAverageRate(at: 100) == 25)
 }
 
+@Test func S233cHeaderWaitAndToolTimeAreExcludedTogether() throws {
+    var timing = RequestTiming(at: 0)
+    _ = timing.tool("a", running: true, at: 4)
+    _ = timing.tool("a", running: false, at: 8)
+    // Headers at 2 s, tool 4-8 s, finished at 10 s: 8 s from the headers minus 4 s of tool time.
+    #expect(timing.sample(at: 10, streamStart: 2) == 4)
+    // A tool that began before the headers only counts from where it overlaps the response.
+    var clipped = RequestTiming(at: 0)
+    _ = clipped.tool("b", running: true, at: 1)
+    _ = clipped.tool("b", running: false, at: 5)
+    #expect(clipped.sample(at: 10, streamStart: 3) == 5)
+    var pending = RequestTiming(at: 0)
+    _ = pending.tool("c", running: true, at: 6)
+    #expect(pending.sample(at: 10, streamStart: 2) == 4)
+}
+
+@Test func S233dCheckpointsWithSummedExclusionStillDecode() throws {
+    let legacy = Data(#"{"baseline":10,"lastTime":12,"tools":[],"excluded":3,"endedAt":null}"#.utf8)
+    var timing = try JSONDecoder().decode(RequestTiming.self, from: legacy)
+    #expect(timing.sample(at: 20) == 7)
+    let round = try JSONDecoder().decode(RequestTiming.self, from: JSONEncoder().encode(timing))
+    #expect(round.baselineTime == 20)
+}
+
 @Test func S234MissingTimingNeverFallsBackToWholeTurnDuration() async throws {
     let s = try Sandbox(); try s.write(meta + usage(100))
     let c = try s.collector(); _ = try await c.refresh()
