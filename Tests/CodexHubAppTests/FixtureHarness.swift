@@ -290,9 +290,14 @@ import CodexHubCollector
                          ProviderQuota(provider: .claude, windowMinutes: 300, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1_792_900_000 + 2 * 3_600 + 13 * 60 + 30)),
                          ProviderQuota(provider: .claude, usedPercent: 72.4, resetsAt: nil)]
         precondition(readme.menuTitle.hasSuffix("CX 61% 3d 4h · CL 5h 90% 2h 13m · CL 28%") && readme.quotaText(readme.quotas[1]) == "Claude 5h 90%", "UI97 menu lists every window with its remaining time; weekly without a reset shows none")
-        readme.menuFields = [.claudeSession, .claudeWeekly]
-        precondition(readme.menuTitle == "CL 5h 90% 2h 13m · CL 28%", "UI99 menu bar shows only the selected fields, shortest window first")
-        readme.menuFields = MenuField.defaults
+        readme.menuFields = [.claude]
+        precondition(readme.menuTitle == "CL 5h 90% 2h 13m · CL 28%", "UI99 menu bar shows only the selected providers, shortest window first")
+        readme.menuWindows = .session
+        precondition(readme.menuTitle == "CL 5h 90% 2h 13m", "UI100 session-only mode hides weekly")
+        readme.menuWindows = .weekly
+        precondition(readme.menuTitle == "CL 28%", "UI101 weekly-only mode hides the session")
+        readme.menuWindows = .both
+        readme.menuFields = Set(MenuField.allCases)
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
         try capture(readme, "readme-overview-en", output, dark: true)
@@ -428,7 +433,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI99 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI101 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

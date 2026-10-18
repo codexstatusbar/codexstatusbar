@@ -262,6 +262,14 @@ struct HubView: View {
                         }
                     }
                 }
+                Divider()
+                settingsRow("Usage windows", icon: "clock") {
+                    Picker(model.text("Usage windows"), selection: Binding(get: { model.menuWindows }, set: { model.menuWindows = $0; model.saveDisplayPreferences?() })) {
+                        Text(model.text("Session + weekly")).tag(MenuWindows.both)
+                        Text(model.text("5h limit only")).tag(MenuWindows.session)
+                        Text(model.text("Weekly limit only")).tag(MenuWindows.weekly)
+                    }
+                }
             }
             settingsSection("Behavior", subtitle: "Control startup and session visibility.") {
                 settingsRow("Hide idle sessions", icon: "eye.slash") {

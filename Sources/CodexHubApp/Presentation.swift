@@ -115,22 +115,16 @@ struct UsageHistoryPoint: Identifiable, Equatable {
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
 enum MenuField: String, CaseIterable {
-    case speed, codexWeekly, claudeWeekly, codexSession, claudeSession
-    static let defaults = Set(allCases)
-    var label: String {
-        switch self {
-        case .speed: "Speed"
-        case .codexWeekly: "Codex weekly remaining"
-        case .claudeWeekly: "Claude weekly remaining"
-        case .codexSession: "Codex session remaining"
-        case .claudeSession: "Claude session remaining"
-        }
-    }
-    var icon: String { self == .speed ? "speedometer" : "calendar" }
+    case speed, codex, claude
+    var label: String { self == .speed ? "Speed" : self == .codex ? "Codex remaining" : "Claude remaining" }
+    var icon: String { self == .speed ? "speedometer" : "gauge.with.dots.needle.33percent" }
+    var provider: SessionProvider? { self == .codex ? .codex : self == .claude ? .claude : nil }
 }
 
-extension ProviderQuota {
-    var field: MenuField { provider == .codex ? (isWeekly ? .codexWeekly : .codexSession) : (isWeekly ? .claudeWeekly : .claudeSession) }
+/// Which usage windows of a provider the menu bar lists.
+enum MenuWindows: String, CaseIterable {
+    case both, session, weekly
+    func includes(_ quota: ProviderQuota) -> Bool { self == .both || (self == .weekly) == quota.isWeekly }
 }
 
 @MainActor @Observable final class HubPresentation {
@@ -155,7 +149,8 @@ extension ProviderQuota {
     var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
     /// What the menu bar title shows; the icon stays when nothing selected has a value.
-    var menuFields: Set<MenuField> = MenuField.defaults
+    var menuFields = Set(MenuField.allCases)
+    var menuWindows = MenuWindows.both
     var hideIdle = false
     var hideUnattached = false
     var retentionDays = 7
@@ -368,7 +363,7 @@ extension ProviderQuota {
     var menuParts: [MenuPart] {
         var parts: [MenuPart] = []
         if menuFields.contains(.speed), aggregateRate != nil, error == nil, summary != "—" { parts.append(MenuPart(provider: nil, text: summary + " " + rateUnit.suffix)) }
-        let shown = quotas.filter { menuFields.contains($0.field) }.sorted {
+        let shown = quotas.filter { $0.provider == .codex ? menuFields.contains(.codex) : menuFields.contains(.claude) }.filter(menuWindows.includes).sorted {
             $0.provider != $1.provider ? $0.provider == .codex : $0.windowMinutes < $1.windowMinutes
         }
         return parts + shown.map { MenuPart(provider: $0.provider, text: ($0.isWeekly ? "" : windowLabel($0) + " ") + String(Int($0.remainingPercent.rounded())) + "%" + (remainingTime($0).map { " " + $0 } ?? "")) }
