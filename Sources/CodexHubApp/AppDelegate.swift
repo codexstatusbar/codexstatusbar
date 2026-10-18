@@ -32,7 +32,8 @@ import CodexHubCollector
         model.hookAction = { [weak self] action in self?.runHooks(action) }
         model.menuShowsReset = defaults.bool(forKey: "menuShowsReset")
         model.menuWindows = defaults.string(forKey: "menuWindows").flatMap(MenuWindows.init(rawValue:)) ?? .both
-        if let saved = defaults.stringArray(forKey: "menuFields") { model.menuFields = Set(saved.compactMap(MenuField.init(rawValue:))) }
+        model.menuSpeed = defaults.string(forKey: "menuSpeed").flatMap(MenuSpeed.init(rawValue:)) ?? .combined
+        model.menuUsage = defaults.string(forKey: "menuUsage").flatMap(MenuUsage.init(rawValue:)) ?? .all
         model.hideIdle = defaults.bool(forKey: "hideIdle")
         model.hideUnattached = defaults.bool(forKey: "hideUnattached")
         model.retentionDays = [1, 7, 30, 90].contains(defaults.integer(forKey: "retentionDays")) ? defaults.integer(forKey: "retentionDays") : 7
@@ -41,7 +42,8 @@ import CodexHubCollector
         model.updateLogin = { [weak self] value in self?.menu?.setStartAtLogin(value) }
         model.saveDisplayPreferences = { [weak self] in
             guard let self else { return }
-            defaults.set(model.menuFields.map(\.rawValue).sorted(), forKey: "menuFields")
+            defaults.set(model.menuSpeed.rawValue, forKey: "menuSpeed")
+            defaults.set(model.menuUsage.rawValue, forKey: "menuUsage")
             defaults.set(model.menuWindows.rawValue, forKey: "menuWindows")
             defaults.set(model.menuShowsReset, forKey: "menuShowsReset")
             defaults.set(model.hideIdle, forKey: "hideIdle")

@@ -292,17 +292,25 @@ import CodexHubCollector
         precondition(readme.menuTitle.hasSuffix("CX W 61% · CL S 90% · CL W 28%"), "UI102 the menu bar hides the time until reset by default")
         readme.menuShowsReset = true
         precondition(readme.menuTitle.hasSuffix("CX W 61% 3d 4h · CL S 90% 2h 13m · CL W 28%") && readme.quotaText(readme.quotas[1]) == "Claude 5h 90%", "UI97 menu lists every window with its remaining time; weekly without a reset shows none")
-        readme.menuFields = [.claude]
+        readme.menuSpeed = .off
+        readme.menuUsage = .claude
         precondition(readme.menuTitle == "CL S 90% 2h 13m · CL W 28%", "UI99 menu bar shows only the selected providers, shortest window first")
         readme.menuWindows = .session
         precondition(readme.menuTitle == "CL S 90% 2h 13m", "UI100 session-only mode hides weekly")
         readme.menuWindows = .weekly
         precondition(readme.menuTitle == "CL W 28%", "UI101 weekly-only mode hides the session")
         readme.menuWindows = .both
-        readme.menuFields = [.speed, .codexSpeed, .claudeSpeed]
+        readme.menuSpeed = .both
+        readme.menuUsage = .off
         precondition(readme.menuTitle == "77.7 T/S · CX 17.7 T/S · CL 60 T/S", "UI103 the menu bar keeps the combined speed and adds each provider's own")
-        readme.menuFields = MenuField.defaults
+        readme.menuSpeed = .combined
+        readme.menuUsage = .all
         readme.menuShowsReset = false
+        let korean = HubPresentation()
+        korean.language = .korean
+        let settingsKeys = ["Menu bar", "Choose what the menu bar shows.", "Speed", "Combined", "By provider", "Combined + by provider", "Hidden", "Remaining usage",
+                            "Usage windows", "Session + weekly", "5h limit only", "Weekly limit only", "Show time until reset", "Weekly", "Session", "left"]
+        precondition(settingsKeys.allSatisfy { korean.text($0) != $0 }, "UI104 every menu bar setting and usage label has a Korean translation")
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
         try capture(readme, "readme-overview-en", output, dark: true)
@@ -438,7 +446,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI103 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI104 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

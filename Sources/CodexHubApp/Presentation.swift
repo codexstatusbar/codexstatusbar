@@ -114,20 +114,19 @@ struct UsageHistoryPoint: Identifiable, Equatable {
 
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
-enum MenuField: String, CaseIterable {
-    /// `speed` is the combined rate; the per-provider ones split it and are off by default.
-    case speed, codexSpeed, claudeSpeed, codex, claude
-    static let defaults: Set<MenuField> = [.speed, .codex, .claude]
-    var label: String {
-        switch self {
-        case .speed: "Combined speed"
-        case .codexSpeed: "Codex speed"
-        case .claudeSpeed: "Claude speed"
-        case .codex: "Codex remaining"
-        case .claude: "Claude remaining"
-        }
+/// What the menu bar shows for speed; the per-provider rates split the combined one.
+enum MenuSpeed: String, CaseIterable {
+    case combined, providers, both, off
+    var showsCombined: Bool { self == .combined || self == .both }
+    var showsProviders: Bool { self == .providers || self == .both }
+}
+
+/// Which providers' remaining usage the menu bar lists.
+enum MenuUsage: String, CaseIterable {
+    case all, codex, claude, off
+    func includes(_ provider: SessionProvider) -> Bool {
+        self == .all || (self == .codex && provider == .codex) || (self == .claude && provider == .claude)
     }
-    var icon: String { [.speed, .codexSpeed, .claudeSpeed].contains(self) ? "speedometer" : "gauge.with.dots.needle.33percent" }
 }
 
 /// Which usage windows of a provider the menu bar lists.
@@ -158,7 +157,8 @@ enum MenuWindows: String, CaseIterable {
     var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
     /// What the menu bar title shows; the icon stays when nothing selected has a value.
-    var menuFields = MenuField.defaults
+    var menuSpeed = MenuSpeed.combined
+    var menuUsage = MenuUsage.all
     var menuWindows = MenuWindows.both
     var menuShowsReset = false
     var hideIdle = false
@@ -393,11 +393,11 @@ enum MenuWindows: String, CaseIterable {
     var menuParts: [MenuPart] {
         let unit = rateUnit.suffix.uppercased()
         var parts: [MenuPart] = []
-        if menuFields.contains(.speed), aggregateRate != nil, error == nil, summary != "—" { parts.append(MenuPart(provider: nil, kind: .speed, mark: unit, value: summary)) }
-        for (field, provider) in [(MenuField.codexSpeed, SessionProvider.codex), (.claudeSpeed, .claude)] where menuFields.contains(field) {
+        if menuSpeed.showsCombined, aggregateRate != nil, error == nil, summary != "—" { parts.append(MenuPart(provider: nil, kind: .speed, mark: unit, value: summary)) }
+        for provider in SessionProvider.allCases where menuSpeed.showsProviders {
             if let rate = providerRate(provider) { parts.append(MenuPart(provider: provider, kind: .speed, mark: unit, value: displayRate(rate))) }
         }
-        let shown = quotas.filter { $0.provider == .codex ? menuFields.contains(.codex) : menuFields.contains(.claude) }.filter(menuWindows.includes).sorted {
+        let shown = quotas.filter { menuUsage.includes($0.provider) }.filter(menuWindows.includes).sorted {
             $0.provider != $1.provider ? $0.provider == .codex : $0.windowMinutes < $1.windowMinutes
         }
         return parts + shown.map {

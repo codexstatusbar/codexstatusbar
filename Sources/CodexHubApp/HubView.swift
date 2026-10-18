@@ -277,14 +277,21 @@ struct HubView: View {
                 }
             }
             settingsSection("Menu bar", subtitle: "Choose what the menu bar shows.") {
-                ForEach(Array(MenuField.allCases.enumerated()), id: \.element) { index, field in
-                    if index > 0 { Divider() }
-                    let label = field.label
-                    settingsRow(label, icon: field.icon) {
-                        Toggle(isOn: Binding(get: { model.menuFields.contains(field) },
-                                             set: { if $0 { model.menuFields.insert(field) } else { model.menuFields.remove(field) }; model.saveDisplayPreferences?() })) {
-                            Label(model.text(label), systemImage: field.icon)
-                        }
+                settingsRow("Speed", icon: "speedometer") {
+                    Picker(model.text("Speed"), selection: Binding(get: { model.menuSpeed }, set: { model.menuSpeed = $0; model.saveDisplayPreferences?() })) {
+                        Text(model.text("Combined")).tag(MenuSpeed.combined)
+                        Text(model.text("By provider")).tag(MenuSpeed.providers)
+                        Text(model.text("Combined + by provider")).tag(MenuSpeed.both)
+                        Text(model.text("Hidden")).tag(MenuSpeed.off)
+                    }
+                }
+                Divider()
+                settingsRow("Remaining usage", icon: "gauge.with.dots.needle.33percent") {
+                    Picker(model.text("Remaining usage"), selection: Binding(get: { model.menuUsage }, set: { model.menuUsage = $0; model.saveDisplayPreferences?() })) {
+                        Text(model.text("Codex + Claude")).tag(MenuUsage.all)
+                        Text("Codex").tag(MenuUsage.codex)
+                        Text("Claude").tag(MenuUsage.claude)
+                        Text(model.text("Hidden")).tag(MenuUsage.off)
                     }
                 }
                 Divider()
@@ -294,13 +301,13 @@ struct HubView: View {
                         Text(model.text("5h limit only")).tag(MenuWindows.session)
                         Text(model.text("Weekly limit only")).tag(MenuWindows.weekly)
                     }
-                }
+                }.disabled(model.menuUsage == .off)
                 Divider()
                 settingsRow("Show time until reset", icon: "timer") {
                     Toggle(isOn: Binding(get: { model.menuShowsReset }, set: { model.menuShowsReset = $0; model.saveDisplayPreferences?() })) {
                         Label(model.text("Show time until reset"), systemImage: "timer")
                     }
-                }
+                }.disabled(model.menuUsage == .off)
             }
             settingsSection("Behavior", subtitle: "Control startup and session visibility.") {
                 settingsRow("Hide idle sessions", icon: "eye.slash") {
