@@ -5,7 +5,7 @@ import CSQLite
 final class MetadataStore: @unchecked Sendable {
     private let directory: SafeDirectory
     private var db: OpaquePointer?
-    private let lockFD: Int32
+    private var lockFD: Int32
     private var databaseIdentity: (dev_t, ino_t)?
 
     init(directoryURL: URL, sourceScope: String) throws {
@@ -52,7 +52,15 @@ final class MetadataStore: @unchecked Sendable {
             throw error
         }
     }
-    deinit { sqlite3_close(db); close(lockFD) }
+    deinit { release() }
+
+    /// Releases the database and the directory lock now instead of whenever the owner is deallocated.
+    /// Later use fails with `.database`.
+    func release() {
+        sqlite3_close(db); db = nil
+        // The lock fd is a dup of the directory fd, so the lock lives on until it is unlocked explicitly.
+        if lockFD >= 0 { flock(lockFD, LOCK_UN); Darwin.close(lockFD); lockFD = -1 }
+    }
 
     /// An actor is not released synchronously with its last reference, so a collector restarted on the same
     /// directory can meet the previous lock for a moment; wait briefly before treating it as held elsewhere.

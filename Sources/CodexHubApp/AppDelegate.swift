@@ -105,7 +105,7 @@ import CodexHubCollector
         model.checkingConnection = true
         polling = Task { [weak self] in
             guard let self else { return }
-            await previous?.stop()
+            await previous?.shutdown()
             previous = nil
             do {
                 let homeID = SHA256.hash(data: Data(canonicalHome.path.utf8)).map { String(format: "%02x", $0) }.joined()

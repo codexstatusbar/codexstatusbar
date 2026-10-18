@@ -83,17 +83,16 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(result.diagnostics.contains { $0.error == .invalidRecord })
 }
 
-private final class CollectorBox: @unchecked Sendable { var collector: LogCollector? }
+private final class StoreBox: @unchecked Sendable { var store: MetadataStore? }
 
-@Test func S250NewCollectorWaitsBrieflyForThePreviousOneToReleaseTheMetadataLock() async throws {
-    let s = try Sandbox(); try s.write(meta + usage(100))
-    let box = CollectorBox()
-    box.collector = try s.collector()
-    // Releasing an actor is not synchronous with dropping the last reference, so a restart may race the old lock.
-    // The release runs on GCD: the waiting initializer holds a cooperative thread, and a starved pool must not delay it.
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { box.collector = nil }
-    let next = try s.collector()
-    #expect(try await next.refresh().sessions.count == 1)
+@Test func S250NewStoreWaitsBrieflyForThePreviousOneToReleaseTheLock() throws {
+    let s = try Sandbox()
+    let box = StoreBox()
+    box.store = try MetadataStore(directoryURL: s.metadata, sourceScope: "fixture")
+    // The release runs on GCD so that neither the waiting thread nor a starved task pool can delay it.
+    DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { box.store?.release() }
+    let next = try MetadataStore(directoryURL: s.metadata, sourceScope: "fixture")
+    #expect((try? next.load()) != nil)
 }
 
 @Test func S252SecondCollectorOnTheSameDataReportsItIsInUse() async throws {
@@ -101,13 +100,23 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     let first = try s.collector()
     _ = try await first.refresh()
     #expect(throws: CollectorError.metadataInUse) { try s.collector() }
-    _ = first
+    await first.shutdown()
+}
+
+@Test func S253ClosingACollectorReleasesTheDataAtOnce() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let first = try s.collector()
+    _ = try await first.refresh()
+    await first.shutdown()
+    let next = try s.collector()   // must not wait for the old collector to be deallocated
+    #expect(try await next.refresh().sessions.count == 1)
 }
 
 @Test func S205RestartRestoresCheckpointWithoutLiveReplay() async throws {
     let s = try Sandbox(); try s.write(meta + start("old") + usage(100))
     var c: LogCollector? = try s.collector()
     _ = try await c?.refresh()
+    await c?.shutdown()
     c = nil
     try s.append(usage(200) + complete("old"))
     let next = try s.collector()
@@ -256,6 +265,7 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     var c: LogCollector? = try s.collector(); _ = try await c?.refresh()
     try s.append(usage(50)); let partial = try await c?.refresh()
     #expect(partial?.sessions[0].monitor.measurement == .partial)
+    await c?.shutdown()
     c = nil
     let restored = try s.collector()
     let snapshot = try await restored.refresh()
@@ -370,6 +380,7 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     #expect(updated.usageDetails?.limits?.first?.remainingPercent == 74.5)
     #expect(updated.usageDetails?.contextTokens == 600)
     #expect(updated.monitor.counter.baseline?.outputTokens == 100)
+    await c?.shutdown()
     c = nil
     let restored = try s.collector()
     let result = try await restored.refresh()
@@ -403,7 +414,7 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     {"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":100},"last_token_usage":{"total_tokens":300},"model_context_window":1000}}}
 
     """)
-    var c: LogCollector? = try s.collector(); _ = try await c?.refresh(); c = nil
+    var c: LogCollector? = try s.collector(); _ = try await c?.refresh(); await c?.shutdown(); c = nil
     var database: OpaquePointer?
     #expect(sqlite3_open(s.metadata.appendingPathComponent("metadata.sqlite").path, &database) == SQLITE_OK)
     defer { sqlite3_close(database) }
@@ -482,6 +493,7 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     try s.append(start("live") + "{\"type\":\"compacted\",\"payload\":\"" + String(repeating: "x", count: 1_200_000))
     let skipped = try #require(await c?.refresh())
     #expect(skipped.diagnostics.contains { $0.error == .oversizedRecord })
+    await c?.shutdown()
     c = nil
     let resumed = try s.collector()
     try s.append("\"}\n" + usage(9000))
@@ -630,6 +642,7 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     var first: LogCollector? = try s.collector()
     #expect(try await first?.loadChartHistory() == nil)
     try await first?.saveChartHistory(payload)
+    await first?.shutdown()
     first = nil
     let restored = try s.collector()
     #expect(try await restored.loadChartHistory() == payload)
@@ -667,11 +680,13 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     var collector: LogCollector? = try s.collector()
     _ = try await collector?.refresh()
     try await collector?.saveChartHistory(Data("retained-chart".utf8))
+    await collector?.shutdown()
     collector = nil
     var restored: LogCollector? = try s.collector()
     let snapshot = try #require(try await restored?.refresh())
     #expect(snapshot.sessions.first?.cwd == "/project")
     #expect(try await restored?.loadChartHistory() == Data("retained-chart".utf8))
+    await restored?.shutdown()
     restored = nil
     let scope = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
     var store: MetadataStore? = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
@@ -679,6 +694,7 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     let key = try #require(states.keys.first)
     states[key]?.offset = 300 * 1024 * 1024
     try store?.save(states, retention: RetentionPolicy(days: 7, maximumSessions: 1000))
+    store?.release()
     store = nil
     let finalStore = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
     #expect(try finalStore.load()[key]?.offset == Int64(314_572_800))
@@ -689,9 +705,11 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     let scope = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
     var store: MetadataStore? = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
     try store?.save(["direct:fixture": FileState(path: "sessions/run/direct.jsonl", historicalUntil: 10, updated: 1)], retention: RetentionPolicy(days: 7, maximumSessions: 1000))
+    store?.release()
     store = nil
     var collector: LogCollector? = try s.collector()
     #expect(try await collector?.refresh().sessions.count == 1)
+    await collector?.shutdown()
     collector = nil
     let check = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
     #expect(try check.load()["direct:fixture"] == nil)
@@ -704,6 +722,7 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     let first = try #require(try await collector?.refresh())
     #expect(first.sessions.first?.parentThreadID == "parent")
     #expect(first.sessions.first?.observedCLIRoot == false)
+    await collector?.shutdown()
     collector = nil
     let scope = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
     var store: MetadataStore? = try MetadataStore(directoryURL: s.metadata, sourceScope: scope)
@@ -711,6 +730,7 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     #expect(states.values.first?.parentThreadID == "parent")
     for id in states.keys { states[id]?.parentThreadID = nil }
     try store?.save(states, retention: RetentionPolicy(days: 7, maximumSessions: 1000))
+    store?.release()
     store = nil
     collector = try s.collector()
     let recovered = try #require(try await collector?.refresh())

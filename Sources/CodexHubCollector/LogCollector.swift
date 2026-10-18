@@ -139,6 +139,8 @@ public actor LogCollector {
         }
     }
     public func stop() { polling?.cancel(); polling = nil }
+    /// Stops polling and releases the metadata lock at once; the collector cannot be used afterwards.
+    public func shutdown() { stop(); store.release() }
 
     public func snapshot() -> CollectorSnapshot {
         let transcripts = Dictionary(grouping: states.filter { $0.value.threadID != nil }, by: { $0.value.threadID! })
