@@ -135,7 +135,7 @@ struct HubView: View {
             ObservedTokenChart(points: model.overviewUsageHistory(for: provider), now: model.frame?.time ?? 0, emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset, unit: model.rateUnit)
                 .accessibilityLabel(provider.displayName + " " + model.text("관측 출력 토큰"))
             // Fixed slots keep each window at the same height in every column; a missing window leaves its slot empty.
-            ForEach([false, true], id: \.self) { weekly in
+            ForEach([true, false], id: \.self) { weekly in
                 if model.quotas.contains(where: { $0.isWeekly == weekly }) {
                     if let quota = model.quotas.first(where: { $0.provider == provider && $0.isWeekly == weekly }) {
                         quotaRow(quota)
