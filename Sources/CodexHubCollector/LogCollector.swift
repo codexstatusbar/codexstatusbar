@@ -901,13 +901,15 @@ public actor LogCollector {
                 var duration: Double?
                 if !historical, total.outputTokens != monitor?.counter.baseline?.outputTokens {
                     if let time = recordTime(object) {
-                        if state.requestTiming?.accepts(time) == false { state.requestTiming = nil }
+                        let reversed = state.requestTiming?.accepts(time) == false
+                        if reversed { state.requestTiming = nil }
                         let earliest = state.requestTiming?.baselineTime ?? time - 600
                         // Generation starts at the response headers; time before them is request latency.
                         let start = state.threadID.flatMap { streamStarts.streamStart(thread: $0, earliest: earliest, latest: time) }
                         if state.requestTiming != nil {
                             duration = state.requestTiming?.sample(at: time, streamStart: start)
-                        } else if let start, time > start {
+                        } else if !reversed, let start, time > start {
+                            // Only the very first report has no earlier timing; a reversed clock cannot be trusted.
                             duration = time - start
                         }
                         if state.requestTiming == nil { state.requestTiming = RequestTiming(at: time) }

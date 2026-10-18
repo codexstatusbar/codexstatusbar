@@ -594,6 +594,17 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     #expect(try snapshot.sessions[0].monitor.workAverageRate(at: 100) == nil)
 }
 
+@Test func S233fLogTimeGoingBackwardsLeavesTheLastRateAlone() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.collector(); _ = try await c.refresh()
+    try writeHeaderLog(s, second: 6)
+    try s.append(dated(start("live"), 0) + dated(usage(200), 10))
+    #expect(try await c.refresh().sessions[0].monitor.workAverageRate(at: 100) == 25)
+    // A report stamped before the previous one cannot be timed, so it must not produce a new rate.
+    try s.append(dated(usage(300), 9))
+    #expect(try await c.refresh().sessions[0].monitor.workAverageRate(at: 100) == 25)
+}
+
 @Test func S233cHeaderWaitAndToolTimeAreExcludedTogether() throws {
     var timing = RequestTiming(at: 0)
     _ = timing.tool("a", running: true, at: 4)
