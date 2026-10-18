@@ -270,6 +270,12 @@ struct HubView: View {
                         Text(model.text("Weekly limit only")).tag(MenuWindows.weekly)
                     }
                 }
+                Divider()
+                settingsRow("Show time until reset", icon: "timer") {
+                    Toggle(isOn: Binding(get: { model.menuShowsReset }, set: { model.menuShowsReset = $0; model.saveDisplayPreferences?() })) {
+                        Label(model.text("Show time until reset"), systemImage: "timer")
+                    }
+                }
             }
             settingsSection("Behavior", subtitle: "Control startup and session visibility.") {
                 settingsRow("Hide idle sessions", icon: "eye.slash") {

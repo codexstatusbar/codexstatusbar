@@ -30,6 +30,7 @@ import CodexHubCollector
             defaults.set(unit.rawValue, forKey: "rateUnit")
         }
         model.hookAction = { [weak self] action in self?.runHooks(action) }
+        model.menuShowsReset = defaults.bool(forKey: "menuShowsReset")
         model.menuWindows = defaults.string(forKey: "menuWindows").flatMap(MenuWindows.init(rawValue:)) ?? .both
         if let saved = defaults.stringArray(forKey: "menuFields") { model.menuFields = Set(saved.compactMap(MenuField.init(rawValue:))) }
         model.hideIdle = defaults.bool(forKey: "hideIdle")
@@ -42,6 +43,7 @@ import CodexHubCollector
             guard let self else { return }
             defaults.set(model.menuFields.map(\.rawValue).sorted(), forKey: "menuFields")
             defaults.set(model.menuWindows.rawValue, forKey: "menuWindows")
+            defaults.set(model.menuShowsReset, forKey: "menuShowsReset")
             defaults.set(model.hideIdle, forKey: "hideIdle")
             defaults.set(model.hideUnattached, forKey: "hideUnattached")
         }
