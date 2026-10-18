@@ -652,7 +652,7 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     #expect(timing.sample(at: 18) == 2)
 }
 
-@Test func S236ServerTimingReachesSnapshotOnlyForMatchingLiveTurn() async throws {
+@Test func S236LegacyServerTimingEventsAreIgnoredWithoutBreakingCollection() async throws {
     let s = try Sandbox()
     let managed = s.root.appendingPathComponent("managed")
     let runID = UUID().uuidString
@@ -678,14 +678,11 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     var timing: [String: Any] = ["threadID": "session-a", "turnID": "turn-a", "sampledTokens": 163, "outputDeltaCount": 159, "outputDeltaMeanMilliseconds": 16.467705253164556, "engineCalls": 1, "coverage": "missing_harness_boundary"]
     try handle.write(contentsOf: row("event_msg", ["type": "hub_server_timing", "turn_id": "turn-a", "timing": timing]))
     let snapshot = try await c.refresh()
-    #expect(snapshot.sessions.first?.serverTiming?.sampledTokens == 163)
-    #expect(snapshot.sessions.first?.serverTiming?.inferenceMilliseconds == nil)
-    timing["turnID"] = "wrong-turn"
+    #expect(snapshot.sessions.count == 1 && snapshot.diagnostics.isEmpty && snapshot.sessions.first?.hasGap == false)
     timing["sampledTokens"] = 999
     try handle.write(contentsOf: row("event_msg", ["type": "hub_server_timing", "turn_id": "wrong-turn", "timing": timing]))
-    #expect(try await c.refresh().sessions.first?.serverTiming?.sampledTokens == 163)
-    try await c.markGap()
-    #expect(await c.snapshot().sessions.first?.serverTiming == nil)
+    let later = try await c.refresh()
+    #expect(later.sessions.count == 1 && later.diagnostics.isEmpty && later.sessions.first?.hasGap == false)
 }
 
 

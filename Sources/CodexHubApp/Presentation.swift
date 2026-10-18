@@ -19,7 +19,6 @@ struct SessionPresentation: Identifiable {
     var observedActivity: Activity?
     var hookCompletionCandidate = false
     var usageDetails: SessionUsageDetails?
-    var serverTiming: ServerTiming?
     var provider = SessionProvider.codex
     var activity: Activity { observedActivity ?? monitor.activity }
     var measurement: CodexHubCore.Measurement { sourceMeasurement ?? monitor.measurement }

@@ -259,7 +259,7 @@ import CodexHubCollector
                                 observationStopped: session.observationStopped,
                                 observedActivity: session.activity, hookCompletionCandidate: session.hookCompletionCandidate,
                                                                 usageDetails: session.usageDetails,
-                                serverTiming: session.serverTiming, provider: session.provider)
+                                provider: session.provider)
         }
         let rows = connected.sessions.compactMap { session -> SessionPresentation? in
             let controller = session.source == .directRelay ? session.processes.first(where: { $0.role == .tui })?.identity : nil

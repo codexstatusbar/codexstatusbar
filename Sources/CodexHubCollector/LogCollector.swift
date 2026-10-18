@@ -42,15 +42,11 @@ public struct SessionSnapshot: Sendable {
     public let observationStopped: Bool
     public let activity: Activity
     public let hookCompletionCandidate: Bool
-    public let liveRate: Double?
-    public let liveMeasurement: CodexHubCore.Measurement
-    public let liveUnavailableReason: String?
     public var measurement: CodexHubCore.Measurement { sourceReconciliationPending || observationStopped ? .partial : monitor.measurement }
     /// Exact CLI root provenance only; descendant coverage and PID ownership are not proven.
     public let observedCLIRoot: Bool
     public let parentThreadID: String?
     public let usageDetails: SessionUsageDetails?
-    public let serverTiming: ServerTiming?
     public var provider: SessionProvider = .codex
     /// Set only by providers that prove process ownership themselves.
     public var process: ProcessIdentity?
@@ -91,7 +87,6 @@ struct FileState: Codable, Sendable {
     var turnID: String?
     var lastTurnState: String?
     var requestTiming: RequestTiming?
-    var serverTiming: ServerTiming?
     var cwd: String?
     var model: String?
     var usageDetails: SessionUsageDetails?
@@ -132,7 +127,6 @@ public actor LogCollector {
     private let wallTime: @Sendable () -> Double
     private var states: [String: FileState]
     private var monitors: [String: ThreadMonitor] = [:]
-    private var visibleWindows: [String: VisibleWindow] = [:]
     private var hookStates: [String: HookState] = [:]
     private var runningSessionFiles: Set<String> = []
     private var policy: RetentionPolicy
@@ -195,12 +189,6 @@ public actor LogCollector {
                 monitor.activeTurnID != nil && hook?.turnID == monitor.activeTurnID &&
                 lastFrame - (hook?.receivedAt ?? -.infinity) <= 10 && state.reconciliationPeer == nil
             let activity = hookEligible && monitor.activity == .working && !(hook?.tools.isEmpty ?? true) ? Activity.toolRunning : monitor.activity
-            let live = visibleWindows[id] ?? VisibleWindow()
-            let liveBlocked = state.usageSource != .directRelay || monitor.activeTurnID == nil ||
-                monitor.connectivity != .connected || state.reconciliationPeer != nil || state.observationStopped == true
-            let reason = state.usageSource != .directRelay ? "direct_source_required" :
-                (monitor.activeTurnID == nil ? "no_active_turn" :
-                    (liveBlocked ? "source_unavailable" : live.unavailableReason))
             let context = state.usageSource == .rolloutLog ? state : transcripts[monitor.key.threadID].flatMap { files in
                 files.count == 1 && files.first?.value.turnID == state.turnID ? files.first?.value : nil
             }
@@ -210,13 +198,10 @@ public actor LogCollector {
                                    sourceReconciliationPending: state.reconciliationPeer != nil,
                                    observationStopped: state.observationStopped == true,
                                    activity: activity, hookCompletionCandidate: hookEligible && hook?.completionCandidate == true,
-                                   liveRate: liveBlocked ? nil : live.rate(at: lastFrame),
-                                   liveMeasurement: liveBlocked ? .unavailable : live.measurement(at: lastFrame),
-                                   liveUnavailableReason: reason ?? (live.measurement(at: lastFrame) == .partial ? "invalid_window" : nil),
                                    observedCLIRoot: roots.contains(monitor.key.threadID) &&
                                        (state.usageSource == .rolloutLog || state.managedValidated == true),
                                    parentThreadID: state.usageSource == .rolloutLog ? state.parentThreadID : transcripts[monitor.key.threadID].flatMap { $0.count == 1 ? $0.first?.value.parentThreadID : nil },
-                                   usageDetails: context?.usageDetails, serverTiming: monitor.connectivity == .connected && state.reconciliationPeer == nil && state.observationStopped != true ? state.serverTiming : nil)
+                                   usageDetails: context?.usageDetails)
         }.sorted { $0.id < $1.id }
         let grouped = Dictionary(grouping: allSessions, by: { $0.monitor.key.threadID })
         let sessions = grouped.values.compactMap { group in
@@ -250,7 +235,6 @@ public actor LogCollector {
         guard now.isFinite, now >= lastFrame, wall.isFinite else { throw CollectorError.invalidSettings }
         var nextStates = states
         var nextMonitors = monitors
-        var nextVisible = visibleWindows
         var pendingHooks: [HookEvent] = []
         var invalidHookStreams: Set<String> = []
         var nextDiagnostics: [CollectorDiagnostic] = []
@@ -320,22 +304,18 @@ public actor LogCollector {
                 for replaced in replacedIDs { nextStates.removeValue(forKey: replaced); nextMonitors.removeValue(forKey: replaced) }
                 var state = nextStates[id] ?? FileState(path: relative, historicalUntil: info.st_size, updated: modified, hasGap: !replacedIDs.isEmpty)
                 var monitor = nextMonitors[id]
-                var visible = nextVisible[id] ?? VisibleWindow()
                 var fileHooks: [HookEvent] = []
                 if recovering.contains(id) || monitor?.connectivity == .disconnected || (lastFrame > 0 && now - lastFrame > 5) {
                     state.historicalUntil = info.st_size
                     state.hasGap = true
                     state.requestTiming = nil
                     monitor = nil
-                    state.serverTiming = nil
-                    visible.invalidate(reason: "observation_gap")
                 }
                 let changedBoundary = try state.offset > 0 && (state.offset > info.st_size || boundary(fd, offset: state.offset) != state.boundaryHash)
                 if changedBoundary {
                     if input.hook { invalidHookStreams.insert(id) }
                     state = FileState(path: relative, historicalUntil: info.st_size, updated: modified, hasGap: true)
                     monitor = nil
-                    visible.invalidate(reason: "observation_gap")
                 }
                 state.path = relative
                 state.sourceName = input.hook ? "hook" : (input.managed ? "direct-relay" : "rollout-log")
@@ -399,7 +379,6 @@ public actor LogCollector {
                 if state.sourceDisconnected != true && state.observationStopped != true && monitor?.connectivity != .connected { try monitor?.setConnectivity(.connected, at: now) }
                 if info.st_size - state.offset > maximumRead {
                     state.historicalUntil = info.st_size
-                    visible.invalidate(reason: "buffered_records")
                 }
                 let size = min(maximumRead, Int(max(0, info.st_size - state.offset)))
                 var bytes = [UInt8](repeating: 0, count: size)
@@ -413,9 +392,7 @@ public actor LogCollector {
                         state.discardingOversizedLine = false
                         state.hasGap = true
                         state.requestTiming = nil
-                        state.serverTiming = nil
                         try monitor?.markGap(at: now)
-                        visible.invalidate(reason: "oversized_record")
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
                         consumed = newline + 1
                         continue
@@ -429,15 +406,13 @@ public actor LogCollector {
                                 fileHooks.append(event)
                             }
                         } else {
-                            try consume(Data(data[consumed..<newline]), state: &state, monitor: &monitor, visible: &visible, historical: historical, now: now)
+                            try consume(Data(data[consumed..<newline]), state: &state, monitor: &monitor, historical: historical, now: now)
                         }
                     } catch {
                         if input.managed { state.managedValidated = false }
                         if input.hook { invalidHookStreams.insert(id) }
                         state.hasGap = true
-                        visible.invalidate(reason: "invalid_record")
                         state.requestTiming = nil
-                        state.serverTiming = nil
                         try monitor?.markGap(at: now)
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .invalidRecord))
                     }
@@ -450,9 +425,7 @@ public actor LogCollector {
                     state.discardingOversizedLine = true
                     state.hasGap = true
                     state.requestTiming = nil
-                    state.serverTiming = nil
                     try monitor?.markGap(at: now)
-                    visible.invalidate(reason: "oversized_record")
                     diagnose(CollectorDiagnostic(fileIdentity: id, error: .oversizedRecord))
                     consumed = data.count
                 }
@@ -468,11 +441,10 @@ public actor LogCollector {
                     let connection = state.processes?.first(where: { $0.role == .relay })?.connectivity ?? .unknown
                     if connection != .connected { try monitor?.setConnectivity(connection, at: now) }
                 }
-                if monitor?.connectivity != .connected { visible.invalidate(reason: "source_unavailable") }
                 if input.hook {
                     guard pendingHooks.count + fileHooks.count <= 4096 else { throw CollectorError.oversizedRecord }
                     pendingHooks += fileHooks
-                } else { nextVisible[id] = visible }
+                }
                 nextStates[id] = state
                 if let monitor { nextMonitors[id] = monitor }
             } catch {
@@ -480,21 +452,12 @@ public actor LogCollector {
                 if let id = identity {
                     if input.hook { invalidHookStreams.insert(id) }
                     if !input.managed && !input.hook { nextStates[id]?.hookIdentityEligible = false }
-                    try? nextMonitors[id]?.setConnectivity(.degraded, at: now)
-                    nextVisible[id]?.invalidate(reason: "source_unavailable")
-                }
+                    try? nextMonitors[id]?.setConnectivity(.degraded, at: now)                }
             }
         }
         for id in nextMonitors.keys where !seen.contains(id) { try nextMonitors[id]?.setConnectivity(.disconnected, at: now) }
         for id in try selectAuthorities(states: &nextStates, monitors: &nextMonitors, at: now) {
             diagnose(CollectorDiagnostic(fileIdentity: id, error: .ambiguousSource))
-        }
-        for id in nextVisible.keys {
-            if nextMonitors[id]?.connectivity != .connected || nextStates[id]?.isAuthority != true ||
-                nextStates[id]?.reconciliationPeer != nil ||
-                (states[id]?.isAuthority == false && nextStates[id]?.isAuthority == true) {
-                nextVisible[id]?.invalidate(reason: "source_changed")
-            }
         }
         for event in pendingHooks where ["UserPromptSubmit", "PreToolUse", "PostToolUse"].contains(event.name) && !invalidHookStreams.contains(event.streamID) {
             let matches = nextStates.filter { $0.value.sourceName == "rollout-log" && $0.value.threadID == event.sessionID }
@@ -508,7 +471,6 @@ public actor LogCollector {
             nextStates[id]?.lastTurnState = "active"
             nextStates[id]?.hasGap = true
             nextStates[id]?.requestTiming = nil
-            nextStates[id]?.serverTiming = nil
         }
         let nextHooks = reconcileHooks(pendingHooks, states: nextStates, monitors: nextMonitors,
                                        seen: seen, invalidStreams: invalidHookStreams, now: now)
@@ -522,7 +484,6 @@ public actor LogCollector {
         nextDiagnostics += cleanupManaged(beforeRetention.filter { nextStates[$0.key] == nil }, reportUntracked: false)
         states = nextStates
         monitors = nextMonitors
-        visibleWindows = nextVisible.filter { nextStates[$0.key] != nil }
         hookStates = nextHooks.filter { nextStates[$0.key] != nil }
         recovering.removeAll()
         diagnostics = Array(nextDiagnostics.prefix(100))
@@ -536,7 +497,7 @@ public actor LogCollector {
     public func clearMetadata() throws {
         try store.save([:], retention: policy, clearChartHistory: true)
         let cleanup = cleanupManaged(states, reportUntracked: true)
-        states.removeAll(); monitors.removeAll(); visibleWindows.removeAll(); hookStates.removeAll(); recovering.removeAll(); diagnostics = cleanup
+        states.removeAll(); monitors.removeAll(); hookStates.removeAll(); recovering.removeAll(); diagnostics = cleanup
     }
 
     public func updateRetention(_ policy: RetentionPolicy) throws {
@@ -548,7 +509,6 @@ public actor LogCollector {
         self.policy = policy
         states = kept
         monitors = monitors.filter { kept[$0.key] != nil }
-        visibleWindows = visibleWindows.filter { kept[$0.key] != nil }
         hookStates = hookStates.filter { kept[$0.key] != nil && kept[$0.value.streamID] != nil }
     }
 
@@ -560,7 +520,6 @@ public actor LogCollector {
         for id in next.keys {
             nextStates[id]?.hasGap = true
             nextStates[id]?.requestTiming = nil
-            nextStates[id]?.serverTiming = nil
             if let state = nextStates[id], let thread = state.threadID {
                 next[id] = try restoredMonitor(thread: thread, state: state, at: now)
                 try next[id]?.markGap(at: now)
@@ -569,7 +528,6 @@ public actor LogCollector {
         try store.save(nextStates, retention: policy)
         states = nextStates; monitors = next; lastFrame = now
         recovering = Set(states.keys)
-        visibleWindows.removeAll()
         hookStates.removeAll()
     }
 
@@ -598,8 +556,7 @@ public actor LogCollector {
                     var checked = state
                     checked.threadID = nil; checked.processes = nil; checked.managedValidated = nil
                     var monitor: ThreadMonitor?
-                    var visible = VisibleWindow()
-                    try consume(Data(bytes[..<newline]), state: &checked, monitor: &monitor, visible: &visible, historical: true, now: lastFrame)
+                    try consume(Data(bytes[..<newline]), state: &checked, monitor: &monitor, historical: true, now: lastFrame)
                     guard checked.threadID == state.threadID, checked.managedValidated == true, checked.processes == state.processes, checked.processes?.first(where: { $0.role == .relay })?.connectivity == .disconnected else { throw CollectorError.cleanupDeferred }
                     try root.removeManagedFile(state.path, matching: fd)
                     removed.insert(state.path)
@@ -699,7 +656,7 @@ public actor LogCollector {
         return date.map { $0.timeIntervalSince1970 }
     }
 
-    private func consume(_ data: Data, state: inout FileState, monitor: inout ThreadMonitor?, visible: inout VisibleWindow, historical: Bool, now: Double) throws {
+    private func consume(_ data: Data, state: inout FileState, monitor: inout ThreadMonitor?, historical: Bool, now: Double) throws {
         guard !data.isEmpty else { return }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = object["type"] as? String, let payload = object["payload"] as? [String: Any] else { throw CollectorError.invalidRecord }
@@ -762,22 +719,13 @@ public actor LogCollector {
         guard type == "event_msg", let event = payload["type"] as? String else { return }
         guard monitor != nil else { throw CollectorError.invalidRecord }
         if state.usageSource == .directRelay {
-            if event == "hub_server_timing" {
-                guard !historical, let raw = payload["timing"] as? [String: Any],
-                      let data = try? JSONSerialization.data(withJSONObject: raw),
-                      let timing = try? JSONDecoder().decode(ServerTiming.self, from: data),
-                      timing.threadID == state.threadID, timing.turnID == state.turnID,
-                      timing.isValid else { return }
-                state.serverTiming = timing
-                return
-            }
+            // Emitted by older managed relays; the app no longer uses server timing.
+            if event == "hub_server_timing" { return }
             if event == "measurement_gap" {
                 guard let reason = payload["reason"] as? String,
                       ["observer_queue_overflow", "frame_bound", "upgrade_bound", "unsupported_upgrade", "unsupported_frame", "unsupported_message", "invalid_json", "invalid_identifier", "invalid_usage", "metadata_bound", "thread_bound", "metadata_unavailable", "connection_closed"].contains(reason) else { throw CollectorError.invalidRecord }
-                visible.invalidate(reason: "observation_gap")
                 state.observationStopped = true
                 state.hasGap = true
-                state.serverTiming = nil
                 state.requestTiming = nil
                 if let thread = state.threadID {
                     monitor = try restoredMonitor(thread: thread, state: state, at: now)
@@ -787,35 +735,30 @@ public actor LogCollector {
             }
             if event == "hub_connection" {
                 guard payload["state"] as? String == "disconnected" else { throw CollectorError.invalidRecord }
-                visible.invalidate(reason: "source_disconnected")
                 state.sourceDisconnected = true
                 try monitor?.setConnectivity(.disconnected, at: now)
                 return
             }
             guard state.observationStopped != true, state.sourceDisconnected != true else { throw CollectorError.invalidRecord }
             if event == "visible_count" || event == "visible_unavailable" {
-                guard let turn = identifier(payload["turn_id"]), let item = identifier(payload["item_id"]) else { throw CollectorError.invalidRecord }
+                guard let turn = identifier(payload["turn_id"]), identifier(payload["item_id"]) != nil else { throw CollectorError.invalidRecord }
                 guard !historical, monitor?.activeTurnID == turn else { return }
                 guard let received = object["received_monotonic_ns"] as? String, let ns = UInt64(received),
                       Double(ns) / 1_000_000_000 <= now, now - Double(ns) / 1_000_000_000 <= 2 else {
-                    visible.invalidate(reason: "buffered_records")
                     return
                 }
                 if event == "visible_unavailable" {
                     guard let reason = payload["reason"] as? String,
                           ["model_changed", "turn_boundary", "duplicate_start", "missing_turn_start", "unsupported_mapping", "message_bound", "nonempty_start", "missing_item_start", "tokenizer_unavailable", "work_bound"].contains(reason) else { throw CollectorError.invalidRecord }
-                    visible.invalidate(reason: reason)
                     return
                 }
                 guard let count = integer(payload["count"]), count >= 0, count <= Int.max,
-                      let complete = boolean(payload["complete_from_start"]), let final = boolean(payload["final"]),
-                      boolean(payload["corrected"]) != nil, let mismatch = boolean(payload["text_mismatch"]),
+                      boolean(payload["complete_from_start"]) != nil, boolean(payload["final"]) != nil,
+                      boolean(payload["corrected"]) != nil, boolean(payload["text_mismatch"]) != nil,
                       let model = identifier(payload["model"]),
                       ["o1", "o3", "o4-mini", "gpt-5", "gpt-4.1", "gpt-4o"].contains(model),
                       payload["encoding"] as? String == "o200k_base" else { throw CollectorError.invalidRecord }
                 state.model = model
-                try visible.observe(itemID: item, count: Int(count), completeFromStart: complete,
-                                    final: final, textMismatch: mismatch, at: now)
                 if count > 0 { try monitor?.setGenerating(true, turnID: turn, at: now) }
                 return
             }
@@ -861,10 +804,8 @@ public actor LogCollector {
                     state.hasGap = true
                     monitor = try restoredMonitor(thread: thread, state: state, at: now)
                     state.requestTiming = nil
-                    state.serverTiming = nil
                     try monitor?.markGap(at: now)
                 }
-                visible = VisibleWindow()
                 try monitor?.startTurn(turn, at: now)
                 state.requestTiming = recordTime(object).map { RequestTiming(at: $0) }
             }
@@ -878,7 +819,6 @@ public actor LogCollector {
             if !historical {
                 if state.turnID == turn, let time = recordTime(object) { state.requestTiming?.finish(at: time) }
                 try monitor?.finishTurn(turn, outcome: outcome, at: now)
-                if monitor?.activeTurnID == nil { visible.invalidate(reason: "no_active_turn", partial: false) }
             }
         case "token_count":
             consumeDetails("token_count", payload: payload, state: &state)

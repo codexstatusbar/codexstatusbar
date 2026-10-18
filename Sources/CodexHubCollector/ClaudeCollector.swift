@@ -360,10 +360,9 @@ public actor ClaudeCollector {
         SessionSnapshot(id: "claude:" + t.id, cwd: t.cwd, model: t.model, monitor: t.monitor, lastObserved: t.updated,
                         hasGap: t.hasGap, source: .rolloutLog, processes: [], sourceReconciliationPending: false,
                         observationStopped: false, activity: t.monitor.activity, hookCompletionCandidate: false,
-                        liveRate: nil, liveMeasurement: .unavailable, liveUnavailableReason: "direct_source_required",
                         observedCLIRoot: t.root, parentThreadID: nil,
                         usageDetails: SessionUsageDetails(reasoningEffort: t.effort, serviceTier: t.tier),
-                        serverTiming: nil, provider: .claude, process: t.process)
+                        provider: .claude, process: t.process)
     }
 
     /// `procStart` is written in UTC, e.g. "Sat Oct 17 18:18:23 2026".
