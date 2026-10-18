@@ -69,6 +69,10 @@ import CodexHubCollector
         try capture(model, "connection-full", output, dark: false, height: 900)
         model.language = .english
         try capture(model, "readme-connection-en", output, dark: false, height: 900)
+        let readme_connection_en_language = model.language
+        model.language = .korean
+        try capture(model, "readme-connection-ko", output, dark: false, height: 900)
+        model.language = readme_connection_en_language
         model.language = .korean
         model.page = .overview
         try set([a,b], verified: [a.key])
@@ -134,6 +138,10 @@ import CodexHubCollector
         model.page = .preferences
         try capture(model, "preferences-english", output, dark: false)
         try capture(model, "readme-settings-en", output, dark: true, height: 900)
+        let readme_settings_en_language = model.language
+        model.language = .korean
+        try capture(model, "readme-settings-ko", output, dark: true, height: 900)
+        model.language = readme_settings_en_language
         model.page = .overview
         try capture(model, "overview-english", output, dark: false)
         model.language = .korean
@@ -256,6 +264,10 @@ import CodexHubCollector
         try capture(historyModel, "graphics-detail-dark", output, dark: true, height: 900)
         historyModel.language = .english
         try capture(historyModel, "readme-details-en", output, dark: true, height: 900)
+        let readme_details_en_language = historyModel.language
+        historyModel.language = .korean
+        try capture(historyModel, "readme-details-ko", output, dark: true, height: 900)
+        historyModel.language = readme_details_en_language
         historyModel.rateUnit = .minute
         historyModel.language = .english
         try capture(historyModel, "graphics-detail-light-minute", output, dark: false, height: 900)

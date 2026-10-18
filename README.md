@@ -20,6 +20,7 @@ Tokloom is a native menu bar monitor for developers using Codex or Claude Code. 
 
 - **Codex and Claude Code together** — running Claude Code sessions appear beside Codex ones, each marked with its own icon, and their speeds add up to one combined number (see [Claude Code sessions](#claude-code-sessions)).
 - **Follow your work** — menu bar `t/s` or `t/m`, per-process speed, and working/idle states.
+- **See your limits** — the 5-hour session and weekly remaining usage of Codex and Claude, in the menu bar and in a column per provider on the overview, with time until reset (see [Account usage limits](#account-usage-limits)).
 - **Keep 30 minutes of history** — minute-by-minute output charts that survive app restarts.
 - **Inspect each session** — model, reasoning effort, context utilization, input/output tokens, and remaining usage allowance.
 - **Feel at home on macOS** — a compact 460pt popover, translucent glass styling, light/dark appearances, and language settings.
@@ -131,13 +132,13 @@ Working processes appear above idle ones. Details includes:
 - **Remaining usage allowance**: `100 - used_percent`, followed by time until reset. For example, 43% used becomes `57% left · 6d 19h`. The countdown comes from `resets_at`, not the quota window length.
 - Reported request tier and the Codex home's default speed setting. Fast/Ultrafast request metadata is separate from defaults; `priority` and `fast` display as Fast.
 
-Limits are each session's last reported values. Tokloom does not sum account limits or make a separate server query. Missing reset times remain unknown; elapsed deadlines show awaiting reset. An allowance is not assumed to have refreshed without a new report.
+Limits are each session's last reported values. Tokloom does not sum these per-session limits. Account-wide limits are described under [Account usage limits](#account-usage-limits). Missing reset times remain unknown; elapsed deadlines show awaiting reset. An allowance is not assumed to have refreshed without a new report.
 
 Profiles, CLI overrides, and the server's actual response tier can differ from the default. Missing request metadata remains unknown. Only a simple root-level `service_tier` setting is read from the home configuration; Tokloom does not modify it.
 
 ## Charts and local history
 
-Overview and Details chart **newly observed output-token increments** over the last 30 minutes. Fixed one-minute buckets start at second `00` of each wall-clock minute. Without new observations, bar totals stay unchanged; the displayed window advances once per minute. These are output-volume charts, not speed charts, and are unaffected by the `t/s`/`t/m` setting.
+Overview and Details chart **newly observed output-token increments** over the last 30 minutes. Fixed one-minute buckets start at second `00` of each wall-clock minute. Without new observations, bar totals stay unchanged; the displayed window advances once per minute. These are output-volume charts, not speed charts, and are unaffected by the `t/s`/`t/m` setting. The overview also draws one chart per provider beside that provider's usage limits.
 
 Samples are saved in a protected SQLite metadata database. On app restart or reboot, the last 30 minutes are restored using stored timestamps. Live cumulative-counter anchors are not restored, so growth while the app was closed is not added as newly observed output. The overview chart includes only currently connected independent CLI roots and is hidden during collection errors.
 
@@ -145,7 +146,7 @@ Clearing collected metadata also clears chart history. Original Codex logs remai
 
 ## Settings and connection
 
-**Settings** provides language, display unit, hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
+**Settings** provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
 
 **Connection** provides log-path selection/copying, an immediate connection check, optional hooks, collection diagnostics, and experimental managed-run instructions. Hook controls appear only here. Paths and commands have individual copy buttons.
 
@@ -179,10 +180,18 @@ Server timing diagnostics have been removed from the app because the available m
 Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `CLAUDE_CONFIG_DIR` or `~/.claude`. A session is listed only while its `sessions/<pid>.json` matches a live process (PID and start time); the transcript under `projects/` supplies usage. Nothing is modified and no prompt or response text is stored.
 
 - **Same measurement** — each message's `output_tokens` (including thinking) divided by the time from the last user/tool-result entry to the message's last block. Tool execution falls between those entries, so it is excluded, as for Codex. Server queue and prefill time remain included.
-- **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview also lists each provider's share.
+- **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview shows a column per provider with its own speed and chart.
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
-- **Not available for Claude**: remaining usage allowance, context utilization (the window size is not logged), hooks and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
+- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged), hooks and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
 - Collection starts only after the Codex home connects. The 30-minute chart history of Claude sessions is saved and restored with the Codex history.
+
+## Account usage limits
+
+The overview shows one column per provider, and the menu bar can list the same numbers as `S` (5-hour session) and `W` (weekly) with the share still unused. They refresh every five minutes.
+
+- **Codex** — read from the newest `rate_limits` in the local session logs (`~/.codex/sessions`), only while `auth.json` exists. Windows that have already reset are hidden.
+- **Claude** — Claude Code does not log its limits, so Tokloom asks Anthropic's usage endpoint (`api.anthropic.com/api/oauth/usage`) with the OAuth token Claude Code already stored in the macOS Keychain (`Claude Code-credentials`). The token is read through `/usr/bin/security`, sent only to that endpoint, and never saved or logged. macOS may ask once to allow keychain access. Without a Claude Code login, or with an expired token, nothing is shown.
+- Windows are named by their length from the data: `5h` for the session and weekly for 10080 minutes. A window the provider does not report is left out and its slot stays empty so the weekly bar keeps its place.
 
 ## Current scope
 
@@ -209,7 +218,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 88 Core/Collector tests, 110 synthetic UI/process checks (UI01–UI103 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 88 Core/Collector tests, 111 synthetic UI/process checks (UI01–UI104 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 
