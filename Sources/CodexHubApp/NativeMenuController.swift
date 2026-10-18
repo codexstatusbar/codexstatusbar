@@ -27,13 +27,32 @@ import ServiceManagement
     private func observeTitle() {
         withObservationTracking {
             item.button?.toolTip = model.language.resolved == .korean ? "Tokloom — 출력 증가량 ÷ 도구 실행·대기를 뺀 보고 구간(추정). ≈: 최근 5초 화면 출력 추정." : "Tokloom — Output delta / report interval excluding tools (estimate). ≈: visible output estimate over 5 seconds."
-            item.button?.title = model.menuTitle
+            item.button?.attributedTitle = menuAttributedTitle()
             item.button?.image = model.menuTitle.isEmpty ? statusIcon : nil
             item.button?.imagePosition = model.menuTitle.isEmpty ? .imageOnly : .noImage
             item.button?.setAccessibilityLabel("Tokloom, " + (model.menuTitle.isEmpty ? model.text(model.summary) : model.menuTitle))
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in self?.observeTitle() }
         }
+    }
+
+    /// Provider icons take the place of text names so the bar stays short.
+    private func menuAttributedTitle() -> NSAttributedString {
+        let font = item.button?.font ?? NSFont.menuBarFont(ofSize: 0)
+        let result = NSMutableAttributedString()
+        for (index, part) in model.menuParts.enumerated() {
+            if index > 0 { result.append(NSAttributedString(string: "  ", attributes: [.font: font])) }
+            if let provider = part.provider, let icon = NSImage(systemSymbolName: provider == .codex ? "cloud.fill" : "asterisk", accessibilityDescription: provider.displayName)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [NSColor(provider.badgeColor)])) {
+                let attachment = NSTextAttachment()
+                attachment.image = icon
+                attachment.bounds = CGRect(x: 0, y: -2, width: 13, height: 12)
+                result.append(NSAttributedString(attachment: attachment))
+                result.append(NSAttributedString(string: " ", attributes: [.font: font]))
+            }
+            result.append(NSAttributedString(string: part.text, attributes: [.font: font]))
+        }
+        return result
     }
 
     @objc private func toggle() {

@@ -114,7 +114,24 @@ struct UsageHistoryPoint: Identifiable, Equatable {
 
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
-enum MenuField: String, CaseIterable { case speed, codexWeekly, claudeWeekly }
+enum MenuField: String, CaseIterable {
+    case speed, codexWeekly, claudeWeekly, codexSession, claudeSession
+    static let defaults = Set(allCases)
+    var label: String {
+        switch self {
+        case .speed: "Speed"
+        case .codexWeekly: "Codex weekly remaining"
+        case .claudeWeekly: "Claude weekly remaining"
+        case .codexSession: "Codex session remaining"
+        case .claudeSession: "Claude session remaining"
+        }
+    }
+    var icon: String { self == .speed ? "speedometer" : "calendar" }
+}
+
+extension ProviderQuota {
+    var field: MenuField { provider == .codex ? (isWeekly ? .codexWeekly : .codexSession) : (isWeekly ? .claudeWeekly : .claudeSession) }
+}
 
 @MainActor @Observable final class HubPresentation {
     var appName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Tokloom" }
@@ -124,8 +141,9 @@ enum MenuField: String, CaseIterable { case speed, codexWeekly, claudeWeekly }
     private(set) var sessionGroups: [ThreadKey: [SessionPresentation]] = [:]
     var unattachedProcesses: [ProcessIdentity] = []
     var frame: ReportedFrame?
-    /// Weekly windows of the providers that have a login; a provider without one is absent.
-    var quotas: [SessionProvider: ProviderQuota] = [:]
+    /// Session and weekly windows of the providers that have a login; a provider without one is absent.
+    var quotas: [ProviderQuota] = []
+    var clock: () -> Date = { Date() }
     var rateUnit = RateUnit.second
     var updateRateUnit: ((RateUnit) -> Void)?
     var configuredServiceTier: ServiceTier?
@@ -137,7 +155,7 @@ enum MenuField: String, CaseIterable { case speed, codexWeekly, claudeWeekly }
     var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
     /// What the menu bar title shows; the icon stays when nothing selected has a value.
-    var menuFields: Set<MenuField> = Set(MenuField.allCases)
+    var menuFields: Set<MenuField> = MenuField.defaults
     var hideIdle = false
     var hideUnattached = false
     var retentionDays = 7
@@ -345,15 +363,36 @@ enum MenuField: String, CaseIterable { case speed, codexWeekly, claudeWeekly }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "대기 중" }
         return "상태 미확인"
     }
-    var menuTitle: String {
-        let rate = menuFields.contains(.speed) && aggregateRate != nil && error == nil && summary != "—" ? summary + " " + rateUnit.suffix : ""
-        let weekly = SessionProvider.allCases.filter { menuFields.contains($0 == .codex ? .codexWeekly : .claudeWeekly) }
-        return ([rate] + weekly.compactMap { quotaText($0, short: true) }).filter { !$0.isEmpty }.joined(separator: " · ")
+    /// One menu bar item: a provider icon (nil for the speed) followed by its text.
+    struct MenuPart: Equatable { let provider: SessionProvider?; let text: String }
+    var menuParts: [MenuPart] {
+        var parts: [MenuPart] = []
+        if menuFields.contains(.speed), aggregateRate != nil, error == nil, summary != "—" { parts.append(MenuPart(provider: nil, text: summary + " " + rateUnit.suffix)) }
+        let shown = quotas.filter { menuFields.contains($0.field) }.sorted {
+            $0.provider != $1.provider ? $0.provider == .codex : $0.windowMinutes < $1.windowMinutes
+        }
+        return parts + shown.map { MenuPart(provider: $0.provider, text: ($0.isWeekly ? "" : windowLabel($0) + " ") + String(Int($0.remainingPercent.rounded())) + "%" + (remainingTime($0).map { " " + $0 } ?? "")) }
     }
-    /// "Codex 61%" (menu bar: "CX 61%") is the share of the weekly window still unused.
-    func quotaText(_ provider: SessionProvider, short: Bool = false) -> String? {
-        guard let quota = quotas[provider] else { return nil }
-        return (short ? (provider == .codex ? "CX" : "CL") : provider.displayName) + " " + String(Int(quota.remainingPercent.rounded())) + "%"
+    /// Plain-text form of the menu bar, used for accessibility and tests; the bar itself draws icons.
+    var menuTitle: String {
+        menuParts.map { ($0.provider.map { $0 == .codex ? "CX " : "CL " } ?? "") + $0.text }.joined(separator: " · ")
+    }
+    /// "Codex 61%" (menu bar: "CX 61%", a session window "CX 5h 90%") is the share of that window still unused.
+    func quotaText(_ quota: ProviderQuota, short: Bool = false) -> String {
+        let name = short ? (quota.provider == .codex ? "CX" : "CL") : quota.provider.displayName
+        return name + (quota.isWeekly ? "" : " " + windowLabel(quota)) + " " + String(Int(quota.remainingPercent.rounded())) + "%"
+    }
+    /// Time until the window resets, compact: "3d 4h", "2h 13m", "45m".
+    func remainingTime(_ quota: ProviderQuota) -> String? {
+        guard let reset = quota.resetsAt else { return nil }
+        let minutes = Int(reset.timeIntervalSince(clock()) / 60)
+        guard minutes > 0 else { return nil }
+        if minutes >= 1440 { return "\(minutes / 1440)d \(minutes % 1440 / 60)h" }
+        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+    }
+    /// Session windows are named by their length, e.g. "5h".
+    func windowLabel(_ quota: ProviderQuota) -> String {
+        quota.windowMinutes % 60 == 0 ? "\(quota.windowMinutes / 60)h" : "\(quota.windowMinutes)m"
     }
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
     func rate(for session: SessionPresentation) -> String {

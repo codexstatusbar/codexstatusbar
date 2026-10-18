@@ -96,21 +96,25 @@ struct HubView: View {
         }
     }
 
-    private var weeklyQuota: some View {
+    private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
-            Text(model.text("Weekly remaining")).font(.system(size: 10, weight: .medium)).tracking(0.5).foregroundStyle(secondary)
+            Text(model.text("Usage remaining")).font(.system(size: 10, weight: .medium)).tracking(0.5).foregroundStyle(secondary)
             ForEach(SessionProvider.allCases, id: \.self) { provider in
-                if let quota = model.quotas[provider] {
+                ForEach(model.quotas.filter { $0.provider == provider }.sorted { $0.windowMinutes < $1.windowMinutes }, id: \.windowMinutes) { quota in
                     HStack(spacing: 10) {
                         ProviderBadge(provider: provider, size: 22)
+                        Text(model.text(quota.isWeekly ? "Weekly" : "Session") + (quota.isWeekly ? "" : " " + model.windowLabel(quota)))
+                            .font(.system(size: 10)).foregroundStyle(secondary).frame(width: 64, alignment: .leading)
                         ProgressView(value: quota.remainingPercent, total: 100).tint(provider.badgeColor)
                         Text(String(Int(quota.remainingPercent.rounded())) + "%").font(.system(size: 12, weight: .medium)).monospacedDigit().frame(width: 40, alignment: .trailing)
                         if let reset = quota.resetsAt {
-                            Text(reset.formatted(.dateTime.month().day().hour().minute())).font(.system(size: 10)).foregroundStyle(secondary)
+                            Text(model.remainingTime(quota) ?? "—").font(.system(size: 10)).monospacedDigit().foregroundStyle(secondary)
+                                .frame(width: 52, alignment: .trailing)
+                                .help(reset.formatted(.dateTime.month().day().hour().minute()))
                         }
                     }.accessibilityElement(children: .combine)
-                        .accessibilityLabel(model.quotaText(provider).map { $0 + " " + model.text("left") } ?? "")
+                        .accessibilityLabel(model.quotaText(quota) + " " + model.text("left"))
                 }
             }
         }
@@ -152,7 +156,7 @@ struct HubView: View {
                 Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Tokloom never approves commands."), systemImage: "hand.raised")
                     .font(.system(size: 11)).foregroundStyle(Color.primary)
             }
-            if !model.quotas.isEmpty { weeklyQuota }
+            if !model.quotas.isEmpty { quotaSection }
             Divider()
             VStack(spacing: 14) {
                 HStack {
@@ -250,11 +254,11 @@ struct HubView: View {
             settingsSection("Menu bar", subtitle: "Choose what the menu bar shows.") {
                 ForEach(Array(MenuField.allCases.enumerated()), id: \.element) { index, field in
                     if index > 0 { Divider() }
-                    let label = field == .speed ? "Speed" : field == .codexWeekly ? "Codex weekly remaining" : "Claude weekly remaining"
-                    settingsRow(label, icon: field == .speed ? "speedometer" : "calendar") {
+                    let label = field.label
+                    settingsRow(label, icon: field.icon) {
                         Toggle(isOn: Binding(get: { model.menuFields.contains(field) },
                                              set: { if $0 { model.menuFields.insert(field) } else { model.menuFields.remove(field) }; model.saveDisplayPreferences?() })) {
-                            Label(model.text(label), systemImage: field == .speed ? "speedometer" : "calendar")
+                            Label(model.text(label), systemImage: field.icon)
                         }
                     }
                 }

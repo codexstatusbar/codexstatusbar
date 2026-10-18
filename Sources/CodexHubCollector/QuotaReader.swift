@@ -7,11 +7,11 @@ public enum QuotaReader {
     private static let tailBytes = 512 * 1024
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
-    /// Newest `rate_limits` found in the tail of the most recently written rollout files.
-    public static func codexWeekly(home: URL, now: Date = Date()) -> ProviderQuota? {
+    /// Windows of the newest `rate_limits` found in the tail of the most recently written rollout files.
+    public static func codexWindows(home: URL, now: Date = Date()) -> [ProviderQuota] {
         guard FileManager.default.fileExists(atPath: home.appendingPathComponent("auth.json").path),
               let walker = FileManager.default.enumerator(at: home.appendingPathComponent("sessions"),
-                                                           includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
+                                                           includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
         var files: [(URL, Date)] = []
         for case let url as URL in walker where url.pathExtension == "jsonl" {
             files.append((url, (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast))
@@ -23,21 +23,22 @@ public enum QuotaReader {
             try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
             let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
             for line in text.split(separator: "\n").reversed() {
-                if let quota = QuotaParser.codexWeekly(rolloutLine: String(line)), quota.isCurrent(at: now) { return quota }
+                let windows = QuotaParser.codexWindows(rolloutLine: String(line)).filter { $0.isCurrent(at: now) }
+                if !windows.isEmpty { return windows }
             }
         }
-        return nil
+        return []
     }
 
-    /// nil when no Claude Code login exists in the keychain or the endpoint refuses the token.
-    public static func claudeWeekly() async -> ProviderQuota? {
-        guard let token = claudeToken() else { return nil }
+    /// Empty when no Claude Code login exists in the keychain or the endpoint refuses the token.
+    public static func claudeWindows() async -> [ProviderQuota] {
+        guard let token = claudeToken() else { return [] }
         var request = URLRequest(url: usageURL, timeoutInterval: 10)
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         guard let (body, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return QuotaParser.claudeWeekly(usageJSON: body)
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
+        return QuotaParser.claudeWindows(usageJSON: body)
     }
 
     /// The stored credential JSON is read through the system `security` tool and never kept or logged.

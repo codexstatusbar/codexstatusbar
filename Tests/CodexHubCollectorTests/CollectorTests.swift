@@ -793,8 +793,8 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     defer { try? FileManager.default.removeItem(at: home) }
     let line = #"{"payload":{"rate_limits":{"primary":{"used_percent":25,"window_minutes":10080,"resets_at":4102444800}}}}"#
     try ("{}\n" + line + "\n{\"x\":1}\n").write(to: day.appendingPathComponent("a.jsonl"), atomically: true, encoding: .utf8)
-    #expect(QuotaReader.codexWeekly(home: home) == nil)   // no auth.json: not logged in
+    #expect(QuotaReader.codexWindows(home: home).isEmpty)   // no auth.json: not logged in
     try "{}".write(to: home.appendingPathComponent("auth.json"), atomically: true, encoding: .utf8)
-    #expect(QuotaReader.codexWeekly(home: home)?.remainingPercent == 75)
-    #expect(QuotaReader.codexWeekly(home: home, now: Date(timeIntervalSince1970: 4102444801)) == nil)   // window already reset
+    #expect(QuotaReader.codexWindows(home: home).first?.remainingPercent == 75)
+    #expect(QuotaReader.codexWindows(home: home, now: Date(timeIntervalSince1970: 4102444801)).isEmpty)   // window already reset
 }

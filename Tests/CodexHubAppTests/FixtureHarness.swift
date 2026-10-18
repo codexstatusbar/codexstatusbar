@@ -285,12 +285,14 @@ import CodexHubCollector
         readme.sessions = [historyModel.sessions[0], claudeRow]
         readme.frame = try ReportedFrame(monitors: readme.sessions.map(\.monitor), verifiedIndependentThreads: Set(readme.sessions.map(\.id)), at: 303)
         precondition(readme.providerBreakdown?.hasPrefix("Codex ") == true && readme.providerBreakdown?.contains("Claude 60") == true, "UI96 combined speed lists each provider when both run")
-        readme.quotas = [.codex: ProviderQuota(provider: .codex, usedPercent: 39, resetsAt: Date(timeIntervalSince1970: 1_792_909_120)),
-                         .claude: ProviderQuota(provider: .claude, usedPercent: 72.4, resetsAt: nil)]
-        precondition(readme.menuTitle.hasSuffix("CX 61% · CL 28%") && readme.quotaText(.claude) == "Claude 28%", "UI97 menu and root page list each logged-in provider's weekly remaining")
-        readme.menuFields = [.claudeWeekly]
-        precondition(readme.menuTitle == "CL 28%", "UI99 menu bar shows only the selected fields")
-        readme.menuFields = Set(MenuField.allCases)
+        readme.clock = { Date(timeIntervalSince1970: 1_792_900_000) }
+        readme.quotas = [ProviderQuota(provider: .codex, usedPercent: 39, resetsAt: Date(timeIntervalSince1970: 1_792_900_000 + 3 * 86_400 + 4 * 3_600 + 30)),
+                         ProviderQuota(provider: .claude, windowMinutes: 300, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1_792_900_000 + 2 * 3_600 + 13 * 60 + 30)),
+                         ProviderQuota(provider: .claude, usedPercent: 72.4, resetsAt: nil)]
+        precondition(readme.menuTitle.hasSuffix("CX 61% 3d 4h · CL 5h 90% 2h 13m · CL 28%") && readme.quotaText(readme.quotas[1]) == "Claude 5h 90%", "UI97 menu lists every window with its remaining time; weekly without a reset shows none")
+        readme.menuFields = [.claudeSession, .claudeWeekly]
+        precondition(readme.menuTitle == "CL 5h 90% 2h 13m · CL 28%", "UI99 menu bar shows only the selected fields, shortest window first")
+        readme.menuFields = MenuField.defaults
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
         try capture(readme, "readme-overview-en", output, dark: true)
