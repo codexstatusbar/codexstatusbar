@@ -97,11 +97,7 @@ struct HubView: View {
     }
 
     private var measurementCaption: String {
-        if model.measurementMode == .live, !model.sessions.isEmpty,
-           model.sessions.allSatisfy({ ($0.observedSource ?? $0.monitor.counter.source) != .directRelay }) {
-            return model.text("실시간 추정은 관리형 직접 연결이 필요합니다")
-        }
-        return model.aggregateRate != nil && model.error == nil ? model.text(model.measurementMode.label) : model.text(model.summary)
+        model.aggregateRate != nil && model.error == nil ? model.text("생성 구간 추정") : model.text(model.summary)
     }
 
     private var overview: some View {
@@ -222,8 +218,6 @@ struct HubView: View {
                 }.onChange(of: model.language) { _, language in model.saveLanguage?(language) }
                 }
                 Divider()
-                settingsRow("속도 계산 방식") { modePicker }
-                Divider()
                 settingsRow("속도 단위") {
                 Picker(model.text("속도 단위"), selection: Binding(get: { model.rateUnit }, set: { model.updateRateUnit?($0) })) {
                     ForEach(RateUnit.allCases, id: \.self) { unit in
@@ -231,8 +225,6 @@ struct HubView: View {
                     }
                 }.disabled(model.updateRateUnit == nil)
                 }
-                Text(model.text("Live requires complete managed visible text and a supported model. Warm-up and unavailable measurements remain —."))
-                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             settingsSection("Behavior", subtitle: "Control startup and session visibility.") {
                 settingsRow("Hide idle sessions", icon: "eye.slash") {
@@ -357,11 +349,6 @@ struct HubView: View {
     private func connectionNote(_ text: String) -> some View {
         Text(model.text(text)).font(.system(size: 11)).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-    }
-    private var modePicker: some View {
-        Picker(model.text("속도 계산 방식"), selection: Binding(get: { model.measurementMode }, set: { model.updateMeasurementMode?($0) })) {
-            ForEach(MeasurementMode.allCases, id: \.self) { Text(model.text($0.label)).tag($0) }
-        }.disabled(model.updateMeasurementMode == nil)
     }
     private var hooksControls: some View {
         VStack(alignment: .leading, spacing: 8) {

@@ -35,7 +35,7 @@ struct SessionGraphics: View {
             section("요약", icon: "list.bullet.rectangle") {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: wide ? 4 : 2), spacing: 10) {
                     metric("작업 상태 / 수집 방식", sourceStatus, icon: "doc.text")
-                    metric(model.measurementMode.label, model.rate(for: session) + " " + model.rateUnit.suffix, icon: "bolt.fill")
+                    metric("생성 구간 추정", model.rate(for: session) + " " + model.rateUnit.suffix, icon: "bolt.fill")
                     metric(lastTurn?.isObservedAveragePartial == true ? "직전 관측 구간 평균 · 도구 포함" : "직전 작업 평균 · 도구 포함", lastTurn?.workAverage.map { model.displayRate($0) + " " + model.rateUnit.suffix } ?? model.text("미확인"), icon: "chart.bar")
                     metric("모델 / 추론 강도", session.model ?? model.text("미확인"), icon: "cube", subtitle: session.usageDetails?.reasoningEffort)
                 }
@@ -82,7 +82,7 @@ struct SessionGraphics: View {
                 } right: {
                     information("속도 계산 범위", model.coverage)
                     information("Last observation", session.lastObserved?.formatted(date: .numeric, time: .standard))
-                    if model.measurementMode == .reported { information("계산 기준", model.text("사용량 증가량 ÷ 도구 시간을 뺀 보고 구간")) }
+                    information("계산 기준", model.text("사용량 증가량 ÷ 도구 시간을 뺀 보고 구간"))
                     Text(model.text(session.rootObserved ? "측정과 중복 여부가 확인된 세션만 합계에 포함합니다." : "중복 여부가 확인되지 않아 합계에서 제외된 세션입니다.")).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
@@ -139,9 +139,6 @@ struct SessionGraphics: View {
 
     private var measurementNotes: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if model.measurementMode == .live, let reason = session.liveUnavailableReason {
-                note("Live: " + reason)
-            }
             if session.hookCompletionCandidate { note("작업 종료 신호를 받았습니다. 최종 상태를 확인하고 있습니다.") }
             if session.sourceReconciliationPending { note("수집 원본의 사용량을 대조하는 중입니다.") }
             if session.observationStopped { note("수집이 중단되어 새로운 사용량 기준이 필요합니다.") }

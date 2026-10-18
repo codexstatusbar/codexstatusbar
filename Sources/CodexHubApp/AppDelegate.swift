@@ -28,13 +28,6 @@ import CodexHubCollector
             model.rateUnit = unit
             defaults.set(unit.rawValue, forKey: "rateUnit")
         }
-        model.measurementMode = defaults.string(forKey: "measurementModeV2").flatMap(MeasurementMode.init(rawValue:)) ?? .reported
-        defaults.set(model.measurementMode.rawValue, forKey: "measurementModeV2")
-        model.updateMeasurementMode = { [weak self] mode in
-            guard let self else { return }
-            model.measurementMode = mode
-            defaults.set(mode.rawValue, forKey: "measurementModeV2")
-        }
         model.hookAction = { [weak self] action in self?.runHooks(action) }
         model.hideIdle = defaults.bool(forKey: "hideIdle")
         model.hideUnattached = defaults.bool(forKey: "hideUnattached")
@@ -245,8 +238,7 @@ import CodexHubCollector
                                 sourceReconciliationPending: session.sourceReconciliationPending,
                                 observationStopped: session.observationStopped,
                                 observedActivity: session.activity, hookCompletionCandidate: session.hookCompletionCandidate,
-                                liveRate: session.liveRate, liveMeasurement: session.liveMeasurement,
-                                liveUnavailableReason: session.liveUnavailableReason, usageDetails: session.usageDetails,
+                                                                usageDetails: session.usageDetails,
                                 serverTiming: session.serverTiming, provider: session.provider)
         }
         let rows = connected.sessions.compactMap { session -> SessionPresentation? in

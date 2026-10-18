@@ -13,7 +13,6 @@ import CodexHubCollector
         try verifyRunningProcesses()
         let model = HubPresentation()
         model.language = .korean
-        model.measurementMode = .reported
         var a = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-a"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
         try a.setConnectivity(.connected, at: 0)
         try a.startTurn("fixture-turn", at: 1)
@@ -75,22 +74,7 @@ import CodexHubCollector
         try set([a,b], verified: [a.key])
         precondition(model.coverage == "2개 대상 중 1개 계산 가능" && model.summary == "150", "UI04 scope exclusion")
         try capture(model, "partial", output, dark: false)
-        model.measurementMode = .live
-        model.sessions[0].liveRate = 12
-        model.sessions[0].liveMeasurement = .estimated
-        model.sessions[1].liveRate = 34
-        model.sessions[1].liveMeasurement = .estimated
-        precondition(model.summary == "≈12" && model.coverage == "2개 대상 중 1개 계산 가능", "UI12 Live excludes unknown roots and reported samples")
-        try capture(model, "live-partial", output, dark: false)
-        model.sessions[0].liveMeasurement = .warmingUp
-        model.sessions[0].liveRate = nil
-        precondition(model.aggregateRate == nil && model.rate(for: model.sessions[0]) == "—", "UI13 warming up is not numeric zero")
-        model.sessions[0].liveMeasurement = .estimated
-        model.sessions[0].liveRate = 12
-        model.sessions[0].sourceReconciliationPending = true
-        precondition(model.aggregateRate == nil, "UI14 source reconciliation suppresses Live subtotal")
-        model.measurementMode = .reported
-        precondition(model.summary == "150", "UI15 work averages remain separate from Live")
+        precondition(model.summary == "150", "UI15 work averages are the only estimate")
         try a.finishTurn("fixture-turn", outcome: .completed, at: 6)
         try b.finishTurn("fixture-turn", outcome: .completed, at: 6)
         try set([a,b], verified: [a.key,b.key])
@@ -157,12 +141,10 @@ import CodexHubCollector
         model.page = .preferences
         try capture(model, "preferences-korean", output, dark: false)
         try set([a,b], verified: [a.key,b.key])
-        model.measurementMode = MeasurementMode(rawValue: "server") ?? .reported
-        precondition(MeasurementMode.allCases == [.reported, .live] && model.measurementMode == .reported && model.aggregateRate != nil, "UI43 removed server preference falls back to a working estimate")
+        precondition(model.aggregateRate != nil, "UI43 the single estimate keeps working")
         precondition(!HelperConnection.command(home: "/tmp/home", codex: "/tmp/codex", helper: "/tmp/helper").contains("--server-timing"), "UI44 app launch commands do not enable server timing")
         model.page = .overview
         try capture(model, "server-unavailable", output, dark: false)
-        precondition(HubPresentation().measurementMode == .reported, "UI45 usable estimate remains the default")
         let beforeServerMetadata = model.aggregateRate
         model.sessions[0].serverTiming = ServerTiming.parse(logLine: #"TRACE codex_api::responses_websocket_timing: thread_id=fixture-a turn_id=fixture-turn warmup=false payload={"type":"responsesapi.websocket_timing","timing_metrics":{"num_sampled_tokens_total":163,"websocket_output_text_delta_count":159,"websocket_output_text_delta_tbt_ms":16.467705253164556,"critical_path":{"coverage":"missing_harness_boundary"}}}"#)
         precondition(model.sessions[0].serverTiming?.sampledTokens == 163 && model.aggregateRate == beforeServerMetadata, "UI46 output events do not become fabricated token throughput")
@@ -178,7 +160,6 @@ import CodexHubCollector
         model.sessions = [SessionPresentation(monitor: previewWorking, cwd: "/Synthetic/codexstatusbar", model: "GPT-6 Astra · Medium"), SessionPresentation(monitor: previewIdle, cwd: "/Synthetic/ocrfolio", model: "GPT-6 Astra · Medium")]
         model.unattachedProcesses = [ProcessIdentity(pid: 12345, osStartTime: "fixture")]
         model.frame = try ReportedFrame(monitors: [previewWorking, previewIdle], verifiedIndependentThreads: [], at: 3)
-        model.measurementMode = .reported
         model.page = .overview
         model.notice = "Synthetic design preview"
         precondition(model.processCount == 3 && model.activeProcessCount == 1 && model.idleProcessCount == 1, "UI47 process counts come from observed states")

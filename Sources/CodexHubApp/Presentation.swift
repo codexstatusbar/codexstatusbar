@@ -18,9 +18,6 @@ struct SessionPresentation: Identifiable {
     var observationStopped = false
     var observedActivity: Activity?
     var hookCompletionCandidate = false
-    var liveRate: Double?
-    var liveMeasurement: CodexHubCore.Measurement = .unavailable
-    var liveUnavailableReason: String?
     var usageDetails: SessionUsageDetails?
     var serverTiming: ServerTiming?
     var provider = SessionProvider.codex
@@ -106,17 +103,6 @@ enum RateUnit: String, CaseIterable {
     var multiplier: Double { self == .second ? 1 : 60 }
 }
 
-enum MeasurementMode: String, CaseIterable {
-    case reported, live
-    var label: String {
-        switch self {
-        case .reported: "도구 제외 추정"
-        case .live: "실시간 추정 · 5초"
-        }
-    }
-    var symbol: String { self == .live ? "≈" : "" }
-}
-
 struct UsageHistoryPoint: Identifiable, Equatable {
     static let windowSeconds: Double = 1800
     static let binSeconds: Double = 60
@@ -138,8 +124,6 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var frame: ReportedFrame?
     var rateUnit = RateUnit.second
     var updateRateUnit: ((RateUnit) -> Void)?
-    var measurementMode: MeasurementMode = .reported
-    var updateMeasurementMode: ((MeasurementMode) -> Void)?
     var configuredServiceTier: ServiceTier?
     var language = AppLanguage.system
     var saveLanguage: ((AppLanguage) -> Void)?
@@ -331,7 +315,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         if error != nil { return "측정 불가" }
         guard !sessions.isEmpty else { return visibleUnattached.isEmpty ? "실행 없음" : "정보 미확인" }
         if sessions.allSatisfy({ $0.monitor.connectivity == .disconnected }) { return "연결 끊김" }
-        if let speed = aggregateRate { return displayRate(speed, symbol: measurementMode.symbol) }
+        if let speed = aggregateRate { return displayRate(speed) }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.monitor.activeTurnID != nil }) { return "계산 준비 중" }
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "대기 중" }
         return "상태 미확인"
@@ -343,11 +327,8 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
     func rate(for session: SessionPresentation) -> String {
         guard error == nil else { return "—" }
-        if measurementMode == .reported {
-            guard session.measurement == .reported || session.measurement == .warmingUp else { return "—" }
-            return displayRate(try? session.monitor.workAverageRate(at: frame?.time ?? 0))
-        }
-        return displayRate(session.liveMeasurement == .estimated ? session.liveRate : nil, symbol: "≈")
+        guard session.measurement == .reported || session.measurement == .warmingUp else { return "—" }
+        return displayRate(try? session.monitor.workAverageRate(at: frame?.time ?? 0))
     }
     // Group coverage as reported frames do; only observed CLI root counters contribute.
     private struct RunKey: Hashable {
@@ -359,28 +340,12 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
             unassignedThread = key.runID == nil ? key.threadID : nil
         }
     }
-    private var liveAggregate: (rate: Double?, measured: Int, eligible: Int, partial: Bool) {
-        let groups = Dictionary(grouping: sessions.filter { $0.activity != .idle }, by: { RunKey($0.id) })
-        var sum: Double?
-        var measured = 0
-        for rows in groups.values {
-            var complete = true
-            for row in rows {
-                if row.rootObserved, !row.sourceReconciliationPending, !row.observationStopped,
-                   row.monitor.connectivity == .connected, row.liveMeasurement == .estimated, let rate = row.liveRate, rate.isFinite, rate >= 0 {
-                    sum = (sum ?? 0) + rate
-                } else { complete = false }
-            }
-            if complete { measured += 1 }
-        }
-        return (sum?.isFinite == true ? sum : nil, measured, groups.count, measured != groups.count)
-    }
     var aggregateRate: Double? {
-        return measurementMode == .reported ? frame?.tokensPerSecond : liveAggregate.rate
+        return frame?.tokensPerSecond
     }
     /// Per-provider share of the combined rate; only shown when more than one provider is observed.
     var providerBreakdown: String? {
-        guard measurementMode == .reported, error == nil, let time = frame?.time,
+        guard error == nil, let time = frame?.time,
               Set(sessions.map(\.provider)).count > 1 else { return nil }
         let parts = SessionProvider.allCases.compactMap { provider -> String? in
             let rows = sessions.filter { $0.provider == provider }
@@ -393,9 +358,8 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     }
     var coverage: String {
         guard error == nil, let frame else { return "측정 불가" }
-        let live = liveAggregate
-        let measured = measurementMode == .reported ? frame.measuredRuns : live.measured
-        let eligible = measurementMode == .reported ? frame.eligibleRuns : live.eligible
+        let measured = frame.measuredRuns
+        let eligible = frame.eligibleRuns
         return language.resolved == .korean ? "\(eligible)개 대상 중 \(measured)개 계산 가능" : "\(measured) of \(eligible) eligible runs measured"
     }
     var freshness: String {

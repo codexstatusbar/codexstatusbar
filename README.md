@@ -10,7 +10,7 @@
     <a href="https://github.com/codexstatusbar/codexstatusbar/releases">Download</a> ·
     <a href="#screenshots">Explore the app</a> ·
     <a href="#build-and-run">Build from source</a> ·
-    <a href="#measurement-modes">How measurements work</a>
+    <a href="#speed-estimate">How measurements work</a>
   </p>
 </div>
 
@@ -103,18 +103,19 @@ The same packaging path is available locally:
 
 Output goes to `.build/dist/`. Packaging uses ad-hoc signing, not Apple distribution signing or notarization. Synthetic CI checks do not replace provider, hook-trust, or full native QA.
 
-## Measurement modes
+## Speed estimate
 
-Choose the measurement mode and display unit in Settings.
+There is a single estimate. Choose the display unit in Settings.
 
-| Mode | What it shows | Requirements and limits |
+| What it shows | How it is measured | Limits |
 | --- | --- | --- |
-| Tool-excluded estimate · default | Reported output tokens divided by an observed interval excluding tool execution/waiting | Updates on new usage reports. Holds while working and for 10 seconds after becoming idle; then the row shows `—` and leaves the aggregate. Some server response waiting may remain included. |
-| Live visible estimate · 5s | Estimated tokens `≈` from fully observed visible response text | Requires a managed direct connection and supported model. Unavailable for ordinary log connections. |
+| Generation-interval estimate | Reported output tokens divided by the interval in which the response was generated, excluding tool execution/waiting | Updates on new usage reports. Holds while working and for 10 seconds after becoming idle; then the row shows `—` and leaves the aggregate. |
+
+For Codex, the interval starts when the response headers arrive, read from Codex's own tracing log (`logs_2.sqlite`, opened read-only); time spent waiting for the first response is not counted. If that log has no matching entry, the interval falls back to the time since the previous usage report. Claude Code intervals start at the last user or tool-result entry. Neither source records the first token itself, so hidden reasoning latency can remain included.
 
 `t/s` means tokens per second; `t/m` means tokens per minute. The minute display multiplies the same rate by 60—it does not change the measurement interval to one minute. Warm-up, observation gaps, and unsupported sources show `—`, never a fabricated zero.
 
-The menu bar and overview sum only observed CLI roots with verified independent scope, using one selected mode. Direct and log observations for the same thread have a single authority. This is not an account-wide total including every child/subagent. Details explains scope and exclusions.
+The menu bar and overview sum only observed CLI roots with verified independent scope, using this one estimate. Direct and log observations for the same thread have a single authority. This is not an account-wide total including every child/subagent. Details explains scope and exclusions.
 
 ## Session groups
 
@@ -144,7 +145,7 @@ Clearing collected metadata also clears chart history. Original Codex logs remai
 
 ## Settings and connection
 
-**Settings** provides language, measurement mode/unit, hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
+**Settings** provides language, display unit, hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
 
 **Connection** provides log-path selection/copying, an immediate connection check, optional hooks, collection diagnostics, and experimental managed-run instructions. Hook controls appear only here. Paths and commands have individual copy buttons.
 
@@ -180,12 +181,12 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - **Same measurement** — each message's `output_tokens` (including thinking) divided by the time from the last user/tool-result entry to the message's last block. Tool execution falls between those entries, so it is excluded, as for Codex. Server queue and prefill time remain included.
 - **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview also lists each provider's share.
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
-- **Not available for Claude**: remaining usage allowance, context utilization (the window size is not logged), live visible estimate, hooks and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
-- Claude chart history is not restored after restarting Tokloom. Collection still starts after the Codex home connects.
+- **Not available for Claude**: remaining usage allowance, context utilization (the window size is not logged), hooks and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
+- Collection starts only after the Codex home connects. The 30-minute chart history of Claude sessions is saved and restored with the Codex history.
 
 ## Current scope
 
-Live estimation tokenizes only visible response text observed completely from the start of a managed direct relay, using official `o200k_base` assets. Assets and their MIT license are bundled beside the helper as SwiftPM resources, with no runtime download.
+The live visible-text estimator is no longer selectable in the app. It tokenizes only visible response text observed completely from the start of a managed direct relay, using official `o200k_base` assets. Assets and their MIT license are bundled beside the helper as SwiftPM resources, with no runtime download.
 
 Support requires an observed provider identifier exactly equal to `openai` and a model named `o1`, `o3`, `o4-mini`, `gpt-5`, `gpt-4.1`, or `gpt-4o`. Displaying model metadata is independent of this support list: a model can appear in the UI without supporting Live estimation. Other models/providers, missing metadata, incomplete starts, gaps, and stale observations remain unavailable. A provider identifier is not proof of the remote server's identity.
 
@@ -208,7 +209,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 79 Core/Collector tests, 103 synthetic UI/process checks (UI01–UI96 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 80 Core/Collector tests, 103 synthetic UI/process checks (UI01–UI96 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 
