@@ -157,7 +157,6 @@ The [optional Hook installer and recorder](optional-hooks.md) require explicit
 user consent and manual Codex `/hooks` trust. No installation or trust change
 was performed during implementation.
 
-Sources: installed Codex 0.163.0 generated schema from P0 (schema digest recorded
-in `docs/plan_tmp/2026-10-17-swift-native.md`), and
+Sources: installed Codex 0.163.0 generated schema from P0, and
 [official App Server documentation](https://developers.openai.com/codex/app-server).
 The installed schema, not current website drift, determines the implemented fields.
