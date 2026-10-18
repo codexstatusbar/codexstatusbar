@@ -167,9 +167,9 @@ struct SessionGraphics: View {
                         }
                         Button { model.page = .detail(child.id) } label: {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(model.text("보고 출력 · 30분")).font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text(model.text(model.rateUnit == .second ? "보고 출력 · 30초" : "보고 출력 · 30분")).font(.system(size: 10)).foregroundStyle(.secondary)
                                 ObservedTokenChart(points: model.usageHistory[child.id] ?? [], now: model.frame?.time ?? 0,
-                                                   emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset)
+                                                   emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset, unit: model.rateUnit)
                                     .allowsHitTesting(false)
                             }.frame(maxWidth: .infinity, minHeight: 56).contentShape(Rectangle())
                         }.buttonStyle(.plain)
@@ -187,11 +187,11 @@ struct SessionGraphics: View {
             HStack {
                 Text(model.text("관측 출력 토큰")).font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Text(model.text("최근 30분 · 1분 단위")).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(model.text(model.rateUnit == .second ? "최근 30초 · 1초 단위" : "최근 30분 · 1분 단위")).font(.system(size: 10)).foregroundStyle(.secondary)
             }
-            ObservedTokenChart(points: points, now: model.frame?.time ?? 0, emptyText: model.text("새 사용량 로그를 기다리는 중입니다"), wallClockOffset: model.chartWallClockOffset)
+            ObservedTokenChart(points: points, now: model.frame?.time ?? 0, emptyText: model.text("새 사용량 로그를 기다리는 중입니다"), wallClockOffset: model.chartWallClockOffset, unit: model.rateUnit)
             HStack {
-                Text(model.text("30분 전"))
+                Text(model.text(model.rateUnit == .second ? "30초 전" : "30분 전"))
                 Spacer()
                 Text(model.text("지금"))
             }.font(.system(size: 10)).foregroundStyle(.secondary)
@@ -266,19 +266,34 @@ struct ObservedTokenChart: View {
     let emptyText: String
     var compact = false
     var wallClockOffset: Double = 0
+    /// Seconds mode shows the last 30 s in 1 s bars, minutes mode the last 30 min in 1 min bars; both read the same 30 min of history.
+    var unit = RateUnit.minute
+    // Declared without the @State macro, which the Command Line Tools toolchain cannot expand.
+    private let hover = State<Double?>(initialValue: nil)
+    private var hoveredX: Double? { hover.wrappedValue }
+
+    private var binSeconds: Double { unit == .second ? 1 : UsageHistoryPoint.binSeconds }
+    private var windowSeconds: Double { unit == .second ? 30 : UsageHistoryPoint.windowSeconds }
 
     struct Bin: Identifiable {
         let id: Double
         let tokens: Double
     }
     private var windowEnd: Double {
-        (floor((now + wallClockOffset) / UsageHistoryPoint.binSeconds) + 1) * UsageHistoryPoint.binSeconds
+        (floor((now + wallClockOffset) / binSeconds) + 1) * binSeconds
     }
     var bins: [Bin] {
         let groups = Dictionary(grouping: points.filter {
-            $0.time + wallClockOffset >= windowEnd - UsageHistoryPoint.windowSeconds && $0.time <= now
-        }) { floor(($0.time + wallClockOffset) / UsageHistoryPoint.binSeconds) * UsageHistoryPoint.binSeconds }
+            $0.time + wallClockOffset >= windowEnd - windowSeconds && $0.time <= now
+        }) { floor(($0.time + wallClockOffset) / binSeconds) * binSeconds }
         return groups.keys.sorted().map { Bin(id: $0, tokens: groups[$0, default: []].reduce(0) { $0 + Double($1.outputTokens) }) }
+    }
+
+    // A bar holds one minute of output, so its rate is the minute average.
+    private func hoveredBin(_ bins: [Bin]) -> Bin? {
+        guard let x = hoveredX else { return nil }
+        let half = binSeconds / 2
+        return bins.first { abs($0.id + half - windowEnd - x) <= half }
     }
 
     var body: some View {
@@ -287,17 +302,56 @@ struct ObservedTokenChart: View {
                 Text(emptyText).font(.system(size: compact ? 10 : 12)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: compact ? 56 : 110)
             } else {
+                let hovered = hoveredBin(bins)
                 Chart(bins) { bin in
-                    BarMark(x: .value("Time", bin.id + UsageHistoryPoint.binSeconds / 2 - windowEnd), y: .value("Output tokens", bin.tokens), width: .fixed(compact ? 4 : 9))
+                    BarMark(x: .value("Time", bin.id + binSeconds / 2 - windowEnd), y: .value("Output tokens", bin.tokens / binSeconds * unit.multiplier), width: .fixed(compact ? 4 : 9))
                         .foregroundStyle(LinearGradient(colors: [.blue, .indigo], startPoint: .top, endPoint: .bottom))
                         .cornerRadius(2)
+                        .opacity(hovered == nil || hovered?.id == bin.id ? 1 : 0.45)
+                    if let hovered, hovered.id == bin.id {
+                        RuleMark(x: .value("Time", bin.id + binSeconds / 2 - windowEnd))
+                            .foregroundStyle(.clear)
+                            .annotation(position: .top, spacing: 2, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                                BarDetailCard(start: bin.id, tokens: bin.tokens, seconds: binSeconds, unit: unit, peak: bins.map(\.tokens).max() ?? bin.tokens)
+                            }
+                    }
                 }
-                .chartXScale(domain: -UsageHistoryPoint.windowSeconds...0.0)
+                .chartXSelection(value: hover.projectedValue)
+                .chartXScale(domain: -windowSeconds...0.0)
                 .chartXAxis(.hidden)
                 .chartYAxis { if !compact { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) } }
                 .frame(height: compact ? 56 : 110)
             }
         }
+    }
+}
+
+// Enlarged readout shown while the pointer is over a bar; one bar is one minute of output.
+private struct BarDetailCard: View {
+    let start: Double
+    let tokens: Double
+    let seconds: Double
+    let unit: RateUnit
+    let peak: Double
+
+    private var range: String {
+        let format = unit == .second ? Date.FormatStyle().hour().minute().second() : Date.FormatStyle().hour().minute()
+        let from = Date(timeIntervalSince1970: start), to = Date(timeIntervalSince1970: start + seconds)
+        return "\(from.formatted(format)) – \(to.formatted(format))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(range).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(String(format: "%.1f %@", tokens / seconds * unit.multiplier, unit.suffix))
+                .font(.system(size: 15, weight: .semibold).monospacedDigit())
+            Text("\(Int(tokens)) tokens").font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary)
+            ProgressView(value: peak > 0 ? tokens / peak : 0).progressViewStyle(.linear).frame(width: 96)
+        }
+        .padding(8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+        .shadow(radius: 4, y: 2)
     }
 }
 
