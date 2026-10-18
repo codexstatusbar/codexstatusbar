@@ -383,6 +383,8 @@ struct HubView: View {
             }
             connectionSection("Current log location", icon: "folder", tint: .blue) {
                 copyValue("Codex home", model.codexHome)
+                copyValue("Claude home", model.claudeHome)
+                connectionNote(model.quotas.contains { $0.provider == .claude } ? "Claude usage limits: a Claude Code login was found." : "Claude usage limits: no Claude Code login found yet.")
                 connectionNote("로그는 1초 간격으로 자동 수집합니다.")
                 HStack {
                     Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy)
@@ -397,23 +399,6 @@ struct HubView: View {
                     }
                     connectionNote("A collection error does not mean your Codex task failed. Check the original terminal for task status.")
                 }
-            }
-            connectionSection("Managed direct", icon: "flask", tint: .purple) {
-                Text(model.text(model.helperPath == nil ? "Helper unavailable" : "Experimental · unverified"))
-                    .font(.system(size: 10, weight: .medium)).foregroundStyle(.purple)
-                connectionNote("Start a new run yourself in a terminal. Existing sessions are never resumed or replayed. Relay behavior and G0 await user QA.")
-                copyValue("Bundled helper", model.helperPath)
-                copyValue("Installed Codex", model.codexPath)
-                HStack {
-                    Button(model.text("Choose Codex executable…")) { model.chooseCodex?() }.disabled(model.chooseCodex == nil || model.doctorBusy)
-                    Button(model.text(model.doctorBusy ? "Checking version…" : "Check helper compatibility")) { model.runDoctor?() }
-                        .disabled(model.runDoctor == nil || model.helperPath == nil || model.codexPath == nil || model.doctorBusy)
-                }
-                if !model.doctorResult.isEmpty { Text(model.text(model.doctorResult)).font(.system(size: 11)).textSelection(.enabled) }
-                copyValue("관리형 Codex 실행 명령", model.managedCommand)
-                connectionNote("새 관리형 Codex 실행에만 적용됩니다. 전역 설정은 바꾸지 않으며 기존 프로세스에는 소급 적용되지 않습니다.")
-                connectionNote("Run from your intended project directory. Additional flags, prompts, profiles and resume commands are not supported.")
-                connectionNote("Live estimates require a managed direct run with supported model metadata and complete visible-text observation. Unsupported models and missing evidence remain unavailable.")
             }
         }.buttonStyle(.bordered).controlSize(.regular)
     }

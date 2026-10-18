@@ -45,7 +45,7 @@ Tokloom is a native menu bar monitor for developers using Codex or Claude Code. 
   <tr>
     <td width="50%" align="center" valign="top">
       <h3>03 · Keep your terminal</h3>
-      <p>Inspect log paths and collection diagnostics.<br />Use managed connections only when needed.</p>
+      <p>Inspect the Codex and Claude Code log paths and collection diagnostics.<br />Codex and Claude Code, side by side.</p>
       <a href="docs/images/connection-en.png"><img src="docs/images/connection-en.png" alt="Tokloom connection page with log location and diagnostics" width="340" /></a>
     </td>
     <td width="50%" align="center" valign="top">
@@ -148,7 +148,7 @@ Clearing collected metadata also clears chart history. Original Codex logs remai
 
 **Settings** provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
 
-**Connection** provides log-path selection/copying, an immediate connection check, collection diagnostics, and experimental managed-run instructions. Paths and commands have individual copy buttons.
+**Connection** provides log-path selection/copying, an immediate connection check, the Claude Code home with whether a Claude Code login was found, and collection diagnostics. Paths have individual copy buttons.
 
 On macOS 26+, supported buttons use native Glass styling. Older systems use bordered controls; Reduce Transparency uses an opaque system background. Right-click the menu bar item to open or quit the app.
 
@@ -158,9 +158,9 @@ Earlier versions could install optional Codex hooks. They are gone: Tokloom read
 
 ## Experimental managed runs
 
-Select the installed Codex executable in Connection and check helper compatibility. This is a time-bounded version check, not proof of TUI, approval, or provider compatibility. Tokloom never automatically launches Codex.
+The app no longer shows managed-run controls. The helper is still bundled and can be run from a terminal; it never launches Codex automatically and its version check is not proof of TUI, approval, or provider compatibility.
 
-Copy the command from Connection, or adjust these paths, then run it from your intended project directory:
+Adjust these paths, then run it from your intended project directory:
 
 ```sh
 '/path/to/Tokloom.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'

@@ -170,18 +170,9 @@ enum MenuWindows: String, CaseIterable {
     var confirmClear = false
     var busy = false
     var checkingConnection = false
-    var helperPath: String?
-    var codexPath: String?
-    var chooseCodex: (() -> Void)?
-    var runDoctor: (() -> Void)?
-    var doctorBusy = false
-    var doctorResult = "Not checked. Managed relay is experimental; G0 is unverified."
-    var managedCommand: String? {
-        guard let helperPath, let codexPath else { return nil }
-        return HelperConnection.command(home: codexHome, codex: codexPath, helper: helperPath)
-    }
-    var chooseHome: (() -> Void)?
     var codexHome = "Not selected"
+    var claudeHome = "Not selected"
+    var chooseHome: (() -> Void)?
     var refresh: (() -> Void)?
     var clearMetadata: (() -> Void)?
     var updateRetention: ((Int) -> Void)?

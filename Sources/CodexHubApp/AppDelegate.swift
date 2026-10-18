@@ -48,12 +48,6 @@ import CodexHubCollector
             defaults.set(model.hideIdle, forKey: "hideIdle")
             defaults.set(model.hideUnattached, forKey: "hideUnattached")
         }
-        let helper = HelperConnection.bundledURL.path
-        model.helperPath = HelperConnection.executable(helper) ? helper : nil
-        if let saved = defaults.string(forKey: "codexExecutable"), HelperConnection.executable(saved) { model.codexPath = saved }
-        else { model.codexPath = HelperConnection.discoverCodex() }
-        model.chooseCodex = { [weak self] in self?.chooseCodex() }
-        model.runDoctor = { [weak self] in self?.runDoctor() }
         model.chooseHome = { [weak self] in self?.chooseHome() }
         model.refresh = { [weak self] in self?.refresh() }
         model.clearMetadata = { [weak self] in self?.clearMetadata() }
@@ -61,36 +55,6 @@ import CodexHubCollector
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(woke), name: NSWorkspace.didWakeNotification, object: nil)
         let path = defaults.string(forKey: "codexHome") ?? ProcessInfo.processInfo.environment["CODEX_HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
         connect(home: URL(fileURLWithPath: path))
-    }
-
-    private func chooseCodex() {
-        let panel = NSOpenPanel()
-        panel.title = model.text("Choose installed Codex executable")
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard HelperConnection.executable(url.path) else {
-            model.notice = "Choose an executable file."; return
-        }
-        model.codexPath = url.path
-        defaults.set(url.path, forKey: "codexExecutable")
-        model.doctorResult = "Not checked. Managed relay is experimental; G0 is unverified."
-    }
-
-    private func runDoctor() {
-        guard !model.doctorBusy, let helper = model.helperPath, let codex = model.codexPath else { return }
-        let home = model.codexHome
-        model.doctorBusy = true
-        Task {
-            let result = await Task.detached(priority: .userInitiated) {
-                HelperConnection.doctor(home: home, codex: codex, helper: helper)
-            }.value
-            model.doctorBusy = false
-            guard model.codexHome == home, model.codexPath == codex else { return }
-            model.doctorResult = result
-        }
     }
 
     private func chooseHome() {
@@ -125,6 +89,7 @@ import CodexHubCollector
         model.refreshedAt = nil
         let canonicalHome = home.standardizedFileURL.resolvingSymlinksInPath()
         model.codexHome = canonicalHome.path
+        model.claudeHome = ClaudeCollector.defaultHome().path
         // The usage endpoint is rate limited, so the weekly windows refresh every five minutes.
         quotaPolling = Task { [weak self] in
             while !Task.isCancelled {
@@ -135,7 +100,6 @@ import CodexHubCollector
                 do { try await Task.sleep(for: .seconds(300)) } catch { return }
             }
         }
-        model.doctorResult = "Not checked. Managed relay is experimental; G0 is unverified."
         model.busy = true
         model.checkingConnection = true
         polling = Task { [weak self] in
@@ -207,7 +171,7 @@ import CodexHubCollector
         let current = generation
         let home = model.codexHome
         let observed = await Task.detached(priority: .utility) {
-            (RunningCodexProcess.capture(), HelperConnection.configuredServiceTier(home: home))
+            (RunningCodexProcess.capture(), CodexConfig.configuredServiceTier(home: home))
         }.value
         guard generation == current else { return }
         model.configuredServiceTier = observed.1

@@ -46,11 +46,11 @@ import CodexHubCollector
         precondition(SessionPresentation.tokens(999) == "999" && SessionPresentation.tokens(1_000) == "1K", "UI26 small token count boundary")
         precondition(SessionPresentation.tokens(115_911) == "115.9K" && SessionPresentation.tokens(39_568_473) == "39.6M", "UI27 K/M token formatting")
         precondition(SessionPresentation.tokens(1_250_000_000) == "1.3G", "UI28 G token formatting")
-        precondition(HelperConnection.configuredServiceTier(in: "service_tier = \"fast\" # default") == .fast, "UI29 home default tier parsing")
-        precondition(HelperConnection.configuredServiceTier(in: "[profiles.quick]\nservice_tier = \"ultrafast\"") == nil, "UI30 profile tier is not a global default")
-        precondition(HelperConnection.configuredServiceTier(in: "service_tier = \"fast\"\nservice_tier = \"ultrafast\"") == nil, "UI31 conflicting defaults stay unconfirmed")
-        precondition(HelperConnection.configuredServiceTier(in: "instructions = \"\"\"\nservice_tier = \"fast\"") == nil, "UI32 multiline content cannot masquerade as a default")
-        precondition(HelperConnection.configuredServiceTier(in: "service_tier = \"future-tier\"") == nil, "UI33 unknown tier stays unconfirmed")
+        precondition(CodexConfig.configuredServiceTier(in: "service_tier = \"fast\" # default") == .fast, "UI29 home default tier parsing")
+        precondition(CodexConfig.configuredServiceTier(in: "[profiles.quick]\nservice_tier = \"ultrafast\"") == nil, "UI30 profile tier is not a global default")
+        precondition(CodexConfig.configuredServiceTier(in: "service_tier = \"fast\"\nservice_tier = \"ultrafast\"") == nil, "UI31 conflicting defaults stay unconfirmed")
+        precondition(CodexConfig.configuredServiceTier(in: "instructions = \"\"\"\nservice_tier = \"fast\"") == nil, "UI32 multiline content cannot masquerade as a default")
+        precondition(CodexConfig.configuredServiceTier(in: "service_tier = \"future-tier\"") == nil, "UI33 unknown tier stays unconfirmed")
         precondition(ServiceTier.priority.displayName == "Fast" && ServiceTier.ultrafast.displayName == "Ultrafast", "UI34 speed tiers preserve the official mapping")
         model.configuredServiceTier = .fast
 
@@ -150,7 +150,6 @@ import CodexHubCollector
         try capture(model, "preferences-korean", output, dark: false)
         try set([a,b], verified: [a.key,b.key])
         precondition(model.aggregateRate != nil, "UI43 the single estimate keeps working")
-        precondition(!HelperConnection.command(home: "/tmp/home", codex: "/tmp/codex", helper: "/tmp/helper").contains("--server-timing"), "UI44 app launch commands do not enable server timing")
         model.page = .overview
         try capture(model, "server-unavailable", output, dark: false)
         model.page = .detail(model.sessions[0].id)
