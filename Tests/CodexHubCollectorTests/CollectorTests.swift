@@ -553,26 +553,45 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(try late.sessions[0].monitor.workAverageRate(at: 100) == 40)
 }
 
-@Test func S233bResponseHeadersStartTheGenerationInterval() async throws {
-    let s = try Sandbox(); try s.write(meta + usage(100))
-    let c = try s.collector(); _ = try await c.refresh()
-    func dated(_ record: String, _ seconds: Int) -> String {
-        let timestamp = String(format: "2026-10-17T00:00:%02d.000Z", seconds)
-        return record.replacingOccurrences(of: "{", with: "{\"timestamp\":\"" + timestamp + "\",", range: record.startIndex..<record.index(after: record.startIndex))
-    }
-    let epoch = ISO8601DateFormatter().date(from: "2026-10-17T00:00:06Z")!.timeIntervalSince1970
+private func dated(_ record: String, _ seconds: Int) -> String {
+    let timestamp = String(format: "2026-10-17T00:00:%02d.000Z", seconds)
+    return record.replacingOccurrences(of: "{", with: "{\"timestamp\":\"" + timestamp + "\",", range: record.startIndex..<record.index(after: record.startIndex))
+}
+
+/// Writes a Codex tracing log whose only response headers for `session-a` arrived at `second`.
+private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
+    let epoch = Int(ISO8601DateFormatter().date(from: String(format: "2026-10-17T00:00:%02dZ", second))!.timeIntervalSince1970)
     let body = "session_loop{thread_id=session-a}:try_run_sampling_request{turn_id=live}: version=HTTP/1.1"
+    let insert = "INSERT INTO logs(ts, ts_nanos, level, target, feedback_log_body, thread_id) VALUES (\(epoch), 0, 'DEBUG', 'codex_http_client::client', '\(body)', "
     let sql = "CREATE TABLE logs (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, ts_nanos INTEGER NOT NULL, level TEXT, target TEXT NOT NULL, feedback_log_body TEXT, thread_id TEXT); "
-        + "INSERT INTO logs(ts, ts_nanos, level, target, feedback_log_body, thread_id) VALUES (\(Int(epoch)), 0, 'DEBUG', 'codex_http_client::client', '\(body)', 'session-a'); "
-        + "INSERT INTO logs(ts, ts_nanos, level, target, feedback_log_body, thread_id) VALUES (\(Int(epoch)), 0, 'DEBUG', 'codex_http_client::client', '\(body)', 'other-thread');"
+        + insert + "'session-a'); " + insert + "'other-thread');"
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
     process.arguments = [s.home.appendingPathComponent("logs_2.sqlite").path, sql]
     try process.run(); process.waitUntilExit()
+}
+
+@Test func S233bResponseHeadersStartTheGenerationInterval() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.collector(); _ = try await c.refresh()
+    try writeHeaderLog(s, second: 6)
     // 100 tokens over 10 s of log time, but the stream only started at second 6.
     try s.append(dated(start("live"), 0) + dated(usage(200), 10))
     let snapshot = try await c.refresh()
     #expect(try snapshot.sessions[0].monitor.workAverageRate(at: 100) == 25)
+}
+
+@Test func S233eNoGenerationTimeLeftMeansNoRate() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.collector(); _ = try await c.refresh()
+    try writeHeaderLog(s, second: 2)
+    func tool(_ output: Bool, _ seconds: Int) -> String {
+        dated("{\"type\":\"response_item\",\"payload\":{\"type\":\"" + (output ? "function_call_output" : "function_call") + "\",\"call_id\":\"a\"}}\n", seconds)
+    }
+    // Headers at 2 s, but a tool ran from 0 to 10 s: nothing is left to divide by.
+    try s.append(dated(start("live"), 0) + tool(false, 0) + tool(true, 10) + dated(usage(200), 10))
+    let snapshot = try await c.refresh()
+    #expect(try snapshot.sessions[0].monitor.workAverageRate(at: 100) == nil)
 }
 
 @Test func S233cHeaderWaitAndToolTimeAreExcludedTogether() throws {
