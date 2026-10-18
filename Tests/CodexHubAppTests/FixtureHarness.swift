@@ -284,7 +284,7 @@ import CodexHubCollector
         readme.restoreUsageHistory(historyModel.usageHistory.merging([claudeMonitor.key: claudePoints]) { current, _ in current })
         readme.sessions = [historyModel.sessions[0], claudeRow]
         readme.frame = try ReportedFrame(monitors: readme.sessions.map(\.monitor), verifiedIndependentThreads: Set(readme.sessions.map(\.id)), at: 303)
-        precondition(readme.providerBreakdown?.hasPrefix("Codex ") == true && readme.providerBreakdown?.contains("Claude 60") == true, "UI96 combined speed lists each provider when both run")
+        precondition(readme.providerRate(.codex) != nil && readme.displayRate(readme.providerRate(.claude)) == "60" && readme.visibleProviders == [.codex, .claude], "UI96 each provider reports its own speed when both run")
         readme.clock = { Date(timeIntervalSince1970: 1_792_900_000) }
         readme.quotas = [ProviderQuota(provider: .codex, usedPercent: 39, resetsAt: Date(timeIntervalSince1970: 1_792_900_000 + 3 * 86_400 + 4 * 3_600 + 30)),
                          ProviderQuota(provider: .claude, windowMinutes: 300, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1_792_900_000 + 2 * 3_600 + 13 * 60 + 30)),

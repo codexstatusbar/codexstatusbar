@@ -206,13 +206,25 @@ enum MenuWindows: String, CaseIterable {
     let chartWallClockOffset = Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime
     private(set) var usageHistory: [ThreadKey: [UsageHistoryPoint]] = [:]
 
-    var overviewUsageHistory: [UsageHistoryPoint] {
-        guard error == nil else { return [] }
-        return sessions.filter {
+    private var chartSessions: [SessionPresentation] {
+        sessions.filter {
             $0.rootObserved && $0.monitor.connectivity == .connected &&
             !$0.monitor.counter.isPartial &&
             !$0.sourceReconciliationPending && !$0.observationStopped
-        }.flatMap { usageHistory[$0.id] ?? [] }
+        }
+    }
+    var overviewUsageHistory: [UsageHistoryPoint] {
+        guard error == nil else { return [] }
+        return chartSessions.flatMap { usageHistory[$0.id] ?? [] }
+    }
+    /// The same chart data limited to one provider's sessions.
+    func overviewUsageHistory(for provider: SessionProvider) -> [UsageHistoryPoint] {
+        guard error == nil else { return [] }
+        return chartSessions.filter { $0.provider == provider }.flatMap { usageHistory[$0.id] ?? [] }
+    }
+    /// Providers that have a session or a usage window, in a fixed order.
+    var visibleProviders: [SessionProvider] {
+        SessionProvider.allCases.filter { provider in sessions.contains { $0.provider == provider } || quotas.contains { $0.provider == provider } }
     }
 
     func suspendUsageHistory() { usageAnchors.removeAll() }
@@ -427,16 +439,6 @@ enum MenuWindows: String, CaseIterable {
         let rates = sessions.filter { $0.provider == provider && $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }
             .compactMap { try? $0.monitor.workAverageRate(at: time) }
         return rates.isEmpty ? nil : rates.reduce(0, +)
-    }
-    /// Per-provider share of the combined rate; only shown when more than one provider is observed.
-    var providerBreakdown: String? {
-        guard error == nil, frame != nil,
-              Set(sessions.map(\.provider)).count > 1 else { return nil }
-        let parts = SessionProvider.allCases.compactMap { provider -> String? in
-            guard sessions.contains(where: { $0.provider == provider }) else { return nil }
-            return provider.displayName + " " + displayRate(providerRate(provider))
-        }
-        return parts.joined(separator: " · ") + " " + rateUnit.suffix
     }
     var coverage: String {
         guard error == nil, let frame else { return "측정 불가" }

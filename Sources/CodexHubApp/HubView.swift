@@ -96,28 +96,45 @@ struct HubView: View {
         }
     }
 
-    private var quotaSection: some View {
+    /// One column per provider: its own speed, output chart and usage windows.
+    private var providerGroups: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
-            Text(model.text("Usage remaining")).font(.system(size: 10, weight: .medium)).tracking(0.5).foregroundStyle(secondary)
-            ForEach(SessionProvider.allCases, id: \.self) { provider in
-                ForEach(model.quotas.filter { $0.provider == provider }.sorted { $0.windowMinutes < $1.windowMinutes }, id: \.windowMinutes) { quota in
-                    HStack(spacing: 10) {
-                        ProviderBadge(provider: provider, size: 22)
-                        Text(model.text(quota.isWeekly ? "Weekly" : "Session") + (quota.isWeekly ? "" : " " + model.windowLabel(quota)))
-                            .font(.system(size: 10)).foregroundStyle(secondary).frame(width: 64, alignment: .leading)
-                        ProgressView(value: quota.remainingPercent, total: 100).tint(provider.badgeColor)
-                        Text(String(Int(quota.remainingPercent.rounded())) + "%").font(.system(size: 12, weight: .medium)).monospacedDigit().frame(width: 40, alignment: .trailing)
-                        if let reset = quota.resetsAt {
-                            Text(model.remainingTime(quota) ?? "—").font(.system(size: 10)).monospacedDigit().foregroundStyle(secondary)
-                                .frame(width: 52, alignment: .trailing)
-                                .help(reset.formatted(.dateTime.month().day().hour().minute()))
-                        }
-                    }.accessibilityElement(children: .combine)
-                        .accessibilityLabel(model.quotaText(quota) + " " + model.text("left"))
-                }
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(model.visibleProviders, id: \.self) { providerColumn($0) }
             }
         }
+    }
+
+    private func providerColumn(_ provider: SessionProvider) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                ProviderBadge(provider: provider, size: 20)
+                Text(provider.displayName).font(.system(size: 12, weight: .medium))
+                Spacer(minLength: 4)
+                Text(model.providerRate(provider).map { model.displayRate($0) + " " + model.rateUnit.suffix } ?? "—")
+                    .font(.system(size: 11)).monospacedDigit().foregroundStyle(secondary).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            ObservedTokenChart(points: model.overviewUsageHistory(for: provider), now: model.frame?.time ?? 0, emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset, unit: model.rateUnit)
+                .accessibilityLabel(provider.displayName + " " + model.text("관측 출력 토큰"))
+            ForEach(model.quotas.filter { $0.provider == provider }.sorted { $0.windowMinutes < $1.windowMinutes }, id: \.windowMinutes) { quota in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(model.text(quota.isWeekly ? "Weekly" : "Session") + (quota.isWeekly ? "" : " " + model.windowLabel(quota)))
+                            .font(.system(size: 10)).foregroundStyle(secondary)
+                        Spacer(minLength: 4)
+                        Text(String(Int(quota.remainingPercent.rounded())) + "%").font(.system(size: 12, weight: .medium)).monospacedDigit()
+                        if let reset = quota.resetsAt {
+                            Text(model.remainingTime(quota) ?? "—").font(.system(size: 10)).monospacedDigit().foregroundStyle(secondary)
+                                .help(reset.formatted(.dateTime.month().day().hour().minute()))
+                        }
+                    }
+                    ProgressView(value: quota.remainingPercent, total: 100).tint(provider.badgeColor)
+                }.accessibilityElement(children: .combine)
+                    .accessibilityLabel(model.quotaText(quota) + " " + model.text("left"))
+            }
+        }.padding(10).frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(inset, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var measurementCaption: String {
@@ -136,9 +153,6 @@ struct HubView: View {
                     }.accessibilityElement(children: .combine)
                     Label(measurementCaption, systemImage: "info.circle")
                         .font(.system(size: 10)).foregroundStyle(secondary).fixedSize(horizontal: false, vertical: true)
-                    if let breakdown = model.providerBreakdown {
-                        Text(breakdown).font(.system(size: 10)).monospacedDigit().foregroundStyle(secondary)
-                    }
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 4) {
@@ -156,7 +170,7 @@ struct HubView: View {
                 Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Tokloom never approves commands."), systemImage: "hand.raised")
                     .font(.system(size: 11)).foregroundStyle(Color.primary)
             }
-            if !model.quotas.isEmpty { quotaSection }
+            if !model.visibleProviders.isEmpty { providerGroups }
             Divider()
             VStack(spacing: 14) {
                 HStack {
