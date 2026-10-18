@@ -193,11 +193,16 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     }
 
     /// Places `tokens` on the one-second grid over the `generation` seconds that end at `time`, spread evenly
-    /// so the span keeps its length even when there are fewer tokens than seconds. Returns the seconds covered.
+    /// so the span keeps its length even when there are fewer tokens than seconds. Returns the real duration, which
+    /// callers use to position the next response; whole seconds only decide which chart bucket a point falls in.
     @discardableResult
-    static func spread(_ tokens: Int, endingAt time: Double, seconds generation: Double?, into history: inout [UsageHistoryPoint]) -> Int {
+    static func spread(_ tokens: Int, endingAt time: Double, seconds generation: Double?, into history: inout [UsageHistoryPoint]) -> Double {
         var seconds = 1
-        if let generation, generation.isFinite, generation > 0 { seconds = Int(min(max(generation.rounded(), 1), 600)) }
+        var duration = 1.0
+        if let generation, generation.isFinite, generation > 0 {
+            duration = min(generation, 600)
+            seconds = Int(max(duration.rounded(), 1))
+        }
         let points = max(1, min(seconds, tokens))
         let base = tokens / points, extra = tokens % points
         for index in 0..<points {
@@ -212,7 +217,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
             }
         }
         history.sort { $0.time < $1.time }
-        return seconds
+        return duration
     }
 
     func recordUsageHistory(_ rows: [SessionPresentation], at time: Double) {
@@ -242,7 +247,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
                 if !fresh.isEmpty, fresh.reduce(0, { $0 + $1.tokens }) == delta {
                     var end = time
                     for generation in fresh.reversed() {
-                        end -= Double(Self.spread(generation.tokens, endingAt: end, seconds: generation.seconds, into: &history))
+                        end -= Self.spread(generation.tokens, endingAt: end, seconds: generation.seconds, into: &history)
                     }
                 } else {
                     Self.spread(delta, endingAt: time, seconds: nil, into: &history)

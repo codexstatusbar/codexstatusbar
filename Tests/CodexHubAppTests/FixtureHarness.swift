@@ -216,6 +216,18 @@ import CodexHubCollector
         burstModel.recordUsageHistory([SessionPresentation(monitor: burst)], at: 101)
         let burstPoints = burstModel.usageHistory[burstKey] ?? []
         precondition(burstPoints.map(\.outputTokens).reduce(0, +) == 1100 && burstPoints.map(\.outputTokens).max() == 100 && burstPoints.count == 11, "UI56 several responses in one refresh are each placed over their own generation time")
+        let quickKey = ThreadKey(homeID: "/quick", runID: nil, threadID: "quick")
+        var quick = ThreadMonitor(key: quickKey, source: .rolloutLog, epoch: "e", verifiedEmptyThread: true)
+        try quick.setConnectivity(.connected, at: 0)
+        try quick.startTurn("t", at: 0)
+        let quickModel = HubPresentation()
+        quickModel.recordUsageHistory([SessionPresentation(monitor: quick)], at: 100)
+        for total in [10, 20, 30] {
+            try quick.observeUsage(TokenUsage(outputTokens: total), turnID: "t", source: .rolloutLog, epoch: "e", at: 101, rateInterval: .excludingTools(0.2))
+        }
+        quickModel.recordUsageHistory([SessionPresentation(monitor: quick)], at: 101)
+        let quickTimes = (quickModel.usageHistory[quickKey] ?? []).map(\.time)
+        precondition(quickTimes.count == 3 && quickTimes.min()! > 100.5, "UI56 short responses keep their real duration instead of being widened to whole seconds")
         historyModel.sessions = [SessionPresentation(monitor: newTurn)]
         historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 2)
         historyModel.rateUnit = .minute
