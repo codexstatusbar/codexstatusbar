@@ -4,6 +4,12 @@ import CodexHubCore
 
 /// Reads the default speed setting from the Codex home's configuration; nothing is written.
 enum CodexConfig {
+    /// A saved choice wins, otherwise the global `~/.codex`. The `CODEX_HOME` of the launching shell is ignored on
+    /// purpose: it points at per-account or per-agent homes and would silently change what the app watches.
+    static func defaultHome(saved: String?, userHome: URL = FileManager.default.homeDirectoryForCurrentUser) -> String {
+        saved ?? userHome.appendingPathComponent(".codex").path
+    }
+
     static func configuredServiceTier(home: String) -> ServiceTier? {
         let path = URL(fileURLWithPath: home).appendingPathComponent("config.toml").path
         let fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)

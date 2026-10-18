@@ -316,6 +316,8 @@ import CodexHubCollector
         readme.menuSpeed = .combined
         readme.menuUsage = .all
         readme.menuShowsReset = false
+        precondition(CodexConfig.defaultHome(saved: nil, userHome: URL(fileURLWithPath: "/Users/fixture")) == "/Users/fixture/.codex" &&
+                     CodexConfig.defaultHome(saved: "/chosen/home", userHome: URL(fileURLWithPath: "/Users/fixture")) == "/chosen/home", "UI106 the global ~/.codex is the default and a saved choice wins")
         let korean = HubPresentation()
         korean.language = .korean
         let settingsKeys = ["Menu bar", "Choose what the menu bar shows.", "Speed", "Combined", "By provider", "Combined + by provider", "Hidden", "Remaining usage",
@@ -456,7 +458,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI105 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI106 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

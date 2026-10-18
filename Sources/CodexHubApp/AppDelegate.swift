@@ -53,7 +53,7 @@ import CodexHubCollector
         model.clearMetadata = { [weak self] in self?.clearMetadata() }
         model.updateRetention = { [weak self] days in self?.updateRetention(days) }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(woke), name: NSWorkspace.didWakeNotification, object: nil)
-        let path = defaults.string(forKey: "codexHome") ?? ProcessInfo.processInfo.environment["CODEX_HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        let path = CodexConfig.defaultHome(saved: defaults.string(forKey: "codexHome"))
         connect(home: URL(fileURLWithPath: path))
     }
 
