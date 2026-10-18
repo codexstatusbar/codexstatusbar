@@ -11,9 +11,10 @@ final class MetadataStore: @unchecked Sendable {
     init(directoryURL: URL, sourceScope: String) throws {
         directory = try SafeDirectory(directoryURL, createPrivate: true)
         lockFD = dup(directory.fd)
-        guard lockFD >= 0, Self.lock(lockFD) else {
-            if lockFD >= 0 { close(lockFD) }
-            throw CollectorError.database
+        guard lockFD >= 0 else { throw CollectorError.database }
+        guard Self.lock(lockFD) else {
+            close(lockFD)
+            throw CollectorError.metadataInUse
         }
         do {
             try directory.validateMetadataFiles()

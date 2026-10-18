@@ -64,7 +64,9 @@ import CodexHubCollector
         try capture(model, "preferences", output, dark: false)
         try capture(model, "preferences-full", output, dark: true, height: 900)
         model.diagnostics = ["Fixture: logs directory readable", "No provider calls performed"]
-        try capture(model, "preferences-diagnostics", output, dark: false, height: 900)
+        model.error = CollectorError.metadataInUse.message
+        try capture(model, "preferences-diagnostics", output, dark: false, height: 1300)
+        model.error = nil
         model.diagnostics = []
         model.language = .korean
         model.page = .overview
@@ -328,6 +330,8 @@ import CodexHubCollector
         korean.language = .korean
         let settingsKeys = ["Menu bar", "Choose what the menu bar shows.", "Speed", "Combined", "By provider", "Combined + by provider", "Hidden", "Remaining usage",
                             "Usage windows", "Session + weekly", "5h limit only", "Weekly limit only", "Show time until reset", "Weekly", "Session", "left"]
+        let collectorErrors: [CollectorError] = [.unsafePath, .inaccessibleSource, .database, .metadataInUse, .invalidSettings, .invalidRecord, .oversizedRecord, .sourceMismatch, .ambiguousSource]
+        precondition(collectorErrors.allSatisfy { korean.text($0.message) != $0.message }, "UI109 every collector error message has a Korean translation")
         precondition(settingsKeys.allSatisfy { korean.text($0) != $0 }, "UI104 every menu bar setting and usage label has a Korean translation")
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
@@ -464,7 +468,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI108 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI109 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

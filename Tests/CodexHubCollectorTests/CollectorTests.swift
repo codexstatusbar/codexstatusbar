@@ -95,6 +95,14 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     #expect(try await next.refresh().sessions.count == 1)
 }
 
+@Test func S252SecondCollectorOnTheSameDataReportsItIsInUse() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let first = try s.collector()
+    _ = try await first.refresh()
+    #expect(throws: CollectorError.metadataInUse) { try s.collector() }
+    _ = first
+}
+
 @Test func S205RestartRestoresCheckpointWithoutLiveReplay() async throws {
     let s = try Sandbox(); try s.write(meta + start("old") + usage(100))
     var c: LogCollector? = try s.collector()

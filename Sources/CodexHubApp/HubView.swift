@@ -19,7 +19,8 @@ struct HubView: View {
             Divider().padding(.horizontal, 14)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let error = model.error { Text(model.text("Collection error") + ": " + error).textSelection(.enabled) }
+                    // On Settings the collection error sits with the diagnostics instead of above the page.
+                    if model.page != .preferences, let error = model.error { Text(model.text("Collection error") + ": " + model.text(error)).textSelection(.enabled) }
                     if let historyError = model.historyError { Text(model.text(historyError)).font(.system(size: 11)).foregroundStyle(.secondary) }
                     if let notice = model.notice { Text(model.text(notice)).font(.system(size: 11)).foregroundStyle(secondary).textSelection(.enabled) }
                     switch model.page {
@@ -336,8 +337,9 @@ struct HubView: View {
                     Text(model.text(model.loginStatus)).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
-            if !model.diagnostics.isEmpty {
+            if model.error != nil || !model.diagnostics.isEmpty {
                 settingsSection("Collection diagnostics", subtitle: "A collection error does not mean your Codex task failed. Check the original terminal for task status.") {
+                    if let error = model.error { Text(model.text("Collection error") + ": " + model.text(error)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
                     ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in
                         Text(model.text(text)).font(.system(size: 11)).textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)

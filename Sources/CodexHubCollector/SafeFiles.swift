@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 public enum CollectorError: Error, Equatable, Sendable {
-    case unsafePath, inaccessibleSource, database, invalidSettings, invalidRecord, oversizedRecord, sourceMismatch, ambiguousSource
+    case unsafePath, inaccessibleSource, database, metadataInUse, invalidSettings, invalidRecord, oversizedRecord, sourceMismatch, ambiguousSource
 
     public var message: String {
         switch self {
@@ -10,6 +10,7 @@ public enum CollectorError: Error, Equatable, Sendable {
         case .unsafePath: "A file path, owner, type, or permission is unsafe."
         case .inaccessibleSource: "The selected session logs could not be read."
         case .database: "Hub metadata could not be read or saved."
+        case .metadataInUse: "Another Tokloom is already using this Codex home's data. Quit the other copy, then press Check now."
         case .invalidSettings: "The retention settings or clock value is invalid."
         case .invalidRecord: "A log record or session identity could not be safely interpreted."
         case .oversizedRecord: "A source exceeded the collector size or traversal limit."
