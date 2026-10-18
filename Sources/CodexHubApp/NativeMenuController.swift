@@ -26,7 +26,7 @@ import ServiceManagement
 
     private func observeTitle() {
         withObservationTracking {
-            item.button?.toolTip = model.language.resolved == .korean ? "Tokloom — 출력 증가량 ÷ 도구 실행·대기를 뺀 보고 구간(추정). ≈: 최근 5초 화면 출력 추정." : "Tokloom — Output delta / report interval excluding tools (estimate). ≈: visible output estimate over 5 seconds."
+            item.button?.toolTip = model.language.resolved == .korean ? "Tokloom — 출력 증가량 ÷ 응답 생성 구간(추정). S·W: 5시간 세션·주간 남은 사용량." : "Tokloom — Output delta / response generation interval (estimate). S·W: remaining 5-hour session and weekly usage."
             item.button?.attributedTitle = menuAttributedTitle()
             item.button?.image = model.menuTitle.isEmpty ? statusIcon : nil
             item.button?.imagePosition = model.menuTitle.isEmpty ? .imageOnly : .noImage
