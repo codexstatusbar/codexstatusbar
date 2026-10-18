@@ -169,7 +169,7 @@ struct HubView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(model.text(model.rateUnit == .second ? "보고 출력 · 60초" : "보고 출력 · 60분")).font(.system(size: 10)).foregroundStyle(secondary)
                     ObservedTokenChart(points: model.overviewUsageHistory, now: model.frame?.time ?? 0, emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset, unit: model.rateUnit, bars: 60)
-                }.frame(width: width >= 600 ? 240 : width >= 480 ? 160 : 110)
+                }.frame(width: width >= 600 ? 340 : width >= 480 ? 230 : 270)
                     .accessibilityLabel(model.text("관측 출력 토큰"))
                 if width >= 480 { VStack(spacing: 6) {
                     Text(String(model.processCount)).font(.system(size: 20, weight: .semibold)).monospacedDigit()
