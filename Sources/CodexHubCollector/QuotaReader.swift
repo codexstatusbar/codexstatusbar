@@ -32,7 +32,11 @@ public enum QuotaReader {
 
     /// Empty when no Claude Code login exists in the keychain or the endpoint refuses the token.
     public static func claudeWindows() async -> [ProviderQuota] {
-        guard let token = claudeToken() else { return [] }
+        // The keychain read can wait on a macOS permission prompt, so it runs on a GCD thread, not a cooperative one.
+        let token = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async { continuation.resume(returning: claudeToken()) }
+        }
+        guard let token else { return [] }
         var request = URLRequest(url: usageURL, timeoutInterval: 10)
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")

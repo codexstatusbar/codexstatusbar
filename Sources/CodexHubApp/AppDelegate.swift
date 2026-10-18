@@ -377,6 +377,7 @@ import CodexHubCollector
 
     func applicationWillTerminate(_ notification: Notification) {
         polling?.cancel()
+        quotaPolling?.cancel()
         backgroundRefresh?.cancel()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
