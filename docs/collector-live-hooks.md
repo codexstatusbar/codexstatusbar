@@ -20,7 +20,7 @@ backlogs, restart and sleep invalidate the window; a new complete item can warm
 up again. Negative net windows return no speed rather than discarding correction.
 
 Managed schema 1 `visible_count` and `visible_unavailable` records follow
-`docs/live-estimator.md` (producer-owned). Counts require exact active turn and
+the removed live estimator (producer-owned). Counts require exact active turn and
 item IDs, complete_from_start, final, corrected, text_mismatch, model and encoding.
 Normal corrected counts remain valid; text_mismatch marks Partial. No tokenizer
 or raw text is stored in the collector. The producer owns verified model mapping;

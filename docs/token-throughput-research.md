@@ -24,7 +24,7 @@ boundaries must not be assumed to match tokenizer boundaries.
   but remaining queue/prefill/network latency is not separable from these logs.
 - The current default numerator is reported output, including reasoning; it must
   not be paired with a visible-text-only duration and relabeled pure generation.
-- Previous real timing evidence in [server-timing.md](verification/server-timing.md)
+- Previous real timing evidence (the server-timing verification, since removed)
   contained output/event counts and event spacing, but no proven engine decode
   duration. That explains why the server-diagnostic UI could not display speed.
 - Offline schema export from installed `codex-cli 0.163.0` confirms
@@ -35,7 +35,7 @@ boundaries must not be assumed to match tokenizer boundaries.
 - Reproduction command: `codex app-server generate-json-schema --experimental --out .build/research-app-server-schema`.
   This was an offline schema export, not a provider call.
 - Live tokenization currently supports only the explicit model list in
-  `Sources/CodexHubHelper/VisibleEstimator.swift`; current GPT-6 model names are
+  the removed `VisibleEstimator`; current GPT-6 model names are
   not automatically supported. Tokenizer mapping must be verified before expansion.
 
 ## Recommended implementation direction (proposal, not implemented)

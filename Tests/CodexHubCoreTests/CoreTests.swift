@@ -430,43 +430,6 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(try m.workAverageRate(at: 240) == 20)
 }
 
-@Test func C29ServerTimingParsesMetadataWithoutInventingDecodeRate() {
-    let payload = #"{"type":"responsesapi.websocket_timing","timing_metrics":{"engine_service_total_ms":450,"engine_service_ttft_total_ms":340,"engine_service_tbt_across_engine_calls_ms":260}}"#
-    let line = "TRACE codex_api::responses_websocket_timing: thread_id=thread-1 turn_id=turn-1 warmup=false payload=" + payload
-    let timing = ServerTiming.parse(logLine: line)
-    #expect(timing?.threadID == "thread-1")
-    #expect(timing?.inferenceMilliseconds == 450)
-    #expect(timing?.firstTokenMilliseconds == 340)
-    #expect(timing?.betweenTokenMilliseconds == 260)
-    #expect(ServerTiming.parse(logLine: line.replacingOccurrences(of: "warmup=false", with: "warmup=true")) == nil)
-    #expect(ServerTiming.parse(logLine: line.replacingOccurrences(of: "thread_id=thread-1", with: "thread_id=")) == nil)
-    #expect(ServerTiming.parse(logLine: String(repeating: "x", count: 65_537)) == nil)
-}
-
-
-@Test func C30ServerTimingRejectsInvalidFieldsAndAcceptsQuotedTracePayload() throws {
-    let payload = #"{"type":"responsesapi.websocket_timing","timing_metrics":{"engine_service_total_ms":12.5}}"#
-    let quoted = String(data: try JSONEncoder().encode(payload), encoding: .utf8)!
-    let prefix = "TRACE codex_api::responses_websocket_timing: thread_id=\"thread-1\" turn_id=\"turn-1\" warmup=false payload="
-    #expect(ServerTiming.parse(logLine: prefix + quoted)?.inferenceMilliseconds == 12.5)
-    for invalid in ["-1", "true", "null", "\"12.5\""] {
-        #expect(ServerTiming.parse(logLine: prefix + payload.replacingOccurrences(of: "12.5", with: invalid)) == nil)
-    }
-    #expect(ServerTiming.parse(logLine: prefix + "not-json") == nil)
-}
-
-@Test func C31ActualServerStreamTimingSchemaIsPreservedWithoutInventingEngineTime() {
-    let payload = #"{"type":"responsesapi.websocket_timing","timing_metrics":{"timing_scope":"logical_turn","response_id":"response-fixture","websocket_output_text_delta_tbt_ms":16.467705253164556,"websocket_output_text_delta_count":159,"pre_inference_ms":235.108268,"client_tool_pause_total_ms":0,"num_engine_calls":1,"num_sampled_tokens_total":163,"critical_path":{"scope":"response","coverage":"missing_harness_boundary"}}}"#
-    let line = "TRACE codex_api::responses_websocket_timing: thread_id=thread-fixture turn_id=turn-fixture warmup=false payload=" + payload
-    let timing = ServerTiming.parse(logLine: line)
-    #expect(timing?.sampledTokens == 163)
-    #expect(timing?.outputDeltaCount == 159)
-    #expect(timing?.outputDeltaMeanMilliseconds == 16.467705253164556)
-    #expect(timing?.coverage == "missing_harness_boundary")
-    #expect(timing?.inferenceMilliseconds == nil && timing?.betweenTokenMilliseconds == nil)
-    #expect(timing?.responseID == "response-fixture")
-}
-
 @Test func C32IdleRateExpiresAfterTenSecondsWithoutResurrectingOnNewWork() throws {
     var m = try monitor("idle-expiry")
     try m.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "e", at: 5)

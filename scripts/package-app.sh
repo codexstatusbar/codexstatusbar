@@ -6,16 +6,13 @@ cd "$ROOT"
 APP="$ROOT/.build/Tokloom.app"
 OUT="$ROOT/.build/dist"
 mkdir -p "$OUT"
-for binary in "$APP/Contents/MacOS/CodexHubApp" "$APP/Contents/Helpers/codex-hub"; do
+for binary in "$APP/Contents/MacOS/CodexHubApp"; do
     test -x "$binary"
     lipo -verify_arch arm64 "$binary"
     codesign --verify --strict "$binary"
 done
 plutil -lint "$APP/Contents/Info.plist"
 test -s "$APP/Contents/Resources/AppIcon.icns"
-TOKENIZER="$APP/Contents/Helpers/CodexHub_CodexHubHelper.bundle"
-test -s "$TOKENIZER/Contents/Resources/Resources/o200k_base.tiktoken"
-codesign --verify --strict "$TOKENIZER"
 codesign --verify --strict "$APP"
 IMAGE="$OUT/Tokloom-macos-arm64.dmg"
 STAGING="$(mktemp -d "$ROOT/.build/tokloom-dmg.XXXXXX")"

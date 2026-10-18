@@ -87,7 +87,7 @@ The [macOS bundle workflow](.github/workflows/bundle.yml) runs only when a tag m
 2. `verify`: synthetic UI and isolated process checks, with rendered evidence.
 3. `bundle`: after both checks pass, build the arm64 app, validate signatures/resources, and create a DMG.
 
-Download `Tokloom-macos-arm64.dmg` and its SHA-256 file from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases). The app includes its icon, helper, and tokenizer resources.
+Download `Tokloom-macos-arm64.dmg` and its SHA-256 file from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases). The app bundle contains only the app and its icon.
 
 After publication succeeds and both release assets are confirmed, `cleanup` deletes that run's Actions artifacts (bundle copies, rendered evidence and uploaded log files). Release assets, workflow run logs and build caches are retained. Artifacts from failed runs remain available for up to 14 days.
 
@@ -156,21 +156,6 @@ On macOS 26+, supported buttons use native Glass styling. Older systems use bord
 
 Earlier versions could install optional Codex hooks. They are gone: Tokloom reads only logs and never touches `hooks.json`. If you installed them, delete the entries whose command path contains `CodexHub/hooks` from `CODEX_HOME/hooks.json`.
 
-## Experimental managed runs
-
-The app no longer shows managed-run controls. The helper is still bundled and can be run from a terminal; it never launches Codex automatically and its version check is not proof of TUI, approval, or provider compatibility.
-
-Adjust these paths, then run it from your intended project directory:
-
-```sh
-'/path/to/Tokloom.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'
-env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --codex '/absolute/path/to/codex'
-```
-
-Without `--codex`, the helper searches PATH. Its currently allowed version is `codex-cli 0.163.0`. Arbitrary positional arguments, prompts, additional flags, profiles, and resume/fork are rejected. It does not attach to or restart existing runs; the app and managed run have separate lifetimes. The relay is **experimental; G0 remains unverified**.
-
-Server timing diagnostics have been removed from the app because the available metadata cannot establish pure generation speed. Saved selections of the former mode fall back to the tool-excluded estimate. The helper's explicit diagnostic flag remains a developer facility, not a throughput mode. See the [server timing evidence](docs/verification/server-timing.md).
-
 ## Claude Code sessions
 
 Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `CLAUDE_CONFIG_DIR` or `~/.claude`. A session is listed only while its `sessions/<pid>.json` matches a live process (PID and start time); the transcript under `projects/` supplies usage. Nothing is modified and no prompt or response text is stored.
@@ -191,13 +176,7 @@ The overview shows one column per provider, and the menu bar can list the same n
 
 ## Current scope
 
-The live visible-text estimator is no longer selectable in the app. It tokenizes only visible response text observed completely from the start of a managed direct relay, using official `o200k_base` assets. Assets and their MIT license are bundled beside the helper as SwiftPM resources, with no runtime download.
-
-Support requires an observed provider identifier exactly equal to `openai` and a model named `o1`, `o3`, `o4-mini`, `gpt-5`, `gpt-4.1`, or `gpt-4o`. Displaying model metadata is independent of this support list: a model can appear in the UI without supporting Live estimation. Other models/providers, missing metadata, incomplete starts, gaps, and stale observations remain unavailable. A provider identifier is not proof of the remote server's identity.
-
-Live excludes reasoning, tool output, diffs, prompts, and past text. There is no `chars/4` fallback. Estimation stops beyond four items, 16 KiB per item, 512-byte regex segments, or the computation/work limits. Equivalence with official tiktoken has not yet been verified.
-
-The bundle identifier, `CodexHub` storage paths, internal modules, and helper names are retained for compatibility with existing settings and history. The displayed app and distribution files are named Tokloom.
+The bundle identifier, `CodexHub` storage paths, and internal module names are retained for compatibility with existing settings and history. The displayed app and distribution files are named Tokloom.
 
 ## Architecture and storage
 
@@ -206,7 +185,6 @@ The bundle identifier, `CodexHub` storage paths, internal modules, and helper na
 | `CodexHubCore` | Activity, cumulative usage, and work/observation averages |
 | `CodexHubCollector` | Read-only log/managed-metadata collection and SQLite checkpoints |
 | `CodexHubApp` | SwiftUI views, AppKit menu bar, preferences, and chart persistence |
-| `CodexHubHelper` | Swift launcher and local relay |
 
 Production code uses Swift and macOS system libraries. Tokloom does not store raw prompts or responses. Metadata lives under `~/Library/Application Support/CodexHub/homes/<homeHash>`; managed observations are separate under `managed-runs/<homeHash>` in the same `CodexHub` directory.
 
@@ -214,13 +192,11 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 88 Core/Collector tests, 114 synthetic UI/process checks (UI01–UI108 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 85 Core/Collector tests, 114 synthetic UI/process checks (UI01–UI108 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
-The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete provider execution paths.
+The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 
 - [Original design PRD (archived; the product has since moved to log collection and Claude Code support)](docs/Codex_Hub_PRD.md)
 - [Native UI and regression checks](docs/verification/native-ui.md)
 - [Collector verification](docs/verification/collector.md)
-- [Server timing verification](docs/verification/server-timing.md)
-- [Managed helper contract](docs/managed-helper.md)
-- [Live estimator](docs/live-estimator.md) · [Collector input contract](docs/collector-live-hooks.md)
+- [Collector input contract](docs/collector-live-hooks.md)

@@ -87,7 +87,7 @@ open '.build/Tokloom.app'
 2. `verify`: 기존 합성 UI·격리된 프로세스 검증과 화면 증거 수집.
 3. `bundle`: 두 검증이 성공하면 arm64 앱을 빌드하고 서명·리소스를 확인한 뒤 DMG 생성.
 
-[Releases](https://github.com/codexstatusbar/codexstatusbar/releases)에서 `Tokloom-macos-arm64.dmg`와 SHA-256 파일을 받으세요. 앱에는 아이콘, helper와 토크나이저 리소스가 포함됩니다.
+[Releases](https://github.com/codexstatusbar/codexstatusbar/releases)에서 `Tokloom-macos-arm64.dmg`와 SHA-256 파일을 받으세요. 앱 번들에는 앱과 아이콘만 들어 있습니다.
 
 릴리스 게시가 성공하고 두 파일의 업로드를 확인하면 `cleanup`이 해당 실행의 Actions 아티팩트(DMG 사본·검증 이미지·업로드한 로그 파일)를 삭제합니다. 릴리스 파일, 워크플로 실행 로그와 빌드 캐시는 유지합니다. 실패한 실행의 아티팩트는 최대 14일 보관합니다.
 
@@ -158,21 +158,6 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 
 이전 버전은 선택적 Codex 훅을 설치할 수 있었습니다. 지금은 제거되었고, Tokloom은 로그만 읽으며 `hooks.json`을 건드리지 않습니다. 이미 설치했다면 `CODEX_HOME/hooks.json`에서 명령 경로에 `CodexHub/hooks`가 들어 있는 항목을 직접 삭제하세요.
 
-## 실험적 관리형 실행
-
-앱은 더 이상 관리형 실행 컨트롤을 표시하지 않습니다. helper는 여전히 번들에 포함되어 터미널에서 실행할 수 있으며, Codex를 자동으로 시작하지 않고 버전 검사는 실제 TUI·승인·provider 호환성을 검증하지 않습니다.
-
-아래 경로를 설치 위치에 맞춰 바꾸고, 작업할 프로젝트 디렉터리에서 실행하세요.
-
-```sh
-'/path/to/Tokloom.app/Contents/Helpers/codex-hub' doctor --codex '/absolute/path/to/codex'
-env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' run --experimental --codex '/absolute/path/to/codex'
-```
-
-`--codex`를 생략하면 PATH에서 찾습니다. 현재 helper의 허용 버전은 `codex-cli 0.163.0`입니다. 임의 위치 인수·프롬프트·추가 플래그·프로필·resume/fork는 거부합니다. 기존 실행에 붙거나 재시작하지 않으며, 앱과 관리형 실행의 수명은 분리됩니다. 관리형 relay는 **실험적이며 G0 미검증**입니다.
-
-현재 서버 메타데이터로 순수 생성 속도를 계산할 수 없어 앱의 서버 타이밍 진단 모드를 제거했습니다. 기존에 이 모드를 선택한 설정은 도구 제외 추정으로 전환합니다. helper의 명시적 진단 플래그는 개발용으로만 남으며 속도 모드가 아닙니다. 근거는 [서버 타이밍 기록](docs/verification/server-timing.md)에 있습니다.
-
 ## Claude Code 세션
 
 실행 중인 Claude Code CLI 세션이 `CLAUDE_CONFIG_DIR` 또는 `~/.claude`에서 읽기 전용으로 Codex 세션과 함께 표시됩니다. `sessions/<pid>.json`이 살아 있는 프로세스(PID와 시작 시각)와 일치할 때만 나타나고, 사용량은 `projects/` 아래 대화 기록에서 읽습니다. 아무것도 수정하지 않으며 프롬프트나 응답 본문은 저장하지 않습니다.
@@ -193,13 +178,7 @@ env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' 
 
 ## 현재 범위
 
-실시간 가시 텍스트 추정기는 앱에서 더 이상 선택할 수 없습니다. 이 추정은 관리형 direct relay에서 처음부터 완전하게 관측한 가시 응답 텍스트만 공식 `o200k_base` 자산으로 계산합니다. 자산과 MIT 라이선스는 SwiftPM 리소스로 helper 옆에 포함되며 실행 중 내려받지 않습니다.
-
-관측된 provider 식별자가 정확히 `openai`이고 모델명이 `o1`, `o3`, `o4-mini`, `gpt-5`, `gpt-4.1`, `gpt-4o` 중 하나일 때만 지원합니다. 모델 정보 표시는 이 목록과 별개이며, 목록 밖 모델이 화면에 표시돼도 Live 추정을 지원한다는 뜻은 아닙니다. 다른 모델·provider, 누락된 정보, 불완전한 시작, 갭·오래된 관측은 미측정으로 남습니다. provider 식별자는 원격 서버 신원의 보증이 아닙니다.
-
-Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 포함하지 않습니다. `chars/4` 같은 대체 계산도 없습니다. 최대 4개 항목, 항목당 16 KiB, 정규식 구간 512바이트와 계산 시간·작업량 한계를 넘으면 추정을 중단합니다. 공식 tiktoken과의 동등성은 아직 검증하지 않았습니다.
-
-기존 설치의 설정·관측 기록을 유지하기 위해 앱 번들 식별자와 `CodexHub` 저장 경로, 내부 모듈·helper 이름은 그대로 사용합니다. 앱 표시 이름과 배포 파일명은 Tokloom입니다.
+기존 설치의 설정·관측 기록을 유지하기 위해 앱 번들 식별자와 `CodexHub` 저장 경로, 내부 모듈 이름은 그대로 사용합니다. 앱 표시 이름과 배포 파일명은 Tokloom입니다.
 
 ## 구조와 저장
 
@@ -208,7 +187,6 @@ Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 �
 | `CodexHubCore` | 상태·누적 사용량·작업/관측 구간 평균 |
 | `CodexHubCollector` | 읽기 전용 로그/관리형 메타데이터 수집과 SQLite 체크포인트 |
 | `CodexHubApp` | SwiftUI 화면, AppKit 메뉴바, 사용자 설정과 차트 저장 |
-| `CodexHubHelper` | Swift 런처와 로컬 relay |
 
 프로덕션 구현은 Swift와 macOS 시스템 라이브러리를 사용합니다. Tokloom은 프롬프트·응답 원문을 저장하지 않습니다. 메타데이터는 `~/Library/Application Support/CodexHub/homes/<homeHash>`, 관리형 관측 파일은 같은 `CodexHub` 디렉터리의 `managed-runs/<homeHash>`에 분리합니다.
 
@@ -216,13 +194,11 @@ Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 �
 
 ## 검증 상태와 문서
 
-최근 완료한 범위는 Core/Collector 테스트 88개, UI01–UI108·P01–P07의 합성 UI/프로세스 검증 114개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
+최근 완료한 범위는 Core/Collector 테스트 85개, UI01–UI108·P01–P07의 합성 UI/프로세스 검증 114개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
 
-전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기, Live tokenizer 동등성과 전체 provider 실행 경로는 검증이 남아 있습니다.
+전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기와 전체 provider 실행 경로는 검증이 남아 있습니다.
 
 - [초기 설계 PRD (보관; 현재 제품은 로그 수집과 Claude Code 지원으로 구현됨)](docs/Codex_Hub_PRD.md)
 - [네이티브 UI와 회귀 검증](docs/verification/native-ui.md)
 - [수집기 검증](docs/verification/collector.md)
-- [서버 타이밍 검증](docs/verification/server-timing.md)
-- [관리형 helper 계약](docs/managed-helper.md)
-- [Live estimator](docs/live-estimator.md) · [수집 입력 계약](docs/collector-live-hooks.md)
+- [수집 입력 계약](docs/collector-live-hooks.md)
