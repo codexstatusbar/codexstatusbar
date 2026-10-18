@@ -333,6 +333,26 @@ import CodexHubCollector
         let collectorErrors: [CollectorError] = [.unsafePath, .inaccessibleSource, .database, .metadataInUse, .invalidSettings, .invalidRecord, .oversizedRecord, .sourceMismatch, .ambiguousSource]
         precondition(collectorErrors.allSatisfy { korean.text($0.message) != $0.message }, "UI109 every collector error message has a Korean translation")
         precondition(settingsKeys.allSatisfy { korean.text($0) != $0 }, "UI104 every menu bar setting and usage label has a Korean translation")
+        precondition(readme.menuItems == [.rate(nil, "77.7 T/S"), .stack(.codex, session: nil, weekly: "W 61%"), .stack(.claude, session: "S 90%", weekly: "W 28%")],
+                     "UI110 remaining usage is grouped per provider with the session above the weekly window")
+        for dark in [false, true] {
+            let image = MenuBarImage.render(readme.menuItems, height: 22)
+            precondition(image.size.width > 80 && image.size.height == 22, "UI111 the stacked menu bar image has a size")
+            let pad: CGFloat = 8, scale: CGFloat = 3
+            let size = NSSize(width: image.size.width + 2 * pad, height: 30)
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale), bitsPerSample: 8, samplesPerPixel: 4,
+                                       hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            rep.size = size
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            NSAppearance(named: dark ? .darkAqua : .aqua)!.performAsCurrentDrawingAppearance {
+                (dark ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.93, alpha: 1)).setFill()
+                NSRect(origin: .zero, size: size).fill()
+                image.draw(at: NSPoint(x: pad, y: 4), from: .zero, operation: .sourceOver, fraction: 1)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: output).appendingPathComponent(dark ? "menubar-dark.png" : "menubar-light.png"))
+        }
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
         try capture(readme, "readme-overview-en", output, dark: true)
@@ -468,7 +488,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI109 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI111 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

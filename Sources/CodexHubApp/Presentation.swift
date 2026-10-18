@@ -382,6 +382,23 @@ enum MenuWindows: String, CaseIterable {
                      value: String(Int($0.remainingPercent.rounded())) + "%" + (menuShowsReset ? remainingTime($0).map { " " + $0 } ?? "" : ""))
         }
     }
+    /// The same parts grouped for drawing: each provider's windows stack, session above weekly.
+    var menuItems: [MenuBarItem] {
+        var items: [MenuBarItem] = []
+        for part in menuParts {
+            switch part.kind {
+            case .speed:
+                items.append(.rate(part.provider, part.text))
+            case .session, .weekly:
+                guard let provider = part.provider else { continue }
+                var session: String?, weekly: String?
+                if case .stack(let last, let s, let w)? = items.last, last == provider { session = s; weekly = w; items.removeLast() }
+                if part.kind == .session { session = part.text } else { weekly = part.text }
+                items.append(.stack(provider, session: session, weekly: weekly))
+            }
+        }
+        return items
+    }
     /// Plain-text form of the menu bar, used for accessibility and tests; the bar itself draws icons.
     var menuTitle: String {
         menuParts.map { ($0.provider.map { $0 == .codex ? "CX " : "CL " } ?? "") + $0.text }.joined(separator: " · ")

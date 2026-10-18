@@ -27,9 +27,17 @@ import ServiceManagement
     private func observeTitle() {
         withObservationTracking {
             item.button?.toolTip = model.language.resolved == .korean ? "Tokloom — 출력 증가량 ÷ 응답 생성 구간(추정). S·W: 5시간 세션·주간 남은 사용량." : "Tokloom — Output delta / response generation interval (estimate). S·W: remaining 5-hour session and weekly usage."
-            item.button?.attributedTitle = menuAttributedTitle()
-            item.button?.image = model.menuTitle.isEmpty ? statusIcon : nil
-            item.button?.imagePosition = model.menuTitle.isEmpty ? .imageOnly : .noImage
+            let items = model.menuItems
+            if items.contains(where: { if case .stack = $0 { true } else { false } }) {
+                // Remaining usage is stacked on two lines, which only an image can draw.
+                item.button?.attributedTitle = NSAttributedString(string: "")
+                item.button?.image = MenuBarImage.render(items, height: NSStatusBar.system.thickness)
+                item.button?.imagePosition = .imageOnly
+            } else {
+                item.button?.attributedTitle = menuAttributedTitle()
+                item.button?.image = model.menuTitle.isEmpty ? statusIcon : nil
+                item.button?.imagePosition = model.menuTitle.isEmpty ? .imageOnly : .noImage
+            }
             item.button?.setAccessibilityLabel("Tokloom, " + (model.menuTitle.isEmpty ? model.text(model.summary) : model.menuTitle))
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in self?.observeTitle() }

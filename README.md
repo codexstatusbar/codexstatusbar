@@ -163,7 +163,7 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 
 ## Account usage limits
 
-The overview shows one column per provider, and the menu bar can list the same numbers as `S` (5-hour session) and `W` (weekly) with the share still unused. They refresh every five minutes.
+The overview shows one column per provider, and the menu bar can list the same numbers as `S` (5-hour session) and `W` (weekly) with the share still unused. In the menu bar each provider's icon is followed by the two windows stacked on two lines, `S` above `W` (a provider with only one window shows it on a single line). They refresh every five minutes.
 
 - **Codex** — read from the newest `rate_limits` in the local session logs (`~/.codex/sessions`), only while `auth.json` exists. Windows that have already reset are hidden.
 - **Claude** — Claude Code does not log its limits, so Tokloom asks Anthropic's usage endpoint (`api.anthropic.com/api/oauth/usage`) with the OAuth token Claude Code already stored in the macOS Keychain (`Claude Code-credentials`). The token is read through `/usr/bin/security`, sent only to that endpoint, and never saved or logged. macOS may ask once to allow keychain access. Without a Claude Code login, or with an expired token, nothing is shown.
@@ -187,7 +187,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 85 Core/Collector tests, 108 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 85 Core/Collector tests, 111 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 
