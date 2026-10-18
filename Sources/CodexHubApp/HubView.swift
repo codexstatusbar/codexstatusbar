@@ -96,6 +96,26 @@ struct HubView: View {
         }
     }
 
+    private var weeklyQuota: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            Text(model.text("Weekly remaining")).font(.system(size: 10, weight: .medium)).tracking(0.5).foregroundStyle(secondary)
+            ForEach(SessionProvider.allCases, id: \.self) { provider in
+                if let quota = model.quotas[provider] {
+                    HStack(spacing: 10) {
+                        ProviderBadge(provider: provider, size: 22)
+                        ProgressView(value: quota.remainingPercent, total: 100).tint(provider.badgeColor)
+                        Text(String(Int(quota.remainingPercent.rounded())) + "%").font(.system(size: 12, weight: .medium)).monospacedDigit().frame(width: 40, alignment: .trailing)
+                        if let reset = quota.resetsAt {
+                            Text(reset.formatted(.dateTime.month().day().hour().minute())).font(.system(size: 10)).foregroundStyle(secondary)
+                        }
+                    }.accessibilityElement(children: .combine)
+                        .accessibilityLabel(model.quotaText(provider).map { $0 + " " + model.text("left") } ?? "")
+                }
+            }
+        }
+    }
+
     private var measurementCaption: String {
         model.aggregateRate != nil && model.error == nil ? model.text("생성 구간 추정") : model.text(model.summary)
     }
@@ -132,6 +152,7 @@ struct HubView: View {
                 Label(model.text("Approval is waiting in Codex. Respond in the original terminal; Tokloom never approves commands."), systemImage: "hand.raised")
                     .font(.system(size: 11)).foregroundStyle(Color.primary)
             }
+            if !model.quotas.isEmpty { weeklyQuota }
             Divider()
             VStack(spacing: 14) {
                 HStack {
@@ -224,6 +245,18 @@ struct HubView: View {
                         Text(model.text(unit == .second ? "초당 · t/s" : "분당 · t/m")).tag(unit)
                     }
                 }.disabled(model.updateRateUnit == nil)
+                }
+            }
+            settingsSection("Menu bar", subtitle: "Choose what the menu bar shows.") {
+                ForEach(Array(MenuField.allCases.enumerated()), id: \.element) { index, field in
+                    if index > 0 { Divider() }
+                    let label = field == .speed ? "Speed" : field == .codexWeekly ? "Codex weekly remaining" : "Claude weekly remaining"
+                    settingsRow(label, icon: field == .speed ? "speedometer" : "calendar") {
+                        Toggle(isOn: Binding(get: { model.menuFields.contains(field) },
+                                             set: { if $0 { model.menuFields.insert(field) } else { model.menuFields.remove(field) }; model.saveDisplayPreferences?() })) {
+                            Label(model.text(label), systemImage: field == .speed ? "speedometer" : "calendar")
+                        }
+                    }
                 }
             }
             settingsSection("Behavior", subtitle: "Control startup and session visibility.") {

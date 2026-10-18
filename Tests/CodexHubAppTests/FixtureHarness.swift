@@ -285,6 +285,13 @@ import CodexHubCollector
         readme.sessions = [historyModel.sessions[0], claudeRow]
         readme.frame = try ReportedFrame(monitors: readme.sessions.map(\.monitor), verifiedIndependentThreads: Set(readme.sessions.map(\.id)), at: 303)
         precondition(readme.providerBreakdown?.hasPrefix("Codex ") == true && readme.providerBreakdown?.contains("Claude 60") == true, "UI96 combined speed lists each provider when both run")
+        readme.quotas = [.codex: ProviderQuota(provider: .codex, usedPercent: 39, resetsAt: Date(timeIntervalSince1970: 1_792_909_120)),
+                         .claude: ProviderQuota(provider: .claude, usedPercent: 72.4, resetsAt: nil)]
+        precondition(readme.menuTitle.hasSuffix("CX 61% · CL 28%") && readme.quotaText(.claude) == "Claude 28%", "UI97 menu and root page list each logged-in provider's weekly remaining")
+        readme.menuFields = [.claudeWeekly]
+        precondition(readme.menuTitle == "CL 28%", "UI99 menu bar shows only the selected fields")
+        readme.menuFields = Set(MenuField.allCases)
+        precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
         try capture(readme, "readme-overview-en", output, dark: true)
         readme.language = .korean
@@ -419,7 +426,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI96 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI99 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

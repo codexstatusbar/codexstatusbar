@@ -10,6 +10,7 @@ import CodexHubCollector
     private var collector: LogCollector?
     private var claudeCollector: ClaudeCollector?
     private var polling: Task<Void, Never>?
+    private var quotaPolling: Task<Void, Never>?
     private var backgroundRefresh: Task<Void, Never>?
     private var generation = 0
     private var savedChartHistory: [ThreadKey: [UsageHistoryPoint]]?
@@ -29,6 +30,7 @@ import CodexHubCollector
             defaults.set(unit.rawValue, forKey: "rateUnit")
         }
         model.hookAction = { [weak self] action in self?.runHooks(action) }
+        if let saved = defaults.stringArray(forKey: "menuFields") { model.menuFields = Set(saved.compactMap(MenuField.init(rawValue:))) }
         model.hideIdle = defaults.bool(forKey: "hideIdle")
         model.hideUnattached = defaults.bool(forKey: "hideUnattached")
         model.retentionDays = [1, 7, 30, 90].contains(defaults.integer(forKey: "retentionDays")) ? defaults.integer(forKey: "retentionDays") : 7
@@ -37,6 +39,7 @@ import CodexHubCollector
         model.updateLogin = { [weak self] value in self?.menu?.setStartAtLogin(value) }
         model.saveDisplayPreferences = { [weak self] in
             guard let self else { return }
+            defaults.set(model.menuFields.map(\.rawValue).sorted(), forKey: "menuFields")
             defaults.set(model.hideIdle, forKey: "hideIdle")
             defaults.set(model.hideUnattached, forKey: "hideUnattached")
         }
@@ -123,6 +126,7 @@ import CodexHubCollector
 
     private func connect(home: URL) {
         polling?.cancel()
+        quotaPolling?.cancel()
         backgroundRefresh?.cancel()
         generation += 1
         let current = generation
@@ -139,6 +143,16 @@ import CodexHubCollector
         model.refreshedAt = nil
         let canonicalHome = home.standardizedFileURL.resolvingSymlinksInPath()
         model.codexHome = canonicalHome.path
+        // The usage endpoint is rate limited, so the weekly windows refresh every five minutes.
+        quotaPolling = Task { [weak self] in
+            while !Task.isCancelled {
+                let codex = await Task.detached { QuotaReader.codexWeekly(home: canonicalHome) }.value
+                let claude = await QuotaReader.claudeWeekly()
+                guard let self, !Task.isCancelled else { return }
+                model.quotas = Dictionary(uniqueKeysWithValues: [codex, claude].compactMap { $0 }.map { ($0.provider, $0) })
+                do { try await Task.sleep(for: .seconds(300)) } catch { return }
+            }
+        }
         model.doctorResult = "Not checked. Managed relay is experimental; G0 is unverified."
         model.hooksResult = "Not checked. Hook trust and runtime compatibility are unverified."
         model.busy = true

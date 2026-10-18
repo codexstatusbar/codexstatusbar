@@ -114,6 +114,8 @@ struct UsageHistoryPoint: Identifiable, Equatable {
 
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
+enum MenuField: String, CaseIterable { case speed, codexWeekly, claudeWeekly }
+
 @MainActor @Observable final class HubPresentation {
     var appName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Tokloom" }
     var sessions: [SessionPresentation] = [] {
@@ -122,6 +124,8 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     private(set) var sessionGroups: [ThreadKey: [SessionPresentation]] = [:]
     var unattachedProcesses: [ProcessIdentity] = []
     var frame: ReportedFrame?
+    /// Weekly windows of the providers that have a login; a provider without one is absent.
+    var quotas: [SessionProvider: ProviderQuota] = [:]
     var rateUnit = RateUnit.second
     var updateRateUnit: ((RateUnit) -> Void)?
     var configuredServiceTier: ServiceTier?
@@ -132,6 +136,8 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
     var hooksResult = "Not checked. Hook trust and runtime compatibility are unverified."
     var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
+    /// What the menu bar title shows; the icon stays when nothing selected has a value.
+    var menuFields: Set<MenuField> = Set(MenuField.allCases)
     var hideIdle = false
     var hideUnattached = false
     var retentionDays = 7
@@ -340,8 +346,14 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         return "상태 미확인"
     }
     var menuTitle: String {
-        guard aggregateRate != nil, error == nil, summary != "—" else { return "" }
-        return summary + " " + rateUnit.suffix
+        let rate = menuFields.contains(.speed) && aggregateRate != nil && error == nil && summary != "—" ? summary + " " + rateUnit.suffix : ""
+        let weekly = SessionProvider.allCases.filter { menuFields.contains($0 == .codex ? .codexWeekly : .claudeWeekly) }
+        return ([rate] + weekly.compactMap { quotaText($0, short: true) }).filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+    /// "Codex 61%" (menu bar: "CX 61%") is the share of the weekly window still unused.
+    func quotaText(_ provider: SessionProvider, short: Bool = false) -> String? {
+        guard let quota = quotas[provider] else { return nil }
+        return (short ? (provider == .codex ? "CX" : "CL") : provider.displayName) + " " + String(Int(quota.remainingPercent.rounded())) + "%"
     }
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
     func rate(for session: SessionPresentation) -> String {
