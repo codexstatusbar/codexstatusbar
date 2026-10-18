@@ -11,7 +11,7 @@ final class MetadataStore: @unchecked Sendable {
     init(directoryURL: URL, sourceScope: String) throws {
         directory = try SafeDirectory(directoryURL, createPrivate: true)
         lockFD = dup(directory.fd)
-        guard lockFD >= 0, flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
+        guard lockFD >= 0, Self.lock(lockFD) else {
             if lockFD >= 0 { close(lockFD) }
             throw CollectorError.database
         }
@@ -52,6 +52,17 @@ final class MetadataStore: @unchecked Sendable {
         }
     }
     deinit { sqlite3_close(db); close(lockFD) }
+
+    /// An actor is not released synchronously with its last reference, so a collector restarted on the same
+    /// directory can meet the previous lock for a moment; wait briefly before treating it as held elsewhere.
+    private static func lock(_ fd: Int32) -> Bool {
+        for _ in 0..<50 {
+            if flock(fd, LOCK_EX | LOCK_NB) == 0 { return true }
+            guard errno == EWOULDBLOCK else { return false }
+            usleep(20_000)
+        }
+        return false
+    }
 
     private func validate() throws {
         try directory.validateMetadataFiles()

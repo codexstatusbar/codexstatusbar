@@ -83,6 +83,18 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(result.diagnostics.contains { $0.error == .invalidRecord })
 }
 
+private final class CollectorBox: @unchecked Sendable { var collector: LogCollector? }
+
+@Test func S250NewCollectorWaitsBrieflyForThePreviousOneToReleaseTheMetadataLock() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let box = CollectorBox()
+    box.collector = try s.collector()
+    // Releasing an actor is not synchronous with dropping the last reference, so a restart may race the old lock.
+    Task.detached { try? await Task.sleep(for: .milliseconds(150)); box.collector = nil }
+    let next = try s.collector()
+    #expect(try await next.refresh().sessions.count == 1)
+}
+
 @Test func S205RestartRestoresCheckpointWithoutLiveReplay() async throws {
     let s = try Sandbox(); try s.write(meta + start("old") + usage(100))
     var c: LogCollector? = try s.collector()
