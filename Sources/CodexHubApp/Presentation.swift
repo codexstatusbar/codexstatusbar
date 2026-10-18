@@ -101,7 +101,7 @@ struct UsageHistoryPoint: Identifiable, Equatable {
     var id: Double { time }
 }
 
-enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
+enum HubPage: Hashable { case overview, detail(ThreadKey), preferences }
 
 /// What the menu bar shows for speed; the per-provider rates split the combined one.
 enum MenuSpeed: String, CaseIterable {

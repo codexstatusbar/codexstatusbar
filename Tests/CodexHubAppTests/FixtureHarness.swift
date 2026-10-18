@@ -63,16 +63,9 @@ import CodexHubCollector
         model.page = .preferences
         try capture(model, "preferences", output, dark: false)
         try capture(model, "preferences-full", output, dark: true, height: 900)
-        model.page = .connection
         model.diagnostics = ["Fixture: logs directory readable", "No provider calls performed"]
-        try capture(model, "connection", output, dark: false)
-        try capture(model, "connection-full", output, dark: false, height: 900)
-        model.language = .english
-        try capture(model, "readme-connection-en", output, dark: false, height: 900)
-        let readme_connection_en_language = model.language
-        model.language = .korean
-        try capture(model, "readme-connection-ko", output, dark: false, height: 900)
-        model.language = readme_connection_en_language
+        try capture(model, "preferences-diagnostics", output, dark: false, height: 900)
+        model.diagnostics = []
         model.language = .korean
         model.page = .overview
         try set([a,b], verified: [a.key])

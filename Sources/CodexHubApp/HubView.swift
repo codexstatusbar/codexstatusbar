@@ -28,7 +28,6 @@ struct HubView: View {
                         if let session = model.sessions.first(where: { $0.id == key }) { detail(session) }
                         else { Text(model.text("This session is no longer available.")) }
                     case .preferences: preferences
-                    case .connection: connection
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 18)
             }.id(model.page)
@@ -77,9 +76,6 @@ struct HubView: View {
             Image(systemName: "arrow.clockwise").accessibilityHidden(true)
             Text(model.freshness).lineLimit(1)
             Spacer(minLength: 8)
-            Button { model.page = .connection } label: {
-                Label(model.text("연결"), systemImage: "cable.connector").frame(minHeight: 28)
-            }.buttonStyle(.plain)
             Button { model.page = .preferences } label: {
                 Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28).contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel(model.text("설정")).help(model.text("설정")).keyboardShortcut(",", modifiers: .command)
@@ -92,7 +88,6 @@ struct HubView: View {
         case .overview: model.appName
         case .detail: model.text("상세정보")
         case .preferences: model.text("설정")
-        case .connection: model.text("연결")
         }
     }
 
@@ -210,7 +205,7 @@ struct HubView: View {
                 }
                 if model.processCount == 0 {
                     Text(model.text(model.error == nil ? "실행 중인 Codex가 없습니다" : "수집 오류로 프로세스 목록을 불러오지 못했습니다")).foregroundStyle(secondary)
-                    Button(model.text("연결 확인")) { model.page = .connection; model.refresh?() }.disabled(model.busy || model.refresh == nil)
+                    Button(model.text("연결 확인")) { model.page = .preferences; model.refresh?() }.disabled(model.busy || model.refresh == nil)
                 } else if model.visibleSessions.isEmpty && model.visibleUnattached.isEmpty {
                     Text(model.text("대기 중인 항목은 설정에 따라 숨겨져 있습니다.")).font(.system(size: 11)).foregroundStyle(secondary)
                 }
@@ -259,6 +254,16 @@ struct HubView: View {
 
     private var preferences: some View {
         VStack(alignment: .leading, spacing: 22) {
+            settingsSection("Log connection", subtitle: "Logs are read as saved metadata; Codex is never restarted.") {
+                copyValue("Codex home", model.codexHome)
+                copyValue("Claude home", model.claudeHome)
+                connectionNote(model.quotas.contains { $0.provider == .claude } ? "Claude usage limits: a Claude Code login was found." : "Claude usage limits: no Claude Code login found yet.")
+                connectionNote("로그는 1초 간격으로 자동 수집합니다.")
+                HStack {
+                    Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy)
+                    Button(model.text(model.checkingConnection ? "연결 확인 중…" : "지금 확인")) { model.refresh?() }.disabled(model.busy || model.refresh == nil)
+                }.buttonStyle(.bordered)
+            }
             settingsSection("General settings", subtitle: "Choose the app language and speed display.") {
                 settingsRow("Language") {
                 Picker(model.text("Language"), selection: $model.language) {
@@ -331,6 +336,14 @@ struct HubView: View {
                     Text(model.text(model.loginStatus)).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
+            if !model.diagnostics.isEmpty {
+                settingsSection("Collection diagnostics", subtitle: "A collection error does not mean your Codex task failed. Check the original terminal for task status.") {
+                    ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in
+                        Text(model.text(text)).font(.system(size: 11)).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
             settingsSection("Privacy and data", subtitle: "Manage how long collected metadata is kept.") {
                 settingsRow("Metadata retention") {
                 Picker(model.text("Metadata retention"), selection: Binding(get: { model.retentionDays }, set: { model.updateRetention?($0) })) {
@@ -371,48 +384,6 @@ struct HubView: View {
             Divider().padding(.top, 4)
         }
     }
-    private var connection: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "terminal").font(.system(size: 22)).foregroundStyle(.blue)
-                    .frame(width: 42, height: 42).background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(model.text("Keep your terminal.")).font(.system(size: 17, weight: .semibold))
-                    connectionNote("Logs compatibility mode observes saved metadata without restarting Codex.")
-                }
-            }
-            connectionSection("Current log location", icon: "folder", tint: .blue) {
-                copyValue("Codex home", model.codexHome)
-                copyValue("Claude home", model.claudeHome)
-                connectionNote(model.quotas.contains { $0.provider == .claude } ? "Claude usage limits: a Claude Code login was found." : "Claude usage limits: no Claude Code login found yet.")
-                connectionNote("로그는 1초 간격으로 자동 수집합니다.")
-                HStack {
-                    Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy)
-                    Button(model.text(model.checkingConnection ? "연결 확인 중…" : "지금 확인")) { model.refresh?() }.disabled(model.busy || model.refresh == nil)
-                }
-            }
-            if !model.diagnostics.isEmpty {
-                connectionSection("Collection diagnostics", icon: "exclamationmark.triangle", tint: attention) {
-                    ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in
-                        Text(model.text(text)).font(.system(size: 11)).textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    connectionNote("A collection error does not mean your Codex task failed. Check the original terminal for task status.")
-                }
-            }
-        }.buttonStyle(.bordered).controlSize(.regular)
-    }
-
-    private func connectionSection<Content: View>(_ title: String, icon: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label { Text(model.text(title)).font(.system(size: 13, weight: .semibold)) } icon: {
-                Image(systemName: icon).foregroundStyle(tint)
-            }
-            content()
-            Divider().padding(.top, 4)
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     private func connectionNote(_ text: String) -> some View {
         Text(model.text(text)).font(.system(size: 11)).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

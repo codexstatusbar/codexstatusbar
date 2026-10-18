@@ -43,15 +43,10 @@ Tokloom is a native menu bar monitor for developers using Codex or Claude Code. 
     </td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top">
-      <h3>03 · Keep your terminal</h3>
-      <p>Inspect the Codex and Claude Code log paths and collection diagnostics.<br />Codex and Claude Code, side by side.</p>
-      <a href="docs/images/connection-en.png"><img src="docs/images/connection-en.png" alt="Tokloom connection page with log location and diagnostics" width="340" /></a>
-    </td>
-    <td width="50%" align="center" valign="top">
-      <h3>04 · Make it yours</h3>
-      <p>Choose your language, speed display and startup<br />behavior, and manage metadata retention.</p>
-      <a href="docs/images/settings-en.png"><img src="docs/images/settings-en.png" alt="Tokloom settings for language, measurement, startup and data retention" width="340" /></a>
+    <td colspan="2" align="center" valign="top">
+      <h3>03 · Connection and settings</h3>
+      <p>The Codex and Claude Code log paths, language, speed display, menu bar items,<br />startup behavior and metadata retention, in one place.</p>
+      <a href="docs/images/settings-en.png"><img src="docs/images/settings-en.png" alt="Tokloom settings with the log connection, language, menu bar items, startup and data retention" width="340" /></a>
     </td>
   </tr>
 </table>
@@ -75,7 +70,7 @@ open '.build/Tokloom.app'
 
 Distribution bundles are arm64 Release builds with local ad-hoc signatures. They are not signed with an Apple distribution certificate or notarized. The first SwiftPM build may download pinned test dependencies.
 
-Choose your Codex home in **Connection**. Tokloom starts with the home that most running Codex terminals use (a process without `CODEX_HOME` uses `~/.codex`), or `~/.codex` when none runs. The `CODEX_HOME` of the shell that launched Tokloom is ignored; choose another home here if you need one, and your choice is kept. Tokloom reads original logs without modifying them or restarting Codex, polling once per second.
+Choose your Codex home in **Settings → Log connection**. Tokloom starts with the home that most running Codex terminals use (a process without `CODEX_HOME` uses `~/.codex`), or `~/.codex` when none runs. The `CODEX_HOME` of the shell that launched Tokloom is ignored; choose another home here if you need one, and your choice is kept. Tokloom reads original logs without modifying them or restarting Codex, polling once per second.
 
 Only live processes appear in the list. Sessions are matched using PID, process start time, and exact log file identity. Unmatched processes remain in an identifying state; exited processes are not listed as historical sessions. Quitting Tokloom does not stop Codex sessions.
 
@@ -144,11 +139,11 @@ Samples are saved in a protected SQLite metadata database. On app restart or reb
 
 Clearing collected metadata also clears chart history. Original Codex logs remain intact. Empty or unsaved history from older versions affected by the persistence bug cannot be recovered.
 
-## Settings and connection
+## Settings
 
-**Settings** provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
+**Settings** starts with **Log connection** (Codex home selection and copying, an immediate check, the Claude Code home with whether a Claude Code login was found, and collection diagnostics when there are any), then provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
 
-**Connection** provides log-path selection/copying, an immediate connection check, the Claude Code home with whether a Claude Code login was found, and collection diagnostics. Paths have individual copy buttons.
+Paths have individual copy buttons.
 
 On macOS 26+, supported buttons use native Glass styling. Older systems use bordered controls; Reduce Transparency uses an opaque system background. Right-click the menu bar item to open or quit the app.
 
