@@ -10,7 +10,6 @@ let help = """
 Usage: codex-hub help
        codex-hub doctor [--codex /absolute/path/to/codex]
        codex-hub run --experimental [--server-timing] [--codex /absolute/path/to/codex]
-       codex-hub hooks install|uninstall|status --home /absolute/CODEX_HOME [--consent]
 
 Experimental managed run: Codex 0.163.0 only; G0 and real TUI semantics UNVERIFIED.
 Starts an owned app-server, relays Unix HTTP Upgrade/WebSocket bytes, then execs
@@ -18,8 +17,7 @@ Codex TUI --remote with the current working directory and environment.
 No extra TUI options, prompts, profiles, resume, fork or server overrides are
 accepted: their argument routing has not been verified. Configure Codex normally.
 Live estimates use bundled tokenization for supported OpenAI model mappings;
-unknown models remain unavailable. Optional hooks require
-explicit consent for mutation and manual /hooks trust; runtime unverified.
+unknown models remain unavailable.
 --server-timing opts this managed invocation into runtime_metrics and local,
 metadata-only server timing capture; no global config or provider request is
 made by installing the app. Raw TBT is not a verified decode-rate contract.
@@ -255,13 +253,6 @@ func pump(from source: Int32, to destination: Int32, observer: Observation?, cli
 func main() throws {
     var arguments = Array(CommandLine.arguments.dropFirst())
     let command = arguments.isEmpty ? "help" : arguments.removeFirst()
-    if command == "_hook-record" { Hooks.record(arguments); return }
-    if command == "hooks" {
-        do { try Hooks.run(arguments) }
-        catch let error as HelperError { throw error }
-        catch { throw HelperError("Hook configuration could not be parsed or updated; no raw configuration is displayed") }
-        return
-    }
     if command == "_serve" { try serve(arguments); return }
     if ["help", "--help", "-h"].contains(command) {
         guard arguments.isEmpty else { throw HelperError("help accepts no options") }
