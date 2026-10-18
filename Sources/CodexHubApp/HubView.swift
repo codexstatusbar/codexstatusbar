@@ -106,6 +106,23 @@ struct HubView: View {
         }
     }
 
+    private func quotaRow(_ quota: ProviderQuota) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(model.text(quota.isWeekly ? "Weekly" : "Session") + (quota.isWeekly ? "" : " " + model.windowLabel(quota)))
+                    .font(.system(size: 10)).foregroundStyle(secondary)
+                Spacer(minLength: 4)
+                Text(String(Int(quota.remainingPercent.rounded())) + "%").font(.system(size: 12, weight: .medium)).monospacedDigit()
+                if let reset = quota.resetsAt {
+                    Text(model.remainingTime(quota) ?? "—").font(.system(size: 10)).monospacedDigit().foregroundStyle(secondary)
+                        .help(reset.formatted(.dateTime.month().day().hour().minute()))
+                }
+            }
+            ProgressView(value: quota.remainingPercent, total: 100).tint(quota.provider.badgeColor)
+        }.accessibilityElement(children: .combine)
+            .accessibilityLabel(model.quotaText(quota) + " " + model.text("left"))
+    }
+
     private func providerColumn(_ provider: SessionProvider) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -117,21 +134,15 @@ struct HubView: View {
             }
             ObservedTokenChart(points: model.overviewUsageHistory(for: provider), now: model.frame?.time ?? 0, emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset, unit: model.rateUnit)
                 .accessibilityLabel(provider.displayName + " " + model.text("관측 출력 토큰"))
-            ForEach(model.quotas.filter { $0.provider == provider }.sorted { $0.windowMinutes < $1.windowMinutes }, id: \.windowMinutes) { quota in
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(model.text(quota.isWeekly ? "Weekly" : "Session") + (quota.isWeekly ? "" : " " + model.windowLabel(quota)))
-                            .font(.system(size: 10)).foregroundStyle(secondary)
-                        Spacer(minLength: 4)
-                        Text(String(Int(quota.remainingPercent.rounded())) + "%").font(.system(size: 12, weight: .medium)).monospacedDigit()
-                        if let reset = quota.resetsAt {
-                            Text(model.remainingTime(quota) ?? "—").font(.system(size: 10)).monospacedDigit().foregroundStyle(secondary)
-                                .help(reset.formatted(.dateTime.month().day().hour().minute()))
-                        }
+            // Fixed slots keep each window at the same height in every column; a missing window leaves its slot empty.
+            ForEach([false, true], id: \.self) { weekly in
+                if model.quotas.contains(where: { $0.isWeekly == weekly }) {
+                    if let quota = model.quotas.first(where: { $0.provider == provider && $0.isWeekly == weekly }) {
+                        quotaRow(quota)
+                    } else {
+                        quotaRow(ProviderQuota(provider: provider, windowMinutes: weekly ? QuotaParser.weeklyMinutes : 300, usedPercent: 0, resetsAt: nil)).hidden()
                     }
-                    ProgressView(value: quota.remainingPercent, total: 100).tint(provider.badgeColor)
-                }.accessibilityElement(children: .combine)
-                    .accessibilityLabel(model.quotaText(quota) + " " + model.text("left"))
+                }
             }
         }.padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(inset, in: RoundedRectangle(cornerRadius: 8))
