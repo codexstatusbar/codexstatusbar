@@ -50,7 +50,10 @@ import ServiceManagement
                 result.append(NSAttributedString(attachment: attachment))
                 result.append(NSAttributedString(string: " ", attributes: [.font: font]))
             }
-            result.append(NSAttributedString(string: part.text, attributes: [.font: font]))
+            let mark = NSAttributedString(string: part.mark, attributes: [.font: NSFont.systemFont(ofSize: font.pointSize, weight: .semibold), .foregroundColor: part.kind.color])
+            let value = NSAttributedString(string: part.value, attributes: [.font: font])
+            let space = NSAttributedString(string: " ", attributes: [.font: font])
+            for piece in part.kind == .speed ? [value, space, mark] : [mark, space, value] { result.append(piece) }
         }
         return result
     }
@@ -125,6 +128,18 @@ import ServiceManagement
         } catch {
             model.notice = "Login item change failed. Check System Settings → Login Items."
             refreshLoginStatus()
+        }
+    }
+}
+
+private extension HubPresentation.MenuPart.Kind {
+    /// Speed is live activity (green); the 5h session is the short, fast-moving limit (teal); the weekly one the long, slow limit (indigo).
+    /// None repeats a provider icon color (Codex blue, Claude coral).
+    var color: NSColor {
+        switch self {
+        case .speed: .systemGreen
+        case .session: .systemTeal
+        case .weekly: .systemIndigo
         }
     }
 }

@@ -35,7 +35,7 @@ import CodexHubCollector
         try capture(model, "reported-dark", output, dark: true)
         model.frame = try ReportedFrame(monitors: [a,b], verifiedIndependentThreads: [a.key,b.key], at: 20)
         precondition(model.summary == "225", "UI35 elapsed work average does not expire after ten seconds")
-        precondition(model.menuTitle == "225 t/s", "UI36 menu shows only speed and unit")
+        precondition(model.menuTitle == "225 T/S", "UI36 menu shows only speed and unit")
         try capture(model, "work-average-waiting", output, dark: false)
         try set([a,b], verified: [a.key,b.key])
         model.sessions[0].usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data("{\"reasoningEffort\":\"high\",\"contextTokens\":600,\"contextWindow\":1000,\"limits\":[{\"name\":\"primary\",\"usedPercent\":21,\"windowMinutes\":10080}]}".utf8))
@@ -102,7 +102,7 @@ import CodexHubCollector
         try a.startTurn("new-turn", at: 7)
         try a.setApproval("approval", waiting: true, turnID: "new-turn", at: 8)
         try set([a,b], verified: [a.key,b.key])
-        precondition(model.summary == "225" && model.menuTitle == "225 t/s", "UI07 approval without samples")
+        precondition(model.summary == "225" && model.menuTitle == "225 T/S", "UI07 approval without samples")
         try capture(model, "working-approval", output, dark: false)
         try a.setConnectivity(.disconnected, at: 9)
         try set([a], verified: [a.key])
@@ -234,10 +234,10 @@ import CodexHubCollector
         historyModel.sessions = [SessionPresentation(monitor: newTurn)]
         historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 2)
         historyModel.rateUnit = .minute
-        precondition(historyModel.menuTitle == HubPresentation.rate(1500) + " t/m" && historyModel.rate(for: historyModel.sessions[0]) == HubPresentation.rate(1500), "UI57 minute conversion is consistent across menu and rows")
+        precondition(historyModel.menuTitle == HubPresentation.rate(1500) + " T/M" && historyModel.rate(for: historyModel.sessions[0]) == HubPresentation.rate(1500), "UI57 minute conversion is consistent across menu and rows")
         precondition(historyModel.displayRate(nil) == "—" && historyModel.displayRate(0) == "0", "UI58 unit conversion preserves missing versus zero")
         historyModel.rateUnit = .second
-        precondition(historyModel.menuTitle == "25 t/s", "UI59 second unit restores the same underlying rate")
+        precondition(historyModel.menuTitle == "25 T/S", "UI59 second unit restores the same underlying rate")
         var chartTotal = 50
         for tick in 3...302 {
             chartTotal += [12, 24, 8, 40, 18, 4][tick % 6]
@@ -300,7 +300,7 @@ import CodexHubCollector
         precondition(readme.menuTitle == "CL W 28%", "UI101 weekly-only mode hides the session")
         readme.menuWindows = .both
         readme.menuFields = [.speed, .codexSpeed, .claudeSpeed]
-        precondition(readme.menuTitle == "77.7 t/s · CX 17.7 t/s · CL 60 t/s", "UI103 the menu bar keeps the combined speed and adds each provider's own")
+        precondition(readme.menuTitle == "77.7 T/S · CX 17.7 T/S · CL 60 T/S", "UI103 the menu bar keeps the combined speed and adds each provider's own")
         readme.menuFields = MenuField.defaults
         readme.menuShowsReset = false
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
@@ -373,7 +373,7 @@ import CodexHubCollector
         idleModel.sessions = [SessionPresentation(monitor: idleMonitor, rootObserved: true)]
         idleModel.restoreUsageHistory([idleMonitor.key: [UsageHistoryPoint(time: 6, outputTokens: 100)]])
         idleModel.frame = try ReportedFrame(monitors: [idleMonitor], verifiedIndependentThreads: [idleMonitor.key], at: 16.999)
-        precondition(idleModel.rate(for: idleModel.sessions[0]) == "20" && idleModel.menuTitle == "20 t/s", "UI83 idle grace retains row and aggregate speed before ten seconds")
+        precondition(idleModel.rate(for: idleModel.sessions[0]) == "20" && idleModel.menuTitle == "20 T/S", "UI83 idle grace retains row and aggregate speed before ten seconds")
         idleModel.frame = try ReportedFrame(monitors: [idleMonitor], verifiedIndependentThreads: [idleMonitor.key], at: 17)
         precondition(idleModel.rate(for: idleModel.sessions[0]) == "—" && idleModel.aggregateRate == nil && idleModel.menuTitle.isEmpty && !idleModel.usageHistory.isEmpty, "UI84 idle expiry clears row and menu rates without clearing chart history")
         try capture(idleModel, "idle-rate-expired", output, dark: true)

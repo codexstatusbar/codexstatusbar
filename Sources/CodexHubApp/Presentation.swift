@@ -380,18 +380,30 @@ enum MenuWindows: String, CaseIterable {
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "대기 중" }
         return "상태 미확인"
     }
-    /// One menu bar item: a provider icon (nil for the speed) followed by its text.
-    struct MenuPart: Equatable { let provider: SessionProvider?; let text: String }
+    /// One menu bar item: a provider icon (nil for the combined speed), a colored mark (`T/S`, `S`, `W`) and its value.
+    struct MenuPart: Equatable {
+        enum Kind { case speed, session, weekly }
+        let provider: SessionProvider?
+        let kind: Kind
+        let mark: String
+        let value: String
+        /// The unit trails a speed (`77.7 T/S`); a window mark leads its percentage (`S 90%`).
+        var text: String { kind == .speed ? value + " " + mark : mark + " " + value }
+    }
     var menuParts: [MenuPart] {
+        let unit = rateUnit.suffix.uppercased()
         var parts: [MenuPart] = []
-        if menuFields.contains(.speed), aggregateRate != nil, error == nil, summary != "—" { parts.append(MenuPart(provider: nil, text: summary + " " + rateUnit.suffix)) }
+        if menuFields.contains(.speed), aggregateRate != nil, error == nil, summary != "—" { parts.append(MenuPart(provider: nil, kind: .speed, mark: unit, value: summary)) }
         for (field, provider) in [(MenuField.codexSpeed, SessionProvider.codex), (.claudeSpeed, .claude)] where menuFields.contains(field) {
-            if let rate = providerRate(provider) { parts.append(MenuPart(provider: provider, text: displayRate(rate) + " " + rateUnit.suffix)) }
+            if let rate = providerRate(provider) { parts.append(MenuPart(provider: provider, kind: .speed, mark: unit, value: displayRate(rate))) }
         }
         let shown = quotas.filter { $0.provider == .codex ? menuFields.contains(.codex) : menuFields.contains(.claude) }.filter(menuWindows.includes).sorted {
             $0.provider != $1.provider ? $0.provider == .codex : $0.windowMinutes < $1.windowMinutes
         }
-        return parts + shown.map { MenuPart(provider: $0.provider, text: ($0.isWeekly ? "W" : "S") + " " + String(Int($0.remainingPercent.rounded())) + "%" + (menuShowsReset ? remainingTime($0).map { " " + $0 } ?? "" : "")) }
+        return parts + shown.map {
+            MenuPart(provider: $0.provider, kind: $0.isWeekly ? .weekly : .session, mark: $0.isWeekly ? "W" : "S",
+                     value: String(Int($0.remainingPercent.rounded())) + "%" + (menuShowsReset ? remainingTime($0).map { " " + $0 } ?? "" : ""))
+        }
     }
     /// Plain-text form of the menu bar, used for accessibility and tests; the bar itself draws icons.
     var menuTitle: String {
