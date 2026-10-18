@@ -89,8 +89,9 @@ private final class StoreBox: @unchecked Sendable { var store: MetadataStore? }
     let s = try Sandbox()
     let box = StoreBox()
     box.store = try MetadataStore(directoryURL: s.metadata, sourceScope: "fixture")
-    // The release runs on GCD so that neither the waiting thread nor a starved task pool can delay it.
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { box.store?.release() }
+    // A dedicated thread does the release: GCD and the task pool share a thread budget with the waiting initializer,
+    // and on a small CI runner they can all be busy sleeping.
+    Thread.detachNewThread { Thread.sleep(forTimeInterval: 0.15); box.store?.release() }
     let next = try MetadataStore(directoryURL: s.metadata, sourceScope: "fixture")
     #expect((try? next.load()) != nil)
 }
