@@ -289,13 +289,13 @@ import CodexHubCollector
         readme.quotas = [ProviderQuota(provider: .codex, usedPercent: 39, resetsAt: Date(timeIntervalSince1970: 1_792_900_000 + 3 * 86_400 + 4 * 3_600 + 30)),
                          ProviderQuota(provider: .claude, windowMinutes: 300, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1_792_900_000 + 2 * 3_600 + 13 * 60 + 30)),
                          ProviderQuota(provider: .claude, usedPercent: 72.4, resetsAt: nil)]
-        precondition(readme.menuTitle.hasSuffix("CX 61% 3d 4h · CL 5h 90% 2h 13m · CL 28%") && readme.quotaText(readme.quotas[1]) == "Claude 5h 90%", "UI97 menu lists every window with its remaining time; weekly without a reset shows none")
+        precondition(readme.menuTitle.hasSuffix("CX w 61% 3d 4h · CL 5h 90% 2h 13m · CL w 28%") && readme.quotaText(readme.quotas[1]) == "Claude 5h 90%", "UI97 menu lists every window with its remaining time; weekly without a reset shows none")
         readme.menuFields = [.claude]
-        precondition(readme.menuTitle == "CL 5h 90% 2h 13m · CL 28%", "UI99 menu bar shows only the selected providers, shortest window first")
+        precondition(readme.menuTitle == "CL 5h 90% 2h 13m · CL w 28%", "UI99 menu bar shows only the selected providers, shortest window first")
         readme.menuWindows = .session
         precondition(readme.menuTitle == "CL 5h 90% 2h 13m", "UI100 session-only mode hides weekly")
         readme.menuWindows = .weekly
-        precondition(readme.menuTitle == "CL 28%", "UI101 weekly-only mode hides the session")
+        precondition(readme.menuTitle == "CL w 28%", "UI101 weekly-only mode hides the session")
         readme.menuWindows = .both
         readme.menuFields = Set(MenuField.allCases)
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")

@@ -366,7 +366,7 @@ enum MenuWindows: String, CaseIterable {
         let shown = quotas.filter { $0.provider == .codex ? menuFields.contains(.codex) : menuFields.contains(.claude) }.filter(menuWindows.includes).sorted {
             $0.provider != $1.provider ? $0.provider == .codex : $0.windowMinutes < $1.windowMinutes
         }
-        return parts + shown.map { MenuPart(provider: $0.provider, text: ($0.isWeekly ? "" : windowLabel($0) + " ") + String(Int($0.remainingPercent.rounded())) + "%" + (remainingTime($0).map { " " + $0 } ?? "")) }
+        return parts + shown.map { MenuPart(provider: $0.provider, text: ($0.isWeekly ? "w" : windowLabel($0)) + " " + String(Int($0.remainingPercent.rounded())) + "%" + (remainingTime($0).map { " " + $0 } ?? "")) }
     }
     /// Plain-text form of the menu bar, used for accessibility and tests; the bar itself draws icons.
     var menuTitle: String {
