@@ -380,7 +380,7 @@ enum MenuWindows: String, CaseIterable {
         if sessions.contains(where: { $0.monitor.connectivity == .connected && $0.activity == .idle }) { return "대기 중" }
         return "상태 미확인"
     }
-    /// One menu bar item: a provider icon (nil for the combined speed), a colored mark (`T/S`, `S`, `W`) and its value.
+    /// One menu bar item: a provider icon (nil for the combined speed), a mark (`T/S`, `S`, `W`) and its value.
     struct MenuPart: Equatable {
         enum Kind { case speed, session, weekly }
         let provider: SessionProvider?
