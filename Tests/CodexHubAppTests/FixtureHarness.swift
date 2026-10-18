@@ -228,6 +228,9 @@ import CodexHubCollector
         quickModel.recordUsageHistory([SessionPresentation(monitor: quick)], at: 101)
         let quickTimes = (quickModel.usageHistory[quickKey] ?? []).map(\.time)
         precondition(quickTimes.count == 3 && quickTimes.min()! > 100.5, "UI56 short responses keep their real duration instead of being widened to whole seconds")
+        var longHistory: [UsageHistoryPoint] = []
+        let longDuration = HubPresentation.spread(1200, endingAt: 2000, seconds: 1200, into: &longHistory)
+        precondition(longDuration == 1200 && longHistory.map(\.outputTokens).reduce(0, +) == 1200 && longHistory.first!.time < 810 && longHistory.count <= 600, "UI56 a response longer than ten minutes keeps its real duration; only the number of chart points is limited")
         historyModel.sessions = [SessionPresentation(monitor: newTurn)]
         historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 2)
         historyModel.rateUnit = .minute

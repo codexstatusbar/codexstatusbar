@@ -200,10 +200,11 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         var seconds = 1
         var duration = 1.0
         if let generation, generation.isFinite, generation > 0 {
-            duration = min(generation, 600)
-            seconds = Int(max(duration.rounded(), 1))
+            duration = generation
+            seconds = Int(min(max(duration.rounded(), 1), 86_400))
         }
-        let points = max(1, min(seconds, tokens))
+        // A long response keeps its real span; only the number of chart points is limited.
+        let points = max(1, min(seconds, tokens, 600))
         let base = tokens / points, extra = tokens % points
         for index in 0..<points {
             // The last `extra` points carry one more token so the total is exact.
