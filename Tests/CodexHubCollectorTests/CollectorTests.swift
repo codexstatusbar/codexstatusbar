@@ -553,6 +553,28 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(try late.sessions[0].monitor.workAverageRate(at: 100) == 40)
 }
 
+@Test func S233bResponseHeadersStartTheGenerationInterval() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.collector(); _ = try await c.refresh()
+    func dated(_ record: String, _ seconds: Int) -> String {
+        let timestamp = String(format: "2026-10-17T00:00:%02d.000Z", seconds)
+        return record.replacingOccurrences(of: "{", with: "{\"timestamp\":\"" + timestamp + "\",", range: record.startIndex..<record.index(after: record.startIndex))
+    }
+    let epoch = ISO8601DateFormatter().date(from: "2026-10-17T00:00:06Z")!.timeIntervalSince1970
+    let body = "session_loop{thread_id=session-a}:try_run_sampling_request{turn_id=live}: version=HTTP/1.1"
+    let sql = "CREATE TABLE logs (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, ts_nanos INTEGER NOT NULL, level TEXT, target TEXT NOT NULL, feedback_log_body TEXT, thread_id TEXT); "
+        + "INSERT INTO logs(ts, ts_nanos, level, target, feedback_log_body, thread_id) VALUES (\(Int(epoch)), 0, 'DEBUG', 'codex_http_client::client', '\(body)', 'session-a'); "
+        + "INSERT INTO logs(ts, ts_nanos, level, target, feedback_log_body, thread_id) VALUES (\(Int(epoch)), 0, 'DEBUG', 'codex_http_client::client', '\(body)', 'other-thread');"
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    process.arguments = [s.home.appendingPathComponent("logs_2.sqlite").path, sql]
+    try process.run(); process.waitUntilExit()
+    // 100 tokens over 10 s of log time, but the stream only started at second 6.
+    try s.append(dated(start("live"), 0) + dated(usage(200), 10))
+    let snapshot = try await c.refresh()
+    #expect(try snapshot.sessions[0].monitor.workAverageRate(at: 100) == 25)
+}
+
 @Test func S234MissingTimingNeverFallsBackToWholeTurnDuration() async throws {
     let s = try Sandbox(); try s.write(meta + usage(100))
     let c = try s.collector(); _ = try await c.refresh()

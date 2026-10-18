@@ -11,6 +11,9 @@ struct RequestTiming: Codable, Sendable {
 
     init(at time: Double) { baseline = time; lastTime = time }
 
+    /// Log time at which the previous sample ended.
+    var baselineTime: Double { baseline }
+
     func accepts(_ time: Double) -> Bool { time.isFinite && time >= lastTime }
 
     mutating func tool(_ id: String, running: Bool, at time: Double) -> Bool {

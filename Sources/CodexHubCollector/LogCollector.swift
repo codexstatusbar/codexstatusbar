@@ -122,6 +122,7 @@ private struct HookState {
 
 public actor LogCollector {
     private let source: SafeDirectory
+    private let streamStarts: StreamStartLog
     private let managedRunsDirectory: URL?
     private let hooksDirectory: URL?
     private let homeHash: String
@@ -147,6 +148,7 @@ public actor LogCollector {
                 monotonic: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
                 wallTime: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) throws {
         source = try SafeDirectory(codexHome)
+        streamStarts = StreamStartLog(codexHome: codexHome)
         // Metadata must never live inside the selected read-only source tree.
         let home = codexHome.resolvingSymlinksInPath().standardizedFileURL.path
         let metadata = metadataDirectory.resolvingSymlinksInPath().standardizedFileURL.path
@@ -900,7 +902,13 @@ public actor LogCollector {
                 if !historical, total.outputTokens != monitor?.counter.baseline?.outputTokens {
                     if let time = recordTime(object) {
                         if state.requestTiming?.accepts(time) == false { state.requestTiming = nil }
+                        let earliest = state.requestTiming?.baselineTime ?? time - 600
                         duration = state.requestTiming?.sample(at: time)
+                        // Generation starts at the response headers; time before them is request latency.
+                        if let thread = state.threadID,
+                           let start = streamStarts.streamStart(thread: thread, earliest: earliest, latest: time), time > start {
+                            duration = min(duration ?? time - start, time - start)
+                        }
                         if state.requestTiming == nil { state.requestTiming = RequestTiming(at: time) }
                     } else { state.requestTiming = nil }
                 }
