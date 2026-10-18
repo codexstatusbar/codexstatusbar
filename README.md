@@ -222,7 +222,7 @@ Completed checks include 88 Core/Collector tests, 112 synthetic UI/process check
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 
-- [PRD](docs/Codex_Hub_PRD.md)
+- [Original design PRD (archived; the product has since moved to log collection and Claude Code support)](docs/Codex_Hub_PRD.md)
 - [Native UI and regression checks](docs/verification/native-ui.md)
 - [Collector verification](docs/verification/collector.md)
 - [Server timing verification](docs/verification/server-timing.md)

@@ -224,7 +224,7 @@ Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 �
 
 전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기, Live tokenizer 동등성과 전체 훅·provider 실행 경로는 검증이 남아 있습니다. 사용자가 실제 설치한 훅의 존재와 자동화된 실행·신뢰 검증은 별개입니다.
 
-- [PRD](docs/Codex_Hub_PRD.md)
+- [초기 설계 PRD (보관; 현재 제품은 로그 수집과 Claude Code 지원으로 구현됨)](docs/Codex_Hub_PRD.md)
 - [네이티브 UI와 회귀 검증](docs/verification/native-ui.md)
 - [수집기 검증](docs/verification/collector.md)
 - [서버 타이밍 검증](docs/verification/server-timing.md)
