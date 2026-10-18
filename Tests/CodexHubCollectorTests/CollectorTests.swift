@@ -90,7 +90,8 @@ private final class CollectorBox: @unchecked Sendable { var collector: LogCollec
     let box = CollectorBox()
     box.collector = try s.collector()
     // Releasing an actor is not synchronous with dropping the last reference, so a restart may race the old lock.
-    Task.detached { try? await Task.sleep(for: .milliseconds(150)); box.collector = nil }
+    // The release runs on GCD: the waiting initializer holds a cooperative thread, and a starved pool must not delay it.
+    DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { box.collector = nil }
     let next = try s.collector()
     #expect(try await next.refresh().sessions.count == 1)
 }
