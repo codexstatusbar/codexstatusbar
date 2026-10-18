@@ -480,3 +480,29 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     try m.observeUsage(TokenUsage(outputTokens: 150), turnID: "next", source: .rolloutLog, epoch: "e", at: 25)
     #expect(try m.workAverageRate(at: 60) == 10)
 }
+
+@Test func C20CodexWeeklyWindowIsFoundWhicheverSlotHoldsIt() {
+    let line = #"{"payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12.0,"window_minutes":300,"resets_at":1},"secondary":{"used_percent":39.5,"window_minutes":10080,"resets_at":1792909120}}}}"#
+    let quota = QuotaParser.codexWeekly(rolloutLine: line)
+    #expect(quota?.usedPercent == 39.5)
+    #expect(quota?.remainingPercent == 60.5)
+    #expect(quota?.resetsAt == Date(timeIntervalSince1970: 1792909120))
+    #expect(QuotaParser.codexWeekly(rolloutLine: #"{"payload":{"rate_limits":{"primary":{"used_percent":5,"window_minutes":300}}}}"#) == nil)
+    #expect(QuotaParser.codexWeekly(rolloutLine: "not json rate_limits") == nil)
+}
+
+@Test func C21ClaudeWeeklyWindowReadsUtilizationAndIsoReset() {
+    let body = Data(#"{"five_hour":{"utilization":3},"seven_day":{"utilization":42.5,"resets_at":"2026-10-25T03:00:00.123456+00:00"}}"#.utf8)
+    let quota = QuotaParser.claudeWeekly(usageJSON: body)
+    #expect(quota?.usedPercent == 42.5)
+    #expect(quota?.resetsAt != nil)
+    #expect(QuotaParser.claudeWeekly(usageJSON: Data(#"{"five_hour":{"utilization":3}}"#.utf8)) == nil)
+}
+
+@Test func C22QuotaIsClampedAndExpiresAfterReset() {
+    let now = Date(timeIntervalSince1970: 1000)
+    #expect(ProviderQuota(provider: .codex, usedPercent: 130, resetsAt: nil).remainingPercent == 0)
+    #expect(ProviderQuota(provider: .codex, usedPercent: .nan, resetsAt: nil).usedPercent == 0)
+    #expect(!ProviderQuota(provider: .codex, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 999)).isCurrent(at: now))
+    #expect(ProviderQuota(provider: .codex, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1001)).isCurrent(at: now))
+}
