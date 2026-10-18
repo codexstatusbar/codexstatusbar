@@ -202,6 +202,20 @@ import CodexHubCollector
         var spreadHistory: [UsageHistoryPoint] = []
         HubPresentation.spread(10, endingAt: 100, seconds: 4, into: &spreadHistory)
         precondition(spreadHistory.map(\.time) == [97, 98, 99, 100] && spreadHistory.map(\.outputTokens) == [2, 2, 3, 3], "UI56 a response is spread over its generation seconds without changing the total")
+        var sparseHistory: [UsageHistoryPoint] = []
+        HubPresentation.spread(3, endingAt: 100, seconds: 10, into: &sparseHistory)
+        precondition(sparseHistory.map(\.time) == [92, 96, 99] && sparseHistory.map(\.outputTokens) == [1, 1, 1], "UI56 few tokens keep the full generation span instead of shrinking it")
+        let burstKey = ThreadKey(homeID: "/burst", runID: nil, threadID: "burst")
+        var burst = ThreadMonitor(key: burstKey, source: .rolloutLog, epoch: "e", verifiedEmptyThread: true)
+        try burst.setConnectivity(.connected, at: 0)
+        try burst.startTurn("t", at: 0)
+        let burstModel = HubPresentation()
+        burstModel.recordUsageHistory([SessionPresentation(monitor: burst)], at: 100)
+        try burst.observeUsage(TokenUsage(outputTokens: 1000), turnID: "t", source: .rolloutLog, epoch: "e", at: 101, rateInterval: .excludingTools(10))
+        try burst.observeUsage(TokenUsage(outputTokens: 1100), turnID: "t", source: .rolloutLog, epoch: "e", at: 101, rateInterval: .excludingTools(1))
+        burstModel.recordUsageHistory([SessionPresentation(monitor: burst)], at: 101)
+        let burstPoints = burstModel.usageHistory[burstKey] ?? []
+        precondition(burstPoints.map(\.outputTokens).reduce(0, +) == 1100 && burstPoints.map(\.outputTokens).max() == 100 && burstPoints.count == 11, "UI56 several responses in one refresh are each placed over their own generation time")
         historyModel.sessions = [SessionPresentation(monitor: newTurn)]
         historyModel.frame = try ReportedFrame(monitors: [newTurn], verifiedIndependentThreads: [newTurn.key], at: 2)
         historyModel.rateUnit = .minute

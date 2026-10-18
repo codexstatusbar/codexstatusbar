@@ -67,6 +67,13 @@ public struct TurnRecord: Sendable {
     }
 }
 
+/// One observed output delta and, when known, how long its response took to generate.
+public struct UsageGeneration: Sendable, Equatable {
+    public let id: Int
+    public let tokens: Int
+    public let seconds: Double?
+}
+
 public enum UsageRateInterval: Sendable {
     case workAverage
     case excludingTools(Double?)
@@ -74,8 +81,9 @@ public enum UsageRateInterval: Sendable {
 
 public struct ThreadMonitor: Sendable {
     public let key: ThreadKey
-    /// Generation time behind the latest tool-excluded delta; nil when the last delta carried no such interval.
-    public private(set) var latestGenerationSeconds: Double?
+    /// Recent live usage deltas with the tool-excluded generation time behind each; newest last.
+    public private(set) var generations: [UsageGeneration] = []
+    private var nextGenerationID = 0
     public private(set) var counter: UsageCounter
     public private(set) var connectivity: Connectivity = .unknown
     public private(set) var activeTurnID: String?
@@ -238,9 +246,15 @@ public struct ThreadMonitor: Sendable {
         case .regression, .suspended:
             invalidateWindow()
         case .delta(let delta):
-            latestGenerationSeconds = nil
             var record = turns[turnID] ?? TurnRecord(isComplete: false)
             record.outputTokens += delta
+            if !historical, !needsBaseline, delta > 0 {
+                var seconds: Double?
+                if case .excludingTools(let value) = rateInterval, let value, value.isFinite, value > 0 { seconds = value }
+                generations.append(UsageGeneration(id: nextGenerationID, tokens: delta, seconds: seconds))
+                nextGenerationID += 1
+                if generations.count > 32 { generations.removeFirst(generations.count - 32) }
+            }
             if historical || needsBaseline {
                 latestWorkAverage = nil
                 record.isComplete = false
@@ -262,7 +276,6 @@ public struct ThreadMonitor: Sendable {
                     if delta > 0, let seconds, seconds.isFinite, seconds > 0 {
                         let estimate = Double(delta) / seconds
                         rate = estimate.isFinite ? estimate : nil
-                        if rate != nil { latestGenerationSeconds = seconds }
                     } else { rate = nil }
                 }
                 if let rate {

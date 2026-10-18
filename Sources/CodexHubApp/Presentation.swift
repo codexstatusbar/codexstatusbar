@@ -171,6 +171,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         let output: Int
         let epoch: String
         let source: UsageSource
+        let generation: Int
     }
     private var usageAnchors: [ThreadKey: UsageAnchor] = [:]
     let chartWallClockOffset = Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime
@@ -191,16 +192,19 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
         usageHistory = history
     }
 
-    /// Adds `tokens` as one-second points ending at `time`, covering the tool-excluded generation time when the monitor reports one.
-    static func spread(_ tokens: Int, endingAt time: Double, seconds generation: Double?, into history: inout [UsageHistoryPoint]) {
+    /// Places `tokens` on the one-second grid over the `generation` seconds that end at `time`, spread evenly
+    /// so the span keeps its length even when there are fewer tokens than seconds. Returns the seconds covered.
+    @discardableResult
+    static func spread(_ tokens: Int, endingAt time: Double, seconds generation: Double?, into history: inout [UsageHistoryPoint]) -> Int {
         var seconds = 1
         if let generation, generation.isFinite, generation > 0 { seconds = Int(min(max(generation.rounded(), 1), 600)) }
-        seconds = max(1, min(seconds, tokens))
-        let base = tokens / seconds, extra = tokens % seconds
-        for index in 0..<seconds {
-            // The last `extra` seconds carry one more token so the total is exact.
-            let amount = base + (index >= seconds - extra ? 1 : 0)
-            let at = time - Double(seconds - 1 - index)
+        let points = max(1, min(seconds, tokens))
+        let base = tokens / points, extra = tokens % points
+        for index in 0..<points {
+            // The last `extra` points carry one more token so the total is exact.
+            let amount = base + (index >= points - extra ? 1 : 0)
+            let slot = min(seconds - 1, Int((Double(index) + 0.5) * Double(seconds) / Double(points)))
+            let at = time - Double(seconds - 1 - slot)
             if let existing = history.firstIndex(where: { $0.time == at }) {
                 history[existing] = UsageHistoryPoint(time: at, outputTokens: history[existing].outputTokens + amount)
             } else {
@@ -208,6 +212,7 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
             }
         }
         history.sort { $0.time < $1.time }
+        return seconds
     }
 
     func recordUsageHistory(_ rows: [SessionPresentation], at time: Double) {
@@ -230,13 +235,21 @@ enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connecti
                previous.source == source, time > previous.time, time - previous.time <= 5,
                counter.outputTokens > previous.output {
                 let delta = counter.outputTokens - previous.output
-                // Logs report a whole response at once; spread it back over the time it took to generate.
-                let seconds = row.monitor.latestGenerationSeconds
+                // Logs report whole responses at once; place each one back over the time it took to generate.
+                let generations = row.monitor.generations
+                let fresh = generations.filter { $0.id > previous.generation || previous.generation > (generations.last?.id ?? -1) }
                 var history = usageHistory[row.id, default: []]
-                Self.spread(delta, endingAt: time, seconds: seconds, into: &history)
+                if !fresh.isEmpty, fresh.reduce(0, { $0 + $1.tokens }) == delta {
+                    var end = time
+                    for generation in fresh.reversed() {
+                        end -= Double(Self.spread(generation.tokens, endingAt: end, seconds: generation.seconds, into: &history))
+                    }
+                } else {
+                    Self.spread(delta, endingAt: time, seconds: nil, into: &history)
+                }
                 usageHistory[row.id] = Array(history.suffix(UsageHistoryPoint.maximumPoints))
             }
-            usageAnchors[row.id] = UsageAnchor(time: time, output: counter.outputTokens, epoch: row.monitor.counter.epoch, source: source)
+            usageAnchors[row.id] = UsageAnchor(time: time, output: counter.outputTokens, epoch: row.monitor.counter.epoch, source: source, generation: row.monitor.generations.last?.id ?? -1)
         }
     }
 
