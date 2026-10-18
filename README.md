@@ -209,7 +209,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 88 Core/Collector tests, 109 synthetic UI/process checks (UI01–UI102 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 88 Core/Collector tests, 110 synthetic UI/process checks (UI01–UI103 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 

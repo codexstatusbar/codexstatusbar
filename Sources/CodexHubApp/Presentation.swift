@@ -115,10 +115,19 @@ struct UsageHistoryPoint: Identifiable, Equatable {
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences, connection }
 
 enum MenuField: String, CaseIterable {
-    case speed, codex, claude
-    var label: String { self == .speed ? "Speed" : self == .codex ? "Codex remaining" : "Claude remaining" }
-    var icon: String { self == .speed ? "speedometer" : "gauge.with.dots.needle.33percent" }
-    var provider: SessionProvider? { self == .codex ? .codex : self == .claude ? .claude : nil }
+    /// `speed` is the combined rate; the per-provider ones split it and are off by default.
+    case speed, codexSpeed, claudeSpeed, codex, claude
+    static let defaults: Set<MenuField> = [.speed, .codex, .claude]
+    var label: String {
+        switch self {
+        case .speed: "Combined speed"
+        case .codexSpeed: "Codex speed"
+        case .claudeSpeed: "Claude speed"
+        case .codex: "Codex remaining"
+        case .claude: "Claude remaining"
+        }
+    }
+    var icon: String { [.speed, .codexSpeed, .claudeSpeed].contains(self) ? "speedometer" : "gauge.with.dots.needle.33percent" }
 }
 
 /// Which usage windows of a provider the menu bar lists.
@@ -149,7 +158,7 @@ enum MenuWindows: String, CaseIterable {
     var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
     /// What the menu bar title shows; the icon stays when nothing selected has a value.
-    var menuFields = Set(MenuField.allCases)
+    var menuFields = MenuField.defaults
     var menuWindows = MenuWindows.both
     var menuShowsReset = false
     var hideIdle = false
@@ -364,10 +373,13 @@ enum MenuWindows: String, CaseIterable {
     var menuParts: [MenuPart] {
         var parts: [MenuPart] = []
         if menuFields.contains(.speed), aggregateRate != nil, error == nil, summary != "—" { parts.append(MenuPart(provider: nil, text: summary + " " + rateUnit.suffix)) }
+        for (field, provider) in [(MenuField.codexSpeed, SessionProvider.codex), (.claudeSpeed, .claude)] where menuFields.contains(field) {
+            if let rate = providerRate(provider) { parts.append(MenuPart(provider: provider, text: displayRate(rate) + " " + rateUnit.suffix)) }
+        }
         let shown = quotas.filter { $0.provider == .codex ? menuFields.contains(.codex) : menuFields.contains(.claude) }.filter(menuWindows.includes).sorted {
             $0.provider != $1.provider ? $0.provider == .codex : $0.windowMinutes < $1.windowMinutes
         }
-        return parts + shown.map { MenuPart(provider: $0.provider, text: ($0.isWeekly ? "w" : windowLabel($0)) + " " + String(Int($0.remainingPercent.rounded())) + "%" + (menuShowsReset ? remainingTime($0).map { " " + $0 } ?? "" : "")) }
+        return parts + shown.map { MenuPart(provider: $0.provider, text: ($0.isWeekly ? "W" : "S") + " " + String(Int($0.remainingPercent.rounded())) + "%" + (menuShowsReset ? remainingTime($0).map { " " + $0 } ?? "" : "")) }
     }
     /// Plain-text form of the menu bar, used for accessibility and tests; the bar itself draws icons.
     var menuTitle: String {
@@ -409,16 +421,20 @@ enum MenuWindows: String, CaseIterable {
     var aggregateRate: Double? {
         return frame?.tokensPerSecond
     }
+    /// Summed work-average rate of one provider's measured root sessions; nil when none is measured.
+    func providerRate(_ provider: SessionProvider) -> Double? {
+        guard error == nil, let time = frame?.time else { return nil }
+        let rates = sessions.filter { $0.provider == provider && $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }
+            .compactMap { try? $0.monitor.workAverageRate(at: time) }
+        return rates.isEmpty ? nil : rates.reduce(0, +)
+    }
     /// Per-provider share of the combined rate; only shown when more than one provider is observed.
     var providerBreakdown: String? {
-        guard error == nil, let time = frame?.time,
+        guard error == nil, frame != nil,
               Set(sessions.map(\.provider)).count > 1 else { return nil }
         let parts = SessionProvider.allCases.compactMap { provider -> String? in
-            let rows = sessions.filter { $0.provider == provider }
-            guard !rows.isEmpty else { return nil }
-            let rates = rows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }
-                .compactMap { try? $0.monitor.workAverageRate(at: time) }
-            return provider.displayName + " " + displayRate(rates.isEmpty ? nil : rates.reduce(0, +))
+            guard sessions.contains(where: { $0.provider == provider }) else { return nil }
+            return provider.displayName + " " + displayRate(providerRate(provider))
         }
         return parts.joined(separator: " · ") + " " + rateUnit.suffix
     }
