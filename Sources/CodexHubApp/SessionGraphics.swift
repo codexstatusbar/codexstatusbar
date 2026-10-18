@@ -139,7 +139,6 @@ struct SessionGraphics: View {
 
     private var measurementNotes: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if session.hookCompletionCandidate { note("작업 종료 신호를 받았습니다. 최종 상태를 확인하고 있습니다.") }
             if session.sourceReconciliationPending { note("수집 원본의 사용량을 대조하는 중입니다.") }
             if session.observationStopped { note("수집이 중단되어 새로운 사용량 기준이 필요합니다.") }
         }

@@ -41,7 +41,6 @@ public struct SessionSnapshot: Sendable {
     public let sourceReconciliationPending: Bool
     public let observationStopped: Bool
     public let activity: Activity
-    public let hookCompletionCandidate: Bool
     public var measurement: CodexHubCore.Measurement { sourceReconciliationPending || observationStopped ? .partial : monitor.measurement }
     /// Exact CLI root provenance only; descendant coverage and PID ownership are not proven.
     public let observedCLIRoot: Bool
@@ -74,8 +73,8 @@ struct FileState: Codable, Sendable {
     var sourceDisconnected: Bool?
     var observationStopped: Bool?
     var managedValidated: Bool?
-    // Persisted session_meta source == cli proof, shared by hooks and root subtotal.
-    var hookIdentityEligible: Bool?
+    // Persisted session_meta source == cli proof, used for the root subtotal.
+    var cliSource: Bool?
     var parentThreadID: String?
     var usageSource: UsageSource { sourceName == "direct-relay" ? .directRelay : .rolloutLog }
     var offset: Int64 = 0
@@ -98,28 +97,10 @@ struct FileState: Codable, Sendable {
     var lastKnownTotalTokens: Int?
 }
 
-private struct HookEvent {
-    let streamID: String
-    let sessionID: String
-    let turnID: String?
-    let toolID: String?
-    let name: String
-    let receivedAt: Double
-}
-
-private struct HookState {
-    let streamID: String
-    let turnID: String
-    var receivedAt: Double
-    var tools: Set<String> = []
-    var completionCandidate = false
-}
-
 public actor LogCollector {
     private let source: SafeDirectory
     private let streamStarts: StreamStartLog
     private let managedRunsDirectory: URL?
-    private let hooksDirectory: URL?
     private let homeHash: String
     private let homePath: String
     private let store: MetadataStore
@@ -127,7 +108,6 @@ public actor LogCollector {
     private let wallTime: @Sendable () -> Double
     private var states: [String: FileState]
     private var monitors: [String: ThreadMonitor] = [:]
-    private var hookStates: [String: HookState] = [:]
     private var runningSessionFiles: Set<String> = []
     private var policy: RetentionPolicy
     private var diagnostics: [CollectorDiagnostic] = []
@@ -138,7 +118,7 @@ public actor LogCollector {
     private let maximumLine = 262_144
     private let maximumFile: Int64 = 268_435_456
 
-    public init(codexHome: URL, metadataDirectory: URL, managedRunsDirectory: URL? = nil, hooksDirectory: URL? = nil,
+    public init(codexHome: URL, metadataDirectory: URL, managedRunsDirectory: URL? = nil,
                 monotonic: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
                 wallTime: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) throws {
         source = try SafeDirectory(codexHome)
@@ -151,7 +131,6 @@ public actor LogCollector {
         self.homePath = home
         self.homeHash = scope
         self.managedRunsDirectory = managedRunsDirectory
-        self.hooksDirectory = hooksDirectory
         store = try MetadataStore(directoryURL: metadataDirectory, sourceScope: scope)
         states = try store.load()
         recovering = Set(states.keys)
@@ -178,17 +157,12 @@ public actor LogCollector {
         }, by: { $0.value.threadID! })
         let roots = Set(transcripts.compactMap { thread, files -> String? in
             guard files.count == 1, let file = files.first,
-                  file.value.hookIdentityEligible == true,
+                  file.value.cliSource == true,
                   monitors[file.key]?.connectivity == .connected else { return nil }
             return thread
         })
         let allSessions = states.compactMap { id, state -> SessionSnapshot? in
             guard state.isAuthority == true, let monitor = monitors[id] else { return nil }
-            let hook = hookStates[id]
-            let hookEligible = state.usageSource == .rolloutLog && monitor.connectivity == .connected &&
-                monitor.activeTurnID != nil && hook?.turnID == monitor.activeTurnID &&
-                lastFrame - (hook?.receivedAt ?? -.infinity) <= 10 && state.reconciliationPeer == nil
-            let activity = hookEligible && monitor.activity == .working && !(hook?.tools.isEmpty ?? true) ? Activity.toolRunning : monitor.activity
             let context = state.usageSource == .rolloutLog ? state : transcripts[monitor.key.threadID].flatMap { files in
                 files.count == 1 && files.first?.value.turnID == state.turnID ? files.first?.value : nil
             }
@@ -197,7 +171,7 @@ public actor LogCollector {
                                    source: state.usageSource, processes: state.processes ?? [],
                                    sourceReconciliationPending: state.reconciliationPeer != nil,
                                    observationStopped: state.observationStopped == true,
-                                   activity: activity, hookCompletionCandidate: hookEligible && hook?.completionCandidate == true,
+                                   activity: monitor.activity,
                                    observedCLIRoot: roots.contains(monitor.key.threadID) &&
                                        (state.usageSource == .rolloutLog || state.managedValidated == true),
                                    parentThreadID: state.usageSource == .rolloutLog ? state.parentThreadID : transcripts[monitor.key.threadID].flatMap { $0.count == 1 ? $0.first?.value.parentThreadID : nil },
@@ -235,33 +209,24 @@ public actor LogCollector {
         guard now.isFinite, now >= lastFrame, wall.isFinite else { throw CollectorError.invalidSettings }
         var nextStates = states
         var nextMonitors = monitors
-        var pendingHooks: [HookEvent] = []
-        var invalidHookStreams: Set<String> = []
         var nextDiagnostics: [CollectorDiagnostic] = []
         func diagnose(_ diagnostic: CollectorDiagnostic) {
             if nextDiagnostics.count < 100 { nextDiagnostics.append(diagnostic) }
         }
-        var roots: [(directory: SafeDirectory, managed: Bool, hook: Bool)] = [(source, false, false)]
+        var roots: [(directory: SafeDirectory, managed: Bool)] = [(source, false)]
         if let url = managedRunsDirectory {
             var info = stat()
             if lstat(url.path, &info) == 0 {
-                do { roots.append((try SafeDirectory(url, requirePrivate: true), true, false)) }
+                do { roots.append((try SafeDirectory(url, requirePrivate: true), true)) }
                 catch { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
             } else if errno != ENOENT { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
         }
-        if let url = hooksDirectory {
-            var info = stat()
-            if lstat(url.path, &info) == 0 {
-                do { roots.append((try SafeDirectory(url, requirePrivate: true), false, true)) }
-                catch { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
-            } else if errno != ENOENT { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
-        }
-        var inputs: [(directory: SafeDirectory, managed: Bool, hook: Bool, path: String)] = []
+        var inputs: [(directory: SafeDirectory, managed: Bool, path: String)] = []
         for root in roots {
             do {
-                let listing = try root.directory.logPaths(subdirectory: root.hook ? "" : "sessions")
+                let listing = try root.directory.logPaths(subdirectory: "sessions")
                 if listing.rejected { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
-                inputs += listing.paths.map { (root.directory, root.managed, root.hook, $0) }
+                inputs += listing.paths.map { (root.directory, root.managed, $0) }
             } catch {
                 var sessions = stat()
                 let missing = fstatat(root.directory.fd, "sessions", &sessions, AT_SYMLINK_NOFOLLOW) != 0 && errno == ENOENT
@@ -279,20 +244,16 @@ public actor LogCollector {
                     guard components.count == 3, UUID(uuidString: String(components[1])) != nil,
                           UUID(uuidString: String(components[2].dropLast(6))) != nil else { throw CollectorError.invalidRecord }
                 }
-                if input.hook {
-                    guard components.count == 2, UUID(uuidString: String(components[0])) != nil,
-                          components[1] == "events.jsonl" else { throw CollectorError.invalidRecord }
-                }
                 let fd = try input.directory.openFile(relative)
                 defer { close(fd) }
                 var info = stat()
                 guard fstat(fd, &info) == 0 else { throw CollectorError.inaccessibleSource }
-                let id = "\(input.hook ? "hook:" : (input.managed ? "direct:" : ""))\(info.st_dev):\(info.st_ino)"
+                let id = "\(input.managed ? "direct:" : "")\(info.st_dev):\(info.st_ino)"
                 identity = id
                 seen.insert(id)
                 // Rollouts can grow indefinitely; maximumRead and maximumLine bound each pass.
-                if input.hook || input.managed {
-                    guard info.st_size <= (input.hook ? 4_194_304 : maximumFile) else { throw CollectorError.oversizedRecord }
+                if input.managed {
+                    guard info.st_size <= maximumFile else { throw CollectorError.oversizedRecord }
                 }
                 let modified = min(wall, Double(info.st_mtimespec.tv_sec))
                 guard modified >= wall - Double(policy.days) * 86400 else {
@@ -300,11 +261,10 @@ public actor LogCollector {
                     nextStates.removeValue(forKey: id); nextMonitors.removeValue(forKey: id)
                     continue
                 }
-                let replacedIDs = nextStates.filter { $0.key != id && $0.value.path == relative && ($0.value.usageSource == .directRelay) == input.managed && ($0.value.sourceName == "hook") == input.hook }.map(\.key)
+                let replacedIDs = nextStates.filter { $0.key != id && $0.value.path == relative && ($0.value.usageSource == .directRelay) == input.managed }.map(\.key)
                 for replaced in replacedIDs { nextStates.removeValue(forKey: replaced); nextMonitors.removeValue(forKey: replaced) }
                 var state = nextStates[id] ?? FileState(path: relative, historicalUntil: info.st_size, updated: modified, hasGap: !replacedIDs.isEmpty)
                 var monitor = nextMonitors[id]
-                var fileHooks: [HookEvent] = []
                 if recovering.contains(id) || monitor?.connectivity == .disconnected || (lastFrame > 0 && now - lastFrame > 5) {
                     state.historicalUntil = info.st_size
                     state.hasGap = true
@@ -313,31 +273,30 @@ public actor LogCollector {
                 }
                 let changedBoundary = try state.offset > 0 && (state.offset > info.st_size || boundary(fd, offset: state.offset) != state.boundaryHash)
                 if changedBoundary {
-                    if input.hook { invalidHookStreams.insert(id) }
                     state = FileState(path: relative, historicalUntil: info.st_size, updated: modified, hasGap: true)
                     monitor = nil
                 }
                 state.path = relative
-                state.sourceName = input.hook ? "hook" : (input.managed ? "direct-relay" : "rollout-log")
+                state.sourceName = input.managed ? "direct-relay" : "rollout-log"
                 if input.managed { state.runID = state.runID ?? String(components[1]) }
-                if !input.managed && !input.hook, state.offset > 0,
-                   state.hookIdentityEligible == nil || recovering.contains(id) {
+                if !input.managed, state.offset > 0,
+                   state.cliSource == nil || recovering.contains(id) {
                     // Old checkpoints contain usage, not root proof; never infer origin from a path.
                     var header = [UInt8](repeating: 0, count: min(maximumLine + 1, Int(info.st_size)))
                     let count = pread(fd, &header, header.count, 0)
                     guard count >= 0 else { throw CollectorError.inaccessibleSource }
-                    state.hookIdentityEligible = false
+                    state.cliSource = false
                     state.parentThreadID = nil
                     if let newline = header.prefix(count).firstIndex(of: 10), newline <= maximumLine,
                        let object = try? JSONSerialization.jsonObject(with: Data(header[..<newline])) as? [String: Any],
                        object["type"] as? String == "session_meta",
                        let payload = object["payload"] as? [String: Any],
                        let thread = identifier(payload["id"]), thread == state.threadID {
-                        state.hookIdentityEligible = payload["source"] as? String == "cli"
+                        state.cliSource = payload["source"] as? String == "cli"
                         state.parentThreadID = parentThreadID(payload, thread: thread)
                     }
                 }
-                if !input.managed && !input.hook, state.offset > 0, state.usageDetails == nil || state.lastTurnState == nil {
+                if !input.managed, state.offset > 0, state.usageDetails == nil || state.lastTurnState == nil {
                     // Recover bounded context/lifecycle markers; activity still requires an exact live-process binding.
                     if state.usageDetails == nil { state.usageDetails = SessionUsageDetails() }
                     if state.lastTurnState == nil { state.lastTurnState = "unknown" }
@@ -388,7 +347,7 @@ public actor LogCollector {
                 var consumed = 0
                 while let newline = data[consumed...].firstIndex(of: 10) {
                     if state.discardingOversizedLine == true || newline - consumed > maximumLine {
-                        guard !input.managed && !input.hook else { throw CollectorError.oversizedRecord }
+                        guard !input.managed else { throw CollectorError.oversizedRecord }
                         state.discardingOversizedLine = false
                         state.hasGap = true
                         state.requestTiming = nil
@@ -399,19 +358,10 @@ public actor LogCollector {
                     }
                     let historical = state.offset + Int64(consumed) < state.historicalUntil
                     do {
-                        if input.hook {
-                            if let event = try hookEvent(Data(data[consumed..<newline]), installation: String(components[0]),
-                                                         streamID: id, historical: historical, now: now, wall: wall) {
-                                guard fileHooks.count < 4096 else { throw CollectorError.oversizedRecord }
-                                fileHooks.append(event)
-                            }
-                        } else {
-                            try consume(Data(data[consumed..<newline]), state: &state, monitor: &monitor, historical: historical, now: now)
-                        }
+                        try consume(Data(data[consumed..<newline]), state: &state, monitor: &monitor, historical: historical, now: now)
                     } catch {
                         if input.managed { state.managedValidated = false }
-                        if input.hook { invalidHookStreams.insert(id) }
-                        state.hasGap = true
+                            state.hasGap = true
                         state.requestTiming = nil
                         try monitor?.markGap(at: now)
                         diagnose(CollectorDiagnostic(fileIdentity: id, error: .invalidRecord))
@@ -420,7 +370,7 @@ public actor LogCollector {
                     if consumed == data.count { break }
                 }
                 if state.discardingOversizedLine == true || data.count - consumed > maximumLine {
-                    guard !input.managed && !input.hook else { throw CollectorError.oversizedRecord }
+                    guard !input.managed else { throw CollectorError.oversizedRecord }
                     // Persist bounded discard progress so a large transcript record cannot pin the cursor.
                     state.discardingOversizedLine = true
                     state.hasGap = true
@@ -441,17 +391,12 @@ public actor LogCollector {
                     let connection = state.processes?.first(where: { $0.role == .relay })?.connectivity ?? .unknown
                     if connection != .connected { try monitor?.setConnectivity(connection, at: now) }
                 }
-                if input.hook {
-                    guard pendingHooks.count + fileHooks.count <= 4096 else { throw CollectorError.oversizedRecord }
-                    pendingHooks += fileHooks
-                }
                 nextStates[id] = state
                 if let monitor { nextMonitors[id] = monitor }
             } catch {
                 diagnose(CollectorDiagnostic(fileIdentity: identity, error: (error as? CollectorError) ?? .inaccessibleSource))
                 if let id = identity {
-                    if input.hook { invalidHookStreams.insert(id) }
-                    if !input.managed && !input.hook { nextStates[id]?.hookIdentityEligible = false }
+                    if !input.managed { nextStates[id]?.cliSource = false }
                     try? nextMonitors[id]?.setConnectivity(.degraded, at: now)                }
             }
         }
@@ -459,21 +404,6 @@ public actor LogCollector {
         for id in try selectAuthorities(states: &nextStates, monitors: &nextMonitors, at: now) {
             diagnose(CollectorDiagnostic(fileIdentity: id, error: .ambiguousSource))
         }
-        for event in pendingHooks where ["UserPromptSubmit", "PreToolUse", "PostToolUse"].contains(event.name) && !invalidHookStreams.contains(event.streamID) {
-            let matches = nextStates.filter { $0.value.sourceName == "rollout-log" && $0.value.threadID == event.sessionID }
-            guard matches.count == 1, let id = matches.first?.key, let state = nextStates[id],
-                  state.isAuthority == true, state.hookIdentityEligible == true, state.reconciliationPeer == nil,
-                  state.lastTurnState == nil || state.lastTurnState == "unknown",
-                  let monitor = nextMonitors[id], runningSessionFiles.contains(id),
-                  monitor.connectivity == .connected, monitor.activity == .unknown,
-                  let turn = state.turnID, turn == event.turnID else { continue }
-            nextMonitors[id] = try resumedMonitor(monitor, turn: turn, at: now)
-            nextStates[id]?.lastTurnState = "active"
-            nextStates[id]?.hasGap = true
-            nextStates[id]?.requestTiming = nil
-        }
-        let nextHooks = reconcileHooks(pendingHooks, states: nextStates, monitors: nextMonitors,
-                                       seen: seen, invalidStreams: invalidHookStreams, now: now)
         let beforeRetention = states.merging(nextStates) { _, new in new }
         nextStates = retained(nextStates, wall: wall, policy: policy)
         nextMonitors = nextMonitors.filter { nextStates[$0.key] != nil }
@@ -484,7 +414,6 @@ public actor LogCollector {
         nextDiagnostics += cleanupManaged(beforeRetention.filter { nextStates[$0.key] == nil }, reportUntracked: false)
         states = nextStates
         monitors = nextMonitors
-        hookStates = nextHooks.filter { nextStates[$0.key] != nil }
         recovering.removeAll()
         diagnostics = Array(nextDiagnostics.prefix(100))
         lastFrame = now
@@ -497,7 +426,7 @@ public actor LogCollector {
     public func clearMetadata() throws {
         try store.save([:], retention: policy, clearChartHistory: true)
         let cleanup = cleanupManaged(states, reportUntracked: true)
-        states.removeAll(); monitors.removeAll(); hookStates.removeAll(); recovering.removeAll(); diagnostics = cleanup
+        states.removeAll(); monitors.removeAll(); recovering.removeAll(); diagnostics = cleanup
     }
 
     public func updateRetention(_ policy: RetentionPolicy) throws {
@@ -509,7 +438,6 @@ public actor LogCollector {
         self.policy = policy
         states = kept
         monitors = monitors.filter { kept[$0.key] != nil }
-        hookStates = hookStates.filter { kept[$0.key] != nil && kept[$0.value.streamID] != nil }
     }
 
     public func markGap() throws {
@@ -528,7 +456,6 @@ public actor LogCollector {
         try store.save(nextStates, retention: policy)
         states = nextStates; monitors = next; lastFrame = now
         recovering = Set(states.keys)
-        hookStates.removeAll()
     }
 
     private func cleanupManaged(_ candidates: [String: FileState], reportUntracked: Bool) -> [CollectorDiagnostic] {
@@ -677,7 +604,7 @@ public actor LogCollector {
             state.runID = run
         }
         if type == "session_meta" {
-            if state.usageSource == .rolloutLog { state.hookIdentityEligible = false }
+            if state.usageSource == .rolloutLog { state.cliSource = false }
             guard let id = identifier(payload["id"]) else { throw CollectorError.invalidRecord }
             guard state.threadID == nil || state.threadID == id else { throw CollectorError.invalidRecord }
             if state.usageSource == .directRelay {
@@ -686,7 +613,7 @@ public actor LogCollector {
             }
             state.threadID = id
             if state.usageSource == .rolloutLog {
-                state.hookIdentityEligible = payload["source"] as? String == "cli"
+                state.cliSource = payload["source"] as? String == "cli"
                 state.parentThreadID = parentThreadID(payload, thread: id)
             }
             state.cwd = metadataString(payload["cwd"])
@@ -870,91 +797,6 @@ public actor LogCollector {
             if !state.partial { state.counts = counts }
         default: break
         }
-    }
-
-    private func hookEvent(_ data: Data, installation: String, streamID: String,
-                           historical: Bool, now: Double, wall: Double) throws -> HookEvent? {
-        guard !data.isEmpty else { return nil }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              integer(object["hub_schema_version"]) == 1, object["hub_source"] as? String == "hook",
-              object["codex_home_id"] as? String == homeHash,
-              let installed = object["installation_id"] as? String,
-              UUID(uuidString: installed) == UUID(uuidString: installation),
-              let session = hookIdentifier(object["session_id"]),
-              let name = object["hook_event_name"] as? String,
-              ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "Interrupt", "SessionEnd"].contains(name),
-              let timestamp = object["timestamp"] as? String, timestamp.utf8.count <= 64,
-              let date = ISO8601DateFormatter().date(from: timestamp),
-              let rawTime = object["received_monotonic_ns"] as? String, rawTime.utf8.count <= 20,
-              !rawTime.isEmpty, rawTime.utf8.allSatisfy({ (48...57).contains($0) }),
-              let nanoseconds = UInt64(rawTime) else { throw CollectorError.invalidRecord }
-        let turn = hookIdentifier(object["turn_id"])
-        let tool = hookIdentifier(object["tool_use_id"])
-        guard name == "SessionStart" || name == "SessionEnd" || turn != nil,
-              (name != "PreToolUse" && name != "PostToolUse") || tool != nil else { throw CollectorError.invalidRecord }
-        let received = Double(nanoseconds) / 1_000_000_000
-        guard !historical, received <= now, now - received <= 2,
-              abs(wall - date.timeIntervalSince1970) <= 2 else { return nil }
-        return HookEvent(streamID: streamID, sessionID: session, turnID: turn, toolID: tool,
-                         name: name, receivedAt: received)
-    }
-
-    private func hookIdentifier(_ value: Any?) -> String? {
-        guard let value = value as? String, !value.isEmpty, value.utf8.count <= 128,
-              value.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95 }) else { return nil }
-        return value
-    }
-
-    private func reconcileHooks(_ events: [HookEvent], states next: [String: FileState],
-                                monitors current: [String: ThreadMonitor], seen: Set<String>,
-                                invalidStreams: Set<String>, now: Double) -> [String: HookState] {
-        func eligible(_ id: String) -> Bool {
-            guard let state = next[id], let monitor = current[id],
-                  state.usageSource == .rolloutLog, state.isAuthority == true,
-                  state.hookIdentityEligible == true, state.reconciliationPeer == nil,
-                  monitor.connectivity == .connected, let turn = monitor.activeTurnID,
-                  monitors[id]?.activeTurnID == turn, states[id]?.isAuthority == true,
-                  states[id]?.epoch == state.epoch, !recovering.contains(id), now - lastFrame <= 5 else { return false }
-            return true
-        }
-        var result = hookStates.filter { id, hook in
-            eligible(id) && hook.turnID == current[id]?.activeTurnID && now - hook.receivedAt <= 10 &&
-                seen.contains(hook.streamID) && !invalidStreams.contains(hook.streamID)
-        }
-        var conflicts: Set<String> = []
-        for event in events.sorted(by: { $0.receivedAt < $1.receivedAt }) {
-            guard !invalidStreams.contains(event.streamID), event.name != "SessionStart" else { continue }
-            // A unique verified CLI transcript plus the actual active turn is the mapping proof.
-            let matches = next.filter { $0.value.sourceName == "rollout-log" && $0.value.threadID == event.sessionID }
-            guard matches.count == 1, let id = matches.first?.key, eligible(id), !conflicts.contains(id),
-                  let turn = current[id]?.activeTurnID,
-                  event.turnID == turn || (event.name == "SessionEnd" && event.turnID == nil),
-                  event.receivedAt >= (current[id]?.turns[turn]?.startedAt ?? .infinity) else { continue }
-            if let previous = result[id], previous.streamID != event.streamID {
-                result.removeValue(forKey: id)
-                conflicts.insert(id)
-                continue
-            }
-            var hook = result[id] ?? HookState(streamID: event.streamID, turnID: turn, receivedAt: event.receivedAt)
-            guard event.receivedAt >= hook.receivedAt else { continue }
-            hook.receivedAt = event.receivedAt
-            switch event.name {
-            case "PreToolUse":
-                if let tool = event.toolID { hook.tools.insert(tool) }
-                hook.completionCandidate = false
-            case "PostToolUse":
-                if let tool = event.toolID { hook.tools.remove(tool) }
-                hook.completionCandidate = false
-            case "UserPromptSubmit": hook.completionCandidate = false
-            case "Stop", "Interrupt", "SessionEnd": hook.completionCandidate = true
-            default: break
-            }
-            guard hook.tools.count <= 256 else {
-                result.removeValue(forKey: id); conflicts.insert(id); continue
-            }
-            result[id] = hook
-        }
-        return result
     }
 
     private func usage(_ counts: [String: Int]) throws -> TokenUsage {

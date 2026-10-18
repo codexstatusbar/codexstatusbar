@@ -385,11 +385,10 @@ struct HubView: View {
                 copyValue("Codex home", model.codexHome)
                 connectionNote("로그는 1초 간격으로 자동 수집합니다.")
                 HStack {
-                    Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy || model.hooksBusy)
+                    Button(model.text("Codex 경로 선택…")) { model.chooseHome?() }.disabled(model.chooseHome == nil || model.busy)
                     Button(model.text(model.checkingConnection ? "연결 확인 중…" : "지금 확인")) { model.refresh?() }.disabled(model.busy || model.refresh == nil)
                 }
             }
-            connectionSection("Optional compatibility hooks", icon: "puzzlepiece.extension", tint: .blue) { hooksControls }
             if !model.diagnostics.isEmpty {
                 connectionSection("Collection diagnostics", icon: "exclamationmark.triangle", tint: attention) {
                     ForEach(Array(model.diagnostics.enumerated()), id: \.offset) { _, text in
@@ -432,18 +431,6 @@ struct HubView: View {
     private func connectionNote(_ text: String) -> some View {
         Text(model.text(text)).font(.system(size: 11)).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-    }
-    private var hooksControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            copyValue("hooks.json", model.codexHome + "/hooks.json")
-            Text(model.text(model.hooksResult)).font(.system(size: 11)).textSelection(.enabled)
-            HStack {
-                Button(model.text(model.hooksBusy ? "Working…" : "Check hook status")) { model.hookAction?(.status) }
-                Button(model.text("Install hooks…")) { model.hookAction?(.install) }
-                Button(model.text("Remove hooks…")) { model.hookAction?(.uninstall) }
-            }
-            Text(model.text("State only, never token usage. Installation requires confirmation; manually review and trust in Codex /hooks. No automatic feature enablement.")).font(.system(size: 11))
-        }.disabled(model.hooksBusy || model.helperPath == nil || model.hookAction == nil)
     }
     private func copyValue(_ label: String, _ text: String?) -> some View {
         VStack(alignment: .leading, spacing: 5) {

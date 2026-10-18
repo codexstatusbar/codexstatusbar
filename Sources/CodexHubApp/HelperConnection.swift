@@ -63,59 +63,6 @@ enum HelperConnection {
         return result
     }
 
-    enum HookAction: String, Sendable { case status, install, uninstall }
-
-    private struct HookStatus: Decodable {
-        let schema_version: Int
-        let state: String
-        let trust: String
-        let runtime_verified: Bool
-        let codex_home_id: String
-    }
-
-    // Only fixed helper arguments are accepted; arbitrary output never reaches the UI.
-    static func hooks(_ action: HookAction, home: String, helper: String) -> String {
-        guard executable(helper), home.hasPrefix("/") else { return "Hook helper or selected home is unavailable." }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: helper)
-        process.arguments = ["hooks", action.rawValue, "--home", home] + (action == .status ? [] : ["--consent"])
-        process.standardInput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        let output = Pipe()
-        process.standardOutput = action == .status ? output : FileHandle.nullDevice
-        do { try process.run() } catch { return "Hook helper could not start. No successful change was confirmed." }
-        output.fileHandleForWriting.closeFile()
-        defer { output.fileHandleForReading.closeFile() }
-        let deadline = ProcessInfo.processInfo.systemUptime + 10
-        while process.isRunning && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.05) }
-        if process.isRunning {
-            process.terminate()
-            let grace = ProcessInfo.processInfo.systemUptime + 0.5
-            while process.isRunning && ProcessInfo.processInfo.systemUptime < grace { Thread.sleep(forTimeInterval: 0.05) }
-            if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
-            return "Hook operation timed out. State may have changed; check status before retrying. Backups are retained."
-        }
-        guard process.terminationReason == .exit, process.terminationStatus == 0 else {
-            return "Hook operation failed: configuration may be unsafe, invalid or conflicting. State may have changed; check status before retrying. Backups are retained."
-        }
-        if action != .status {
-            return (action == .install ? "Install completed. " : "Removal completed. ") + hooks(.status, home: home, helper: helper)
-        }
-        guard let data = try? output.fileHandleForReading.read(upToCount: 4096),
-              let status = try? JSONDecoder().decode(HookStatus.self, from: data),
-              status.schema_version == 1,
-              status.codex_home_id == SHA256.hash(data: Data(home.utf8)).map({ String(format: "%02x", $0) }).joined(),
-              status.trust == "manual_review_required", !status.runtime_verified else {
-            return "Hook status response is unavailable or unsupported. Trust and compatibility remain unverified."
-        }
-        switch status.state {
-        case "installed": return "Installed · manually review and trust in Codex /hooks. Runtime compatibility is unverified."
-        case "not_installed": return "Not installed. Hooks are optional and provide state only."
-        case "conflict": return "Conflict · existing hook definitions do not match Tokloom ownership. No automatic repair is performed."
-        default: return "Unknown hook status. Trust and compatibility remain unverified."
-        }
-    }
-
     // User-triggered only; arbitrary subprocess output is discarded, never shown or persisted.
     static func doctor(home: String, codex: String, helper: String) -> String {
         guard executable(helper), executable(codex) else { return "Helper or Codex executable is unavailable. Choose the installed Codex executable." }

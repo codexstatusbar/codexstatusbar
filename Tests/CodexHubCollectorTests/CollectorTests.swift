@@ -449,39 +449,6 @@ private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\
     #expect(try bound.sessions[0].monitor.reportedRate(at: 100) == nil)
 }
 
-@Test func S229FreshHookRecoversVerifiedRunningTurnWhenStartIsUnavailable() async throws {
-    let s = try Sandbox()
-    try s.write(meta.replacingOccurrences(of: "\"cwd\"", with: "\"source\":\"cli\",\"cwd\"") + "{\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"old\"}}\n" + usage(100))
-    let hooks = s.root.appendingPathComponent("hooks")
-    let installation = UUID().uuidString
-    let directory = hooks.appendingPathComponent(installation)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-    let events = directory.appendingPathComponent("events.jsonl")
-    try Data().write(to: events)
-    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: events.path)
-    let wall = Date().timeIntervalSince1970
-    let c = try LogCollector(codexHome: s.home, metadataDirectory: s.metadata, hooksDirectory: hooks, monotonic: { 100 }, wallTime: { wall })
-    let initial = try await c.refresh()
-    let hash = SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
-    func appendHook(_ tool: String) throws {
-        let event: [String: Any] = ["hub_schema_version":1,"hub_source":"hook","codex_home_id":hash,"installation_id":installation,"session_id":"session-a","turn_id":"old","hook_event_name":"PreToolUse","tool_use_id":tool,"timestamp":ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: wall)),"received_monotonic_ns":"100000000000"]
-        let handle = try FileHandle(forWritingTo: events)
-        defer { try? handle.close() }
-        try handle.seekToEnd(); try handle.write(contentsOf: JSONSerialization.data(withJSONObject: event) + Data([10]))
-    }
-    try appendHook("unbound-tool")
-    let unbound = try await c.refresh()
-    #expect(unbound.sessions[0].monitor.activity == .unknown)
-    _ = try await c.bindRunningSessions([initial.sessions[0].id])
-    try appendHook("tool-1")
-    let recovered = try await c.refresh()
-    #expect(recovered.sessions[0].monitor.activity == .working)
-    #expect(try recovered.sessions[0].monitor.reportedRate(at: 100) == nil)
-    try appendHook("tool-2")
-    let tool = try await c.refresh()
-    #expect(tool.sessions[0].activity == .toolRunning)
-}
-
 @Test func S230LateCompletionDoesNotRestoreIdleForANewerRunningTurn() async throws {
     let s = try Sandbox(); try s.write(meta + usage(100))
     let c = try s.collector(); _ = try await c.refresh()

@@ -17,7 +17,6 @@ struct SessionPresentation: Identifiable {
     var sourceReconciliationPending = false
     var observationStopped = false
     var observedActivity: Activity?
-    var hookCompletionCandidate = false
     var usageDetails: SessionUsageDetails?
     var provider = SessionProvider.codex
     var activity: Activity { observedActivity ?? monitor.activity }
@@ -151,9 +150,6 @@ enum MenuWindows: String, CaseIterable {
     var language = AppLanguage.system
     var saveLanguage: ((AppLanguage) -> Void)?
     func text(_ value: String) -> String { language.text(value) }
-    var hooksBusy = false
-    var hooksResult = "Not checked. Hook trust and runtime compatibility are unverified."
-    var hookAction: ((HelperConnection.HookAction) -> Void)?
     var page = HubPage.overview
     /// What the menu bar title shows; the icon stays when nothing selected has a value.
     var menuSpeed = MenuSpeed.combined

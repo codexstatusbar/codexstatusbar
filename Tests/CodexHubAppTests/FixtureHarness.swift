@@ -64,7 +64,7 @@ import CodexHubCollector
         try capture(model, "preferences", output, dark: false)
         try capture(model, "preferences-full", output, dark: true, height: 900)
         model.page = .connection
-        model.diagnostics = ["Fixture: logs directory readable", "No provider or Hook calls performed"]
+        model.diagnostics = ["Fixture: logs directory readable", "No provider calls performed"]
         try capture(model, "connection", output, dark: false)
         try capture(model, "connection-full", output, dark: false, height: 900)
         model.language = .english
