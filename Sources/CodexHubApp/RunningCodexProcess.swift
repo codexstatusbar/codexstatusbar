@@ -8,6 +8,8 @@ struct RunningCodexProcess: Sendable {
     /// `codex app-server` hosts (for example inside the ChatGPT app) are backends, not terminal sessions.
     /// One that owns no transcript has no session to attach, so it must not be listed as a missing one.
     var isAppServer = false
+    /// The `CODEX_HOME` this process runs with; nil when it is unset or unreadable (the process then uses the global home).
+    var codexHome: String?
 
     static func capture() -> [Self]? {
         let count = proc_listallpids(nil, 0)
@@ -53,27 +55,45 @@ struct RunningCodexProcess: Sendable {
               after.pbi_uid == before.pbi_uid, after.pbi_status != SZOMB,
               after.pbi_start_tvsec == before.pbi_start_tvsec,
               after.pbi_start_tvusec == before.pbi_start_tvusec else { return nil }
-        return Self(identity: ProcessIdentity(pid: pid, osStartTime: "\(before.pbi_start_tvsec).\(String(format: "%06llu", before.pbi_start_tvusec))"), writableFileIDs: files, isAppServer: appServer)
+        return Self(identity: ProcessIdentity(pid: pid, osStartTime: "\(before.pbi_start_tvsec).\(String(format: "%06llu", before.pbi_start_tvusec))"), writableFileIDs: files, isAppServer: appServer, codexHome: environment(of: pid)?["CODEX_HOME"])
     }
 
-    static func arguments(of pid: pid_t) -> [String]? {
+    static func arguments(of pid: pid_t) -> [String]? { procArgs(of: pid)?.arguments }
+
+    static func environment(of pid: pid_t) -> [String: String]? { procArgs(of: pid)?.environment }
+
+    private static func procArgs(of pid: pid_t) -> (arguments: [String], environment: [String: String])? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0, size > 4, size <= 1 << 20 else { return nil }
         var buffer = [UInt8](repeating: 0, count: size)
         guard sysctl(&mib, UInt32(mib.count), &buffer, &size, nil, 0) == 0, size > 4 else { return nil }
+        return parseProcArgs(Array(buffer.prefix(size)))
+    }
+
+    /// KERN_PROCARGS2 layout: argc, executable path, padding, argv strings, then the environment strings.
+    static func parseProcArgs(_ buffer: [UInt8]) -> (arguments: [String], environment: [String: String])? {
+        let size = buffer.count
+        guard size > 4 else { return nil }
         let count = Int(buffer.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
         var index = 4
         while index < size, buffer[index] != 0 { index += 1 }   // executable path
         while index < size, buffer[index] == 0 { index += 1 }   // padding
-        var result: [String] = []
-        while result.count < count, index < size {
+        var strings: [String] = []
+        while index < size {
             var end = index
             while end < size, buffer[end] != 0 { end += 1 }
-            result.append(String(decoding: buffer[index..<end], as: UTF8.self))
+            if end == index { break }                              // empty string ends the list
+            strings.append(String(decoding: buffer[index..<end], as: UTF8.self))
             index = end + 1
         }
-        return result
+        guard count >= 0, count <= strings.count else { return nil }
+        var environment: [String: String] = [:]
+        for entry in strings.dropFirst(count) {
+            guard let equals = entry.firstIndex(of: "=") else { continue }
+            environment[String(entry[..<equals])] = String(entry[entry.index(after: equals)...])
+        }
+        return (Array(strings.prefix(count)), environment)
     }
 
     static func owner(of fileID: String, controller: ProcessIdentity?, in processes: [Self]) -> ProcessIdentity? {

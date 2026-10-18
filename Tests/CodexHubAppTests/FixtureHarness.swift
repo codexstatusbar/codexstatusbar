@@ -318,6 +318,19 @@ import CodexHubCollector
         readme.menuShowsReset = false
         precondition(CodexConfig.defaultHome(saved: nil, userHome: URL(fileURLWithPath: "/Users/fixture")) == "/Users/fixture/.codex" &&
                      CodexConfig.defaultHome(saved: "/chosen/home", userHome: URL(fileURLWithPath: "/Users/fixture")) == "/chosen/home", "UI106 the global ~/.codex is the default and a saved choice wins")
+        let fixtureUser = URL(fileURLWithPath: "/Users/fixture")
+        func home(_ running: [String?]) -> String { CodexConfig.defaultHome(saved: nil, running: running, userHome: fixtureUser) }
+        precondition(home([]) == "/Users/fixture/.codex" && home([nil, nil, "/orca/a"]) == "/Users/fixture/.codex" &&
+                     home(["/orca/a", "/orca/a", nil]) == "/orca/a" && home(["/orca/a", nil]) == "/Users/fixture/.codex" &&
+                     CodexConfig.defaultHome(saved: "/chosen", running: ["/orca/a"], userHome: fixtureUser) == "/chosen",
+                     "UI107 the home most running Codex processes use is detected; a saved choice wins")
+        var procArgs: [UInt8] = [2, 0, 0, 0]
+        procArgs += Array("/bin/codex".utf8) + [0, 0] + Array("codex".utf8) + [0] + Array("-c".utf8) + [0]
+        procArgs += Array("CODEX_HOME=/x y".utf8) + [0] + Array("PATH=/bin".utf8) + [0, 0]
+        let parsed = RunningCodexProcess.parseProcArgs(procArgs)
+        precondition(parsed?.arguments == ["codex", "-c"] && parsed?.environment["CODEX_HOME"] == "/x y" && parsed?.environment["PATH"] == "/bin" &&
+                     RunningCodexProcess.parseProcArgs([2, 0, 0, 0]) == nil,
+                     "UI108 process arguments and environment are split at argc")
         let korean = HubPresentation()
         korean.language = .korean
         let settingsKeys = ["Menu bar", "Choose what the menu bar shows.", "Speed", "Combined", "By provider", "Combined + by provider", "Hidden", "Remaining usage",
@@ -458,7 +471,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI106 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI108 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

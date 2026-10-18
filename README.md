@@ -75,7 +75,7 @@ open '.build/Tokloom.app'
 
 Distribution bundles are arm64 Release builds with local ad-hoc signatures. They are not signed with an Apple distribution certificate or notarized. The first SwiftPM build may download pinned test dependencies.
 
-Choose your Codex home in **Connection**. The default is the global `~/.codex`; the `CODEX_HOME` of the shell that launched the app is ignored, so choose another home here if you need one. Tokloom reads original logs without modifying them or restarting Codex, polling once per second.
+Choose your Codex home in **Connection**. Tokloom starts with the home that most running Codex terminals use (a process without `CODEX_HOME` uses `~/.codex`), or `~/.codex` when none runs. The `CODEX_HOME` of the shell that launched Tokloom is ignored; choose another home here if you need one, and your choice is kept. Tokloom reads original logs without modifying them or restarting Codex, polling once per second.
 
 Only live processes appear in the list. Sessions are matched using PID, process start time, and exact log file identity. Unmatched processes remain in an identifying state; exited processes are not listed as historical sessions. Quitting Tokloom does not stop Codex sessions.
 
@@ -214,7 +214,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 88 Core/Collector tests, 112 synthetic UI/process checks (UI01–UI106 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 88 Core/Collector tests, 114 synthetic UI/process checks (UI01–UI108 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete provider execution paths.
 

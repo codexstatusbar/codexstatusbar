@@ -4,10 +4,20 @@ import CodexHubCore
 
 /// Reads the default speed setting from the Codex home's configuration; nothing is written.
 enum CodexConfig {
-    /// A saved choice wins, otherwise the global `~/.codex`. The `CODEX_HOME` of the launching shell is ignored on
-    /// purpose: it points at per-account or per-agent homes and would silently change what the app watches.
-    static func defaultHome(saved: String?, userHome: URL = FileManager.default.homeDirectoryForCurrentUser) -> String {
-        saved ?? userHome.appendingPathComponent(".codex").path
+    /// A saved choice wins. Otherwise the home most running terminal Codex processes use (a process without
+    /// `CODEX_HOME` uses the global `~/.codex`), and `~/.codex` when none runs. The launching shell's own
+    /// `CODEX_HOME` is ignored on purpose: it would silently change what the app watches.
+    static func defaultHome(saved: String?, running: [String?] = [], userHome: URL = FileManager.default.homeDirectoryForCurrentUser) -> String {
+        if let saved { return saved }
+        let global = userHome.appendingPathComponent(".codex").path
+        let counts = Dictionary(grouping: running.map { $0 ?? global }, by: { $0 }).mapValues(\.count)
+        // Most processes win; a tie goes to the global home, then to the path that sorts first.
+        let best = counts.max { left, right in
+            if left.value != right.value { return left.value < right.value }
+            if (left.key == global) != (right.key == global) { return right.key == global }
+            return left.key > right.key
+        }
+        return best?.key ?? global
     }
 
     static func configuredServiceTier(home: String) -> ServiceTier? {
