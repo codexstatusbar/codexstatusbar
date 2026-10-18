@@ -11,7 +11,7 @@ enum MenuBarItem: Equatable {
 enum MenuBarImage {
     private static let itemGap: CGFloat = 8, iconWidth: CGFloat = 13, iconGap: CGFloat = 3
     private static var rateFont: NSFont { NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular) }
-    private static var stackFont: NSFont { NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium) }
+    private static var stackFont: NSFont { NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium) }
 
     /// Colors resolve while drawing, so the image follows the menu bar's light or dark appearance.
     private static func attributes(_ font: NSFont) -> [NSAttributedString.Key: Any] { [.font: font, .foregroundColor: NSColor.labelColor] }
@@ -40,9 +40,8 @@ enum MenuBarImage {
                 case .stack(let provider, let session, let weekly):
                     drawIcon(provider, x: x, height: height)
                     let lines = [session, weekly].compactMap { $0 }
-                    let lineHeight = stackFont.ascender - stackFont.descender
-                    // Lines sit one point closer than their boxes so two of them fit the bar's height.
-                    let pitch = lineHeight - 1
+                    // Digits and capitals are about 0.72 em tall, so two lines one em apart fit the bar with room to spare.
+                    let pitch = stackFont.pointSize
                     for (index, line) in lines.enumerated() {
                         let offset = (CGFloat(lines.count - 1) / 2 - CGFloat(index)) * pitch
                         drawLine(line, font: stackFont, x: x + iconWidth + iconGap, centerY: height / 2 + offset)
