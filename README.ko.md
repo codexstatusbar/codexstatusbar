@@ -45,8 +45,8 @@ Tokloom은 Codex 또는 Claude Code를 사용하는 개발자를 위한 네이�
   <tr>
     <td width="50%" align="center" valign="top">
       <h3>03 · 기존 터미널 그대로</h3>
-      <p>로그 경로와 수집 진단을 확인하고,<br />필요한 경우에만 훅과 관리형 연결 사용.</p>
-      <a href="docs/images/connection.png"><img src="docs/images/connection.png" alt="Tokloom 연결 화면: 로그 경로, 선택적 훅과 수집 진단" width="340" /></a>
+      <p>로그 경로와 수집 진단을 확인하고,<br />필요한 경우에만 관리형 연결 사용.</p>
+      <a href="docs/images/connection.png"><img src="docs/images/connection.png" alt="Tokloom 연결 화면: 로그 경로와 수집 진단" width="340" /></a>
     </td>
     <td width="50%" align="center" valign="top">
       <h3>04 · 내 방식으로 설정</h3>
@@ -103,7 +103,7 @@ open '.build/Tokloom.app'
 ```
 
 결과는 `.build/dist/`에 생성됩니다. 로컬 ad-hoc 서명이며 Apple 배포 서명·공증을
-추가하는 작업은 아닙니다. CI의 합성 검증도 실제 provider·훅 신뢰·전체 네이티브 QA를
+추가하는 작업은 아닙니다. CI의 합성 검증도 실제 provider·전체 네이티브 QA를
 대신하지 않습니다.
 
 ## 속도 계산과 표시
@@ -150,17 +150,13 @@ Codex는 Codex 자체 추적 로그(`logs_2.sqlite`, 읽기 전용)에 기록된
 
 **설정**에는 언어, 표시 단위, 상태바 표시 항목(속도: 통합·제공자별·둘 다·숨김, 남은 사용량: Codex·Claude·둘 다·숨김, 5시간·주간·둘 다, 선택적으로 리셋까지 남은 시간), 대기 세션 숨기기, 로그인 시 실행, 메타데이터 보관 기간과 삭제, 앱 종료가 있습니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다.
 
-**연결**에는 로그 경로 선택·복사, 즉시 연결 확인, 선택적 훅, 수집 진단과 실험적 관리형 실행 안내가 있습니다. 훅 설정은 이 화면에만 있습니다. 경로와 실행 명령은 각각의 복사 버튼으로 복사합니다.
+**연결**에는 로그 경로 선택·복사, 즉시 연결 확인, 수집 진단과 실험적 관리형 실행 안내가 있습니다. 경로와 실행 명령은 각각의 복사 버튼으로 복사합니다.
 
 macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 사용합니다. 이전 macOS에서는 기본 테두리 버튼을 사용하며, ‘투명도 줄이기’를 켜면 불투명 시스템 배경을 사용합니다. 메뉴바 우클릭 메뉴에서 앱 열기·종료를 선택할 수 있습니다.
 
-### 선택적 Hook
+### 제거됨: Codex 훅
 
-연결 화면의 훅 상태 확인·설치·제거는 내장 helper의 실제 `hooks status/install/uninstall`을 사용합니다. 설치·제거 전 네이티브 확인창에서 선택한 `CODEX_HOME/hooks.json` 경로, 기존 파일 백업과 수동 신뢰 절차를 안내합니다. 관련 없는 핸들러는 보존하며 기존 파일이 없으면 백업도 없습니다.
-
-앱은 훅을 자동 설치하거나 기능·신뢰를 자동 활성화하지 않습니다. 사용자가 Codex `/hooks`에서 정의를 직접 검토하고 신뢰해야 합니다. Installed 표시는 신뢰 또는 실행 호환성 검증을 뜻하지 않습니다. 실패·타임아웃 후에는 상태를 다시 확인하세요.
-
-훅은 **상태 보조 자료이며 토큰 사용량 소스가 아닙니다.** 정확한 세션/turn이 로그와 일치할 때만 상태에 반영하고, Stop 등은 완료 후보로 취급합니다.
+이전 버전은 선택적 Codex 훅을 설치할 수 있었습니다. 지금은 제거되었고, Tokloom은 로그만 읽으며 `hooks.json`을 건드리지 않습니다. 이미 설치했다면 `CODEX_HOME/hooks.json`에서 명령 경로에 `CodexHub/hooks`가 들어 있는 항목을 직접 삭제하세요.
 
 ## 실험적 관리형 실행
 
@@ -184,7 +180,7 @@ env CODEX_HOME="$HOME/.codex" '/path/to/Tokloom.app/Contents/Helpers/codex-hub' 
 - **같은 측정 방식** — 메시지별 `output_tokens`(생각 토큰 포함)를 마지막 user/tool_result 항목부터 그 메시지의 마지막 블록까지의 시간으로 나눕니다. 도구 실행은 그 항목들 사이에 있으므로 Codex처럼 제외됩니다. 서버 대기와 prefill 시간은 남아 있습니다.
 - **하나의 통합 속도** — 메뉴바와 개요는 Codex와 Claude의 관측된 CLI 루트를 합산합니다. 둘 다 있으면 개요에 제공자별 열로 각자의 속도와 차트를 표시합니다.
 - 스트림으로 반복 기록된 블록은 `message.id`당 한 번만 셉니다. 입력은 캐시 읽기/쓰기를 포함해 Codex와 같은 의미로 맞춥니다.
-- **Claude 세션별로 제공하지 않는 항목**: 남은 사용 한도, 컨텍스트 사용률(창 크기가 기록되지 않음), 훅과 관리형 실행. 서브에이전트(sidechain) 출력은 카운터와 통합 속도에서 제외되며, CLI 세션만 통합 속도에 포함됩니다.
+- **Claude 세션별로 제공하지 않는 항목**: 남은 사용 한도, 컨텍스트 사용률(창 크기가 기록되지 않음), 관리형 실행. 서브에이전트(sidechain) 출력은 카운터와 통합 속도에서 제외되며, CLI 세션만 통합 속도에 포함됩니다.
 - 수집은 Codex 홈이 연결된 뒤에 시작됩니다. Claude 세션의 최근 60분 차트 기록은 Codex 기록과 함께 저장·복원됩니다.
 
 ## 계정 사용 한도
@@ -222,11 +218,11 @@ Live에는 reasoning, 도구 출력, diff, 프롬프트와 과거 텍스트를 �
 
 최근 완료한 범위는 Core/Collector 테스트 88개, UI01–UI105·P01–P07의 합성 UI/프로세스 검증 111개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
 
-전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기, Live tokenizer 동등성과 전체 훅·provider 실행 경로는 검증이 남아 있습니다. 사용자가 실제 설치한 훅의 존재와 자동화된 실행·신뢰 검증은 별개입니다.
+전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기, Live tokenizer 동등성과 전체 provider 실행 경로는 검증이 남아 있습니다.
 
 - [초기 설계 PRD (보관; 현재 제품은 로그 수집과 Claude Code 지원으로 구현됨)](docs/Codex_Hub_PRD.md)
 - [네이티브 UI와 회귀 검증](docs/verification/native-ui.md)
 - [수집기 검증](docs/verification/collector.md)
 - [서버 타이밍 검증](docs/verification/server-timing.md)
 - [관리형 helper 계약](docs/managed-helper.md)
-- [Live estimator](docs/live-estimator.md) · [선택적 훅](docs/optional-hooks.md) · [수집 입력 계약](docs/collector-live-hooks.md)
+- [Live estimator](docs/live-estimator.md) · [수집 입력 계약](docs/collector-live-hooks.md)

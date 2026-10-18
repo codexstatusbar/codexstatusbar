@@ -1,4 +1,4 @@
-# Collector Live and optional Hook inputs
+# Collector Live inputs
 
 Status: implementation and compile only. Tests, QA, review, runtime applications,
 provider execution and captures are NOT RUN by user instruction.
@@ -39,57 +39,12 @@ Compile command (no test target execution):
 swift build --target CodexHubCollector --scratch-path /tmp/codexhub-collector-build
 ```
 
-## Optional Hook API and identity
-
-`LogCollector(codexHome:metadataDirectory:managedRunsDirectory:hooksDirectory:
-monotonic:wallTime:)` accepts `hooksDirectory: URL? = nil`. Pass the selected
-home's `hooks/<homeHash>` directory, containing `<installationUUID>/events.jsonl`.
-Nil disables discovery. The collector never installs hooks or edits their config.
-
-`SessionSnapshot.activity` includes eligible Hook tool status;
-`hookCompletionCandidate: Bool` exposes Stop/Interrupt/SessionEnd without claiming
-Idle or final completion. Use `activity` for display; `monitor` remains the
-original authoritative Core monitor and reported usage owner.
-
-Schema and event shapes are producer-owned in `docs/optional-hooks.md`. Hook
-records share the existing SafeDirectory reader, bounded complete-line handling,
-file identity, offsets, boundary hashes, persistence and retention. Hook bytes
-are not a second usage engine. No Hook source can own or add token counters.
-The events file cap is 4 MiB; at most 4096 fresh events per refresh and 256 active
-tool IDs per associated turn are accepted. No Hook files are deleted by metadata
-clear/retention; only collector checkpoints are removed.
-
-Attachment requires one unique transcript in the selected real home whose
-`session_meta.id` matches `session_id` and whose `session_meta.source` is exactly
-`cli`. This rejects unknown and subagent source metadata. Turn events additionally
-require the exact already-observed active log turn ID and receipt after its start.
-SessionStart cannot create activity. SessionEnd without a turn can only mark the
-already-established current session turn as a completion candidate. No source can
-be attached using cwd, a name, PID, or an invented thread ID.
-
-Only connected authoritative rollout state is eligible; direct-owned state is
-never overlaid. Tool hooks only overlay Working, preserving direct/log generating,
-tool and approval state. Multiple conflicting installations are ignored for the
-frame. Expired state falls back to the authoritative monitor, never inferred Idle.
-Freshness requires both local wall and monotonic receipt within two seconds;
-Hook overlays expire after ten seconds without observation. Historical, restart,
-rotation, gap, source switch and completed/changed turns clear or reject overlays.
-Initial discovery and the frame first observing a turn do not replay Hook activity.
-These conservative boundaries can omit a legitimate hook when identity or timing
-is unproven; they never upgrade missing evidence to current activity.
-
-Compile results: `swift build --target CodexHubCollector --scratch-path
-/tmp/codexhub-collector-build` succeeded for Live and Hook slices. The local CLT
-reported an existing missing Developer/Library/Frameworks search-path warning.
-Behavior, tokenizer parity, actual Hook compatibility and integrated app execution
-remain unverified; this document is not a QA pass report.
-
 ## Observed CLI root subtotal
 
 `SessionSnapshot.observedCLIRoot` identifies only a unique rollout transcript in
 this selected home whose validated `session_meta.payload.source` is exactly
 `cli` and whose ID equals the authoritative monitor thread ID. It does not prove
-complete descendant coverage. The existing optional `hookIdentityEligible`
+complete descendant coverage. The optional `cliSource`
 checkpoint field persists this same root provenance; old checkpoints without it
 and recovered checkpoints reread at most the first `maximumLine + 1` bytes using
 the already safely opened file, requiring a complete first session_meta and exact

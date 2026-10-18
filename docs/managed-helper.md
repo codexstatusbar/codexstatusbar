@@ -153,9 +153,6 @@ never persisted. Supported agent-message text is accumulated only in bounded
 memory for the [Live estimator](live-estimator.md), then discarded. Unsupported
 model/provider mappings remain unavailable; runtime parity has not been tested.
 
-The [optional Hook installer and recorder](optional-hooks.md) require explicit
-user consent and manual Codex `/hooks` trust. No installation or trust change
-was performed during implementation.
 
 Sources: installed Codex 0.163.0 generated schema from P0, and
 [official App Server documentation](https://developers.openai.com/codex/app-server).

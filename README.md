@@ -45,8 +45,8 @@ Tokloom is a native menu bar monitor for developers using Codex or Claude Code. 
   <tr>
     <td width="50%" align="center" valign="top">
       <h3>03 · Keep your terminal</h3>
-      <p>Inspect log paths and collection diagnostics.<br />Use hooks and managed connections only when needed.</p>
-      <a href="docs/images/connection-en.png"><img src="docs/images/connection-en.png" alt="Tokloom connection page with log location, optional hooks and diagnostics" width="340" /></a>
+      <p>Inspect log paths and collection diagnostics.<br />Use managed connections only when needed.</p>
+      <a href="docs/images/connection-en.png"><img src="docs/images/connection-en.png" alt="Tokloom connection page with log location and diagnostics" width="340" /></a>
     </td>
     <td width="50%" align="center" valign="top">
       <h3>04 · Make it yours</h3>
@@ -102,7 +102,7 @@ The same packaging path is available locally:
 (cd .build/dist && shasum -a 256 -c Tokloom-macos-arm64.dmg.sha256)
 ```
 
-Output goes to `.build/dist/`. Packaging uses ad-hoc signing, not Apple distribution signing or notarization. Synthetic CI checks do not replace provider, hook-trust, or full native QA.
+Output goes to `.build/dist/`. Packaging uses ad-hoc signing, not Apple distribution signing or notarization. Synthetic CI checks do not replace provider or full native QA.
 
 ## Speed estimate
 
@@ -148,17 +148,13 @@ Clearing collected metadata also clears chart history. Original Codex logs remai
 
 **Settings** provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it.
 
-**Connection** provides log-path selection/copying, an immediate connection check, optional hooks, collection diagnostics, and experimental managed-run instructions. Hook controls appear only here. Paths and commands have individual copy buttons.
+**Connection** provides log-path selection/copying, an immediate connection check, collection diagnostics, and experimental managed-run instructions. Paths and commands have individual copy buttons.
 
 On macOS 26+, supported buttons use native Glass styling. Older systems use bordered controls; Reduce Transparency uses an opaque system background. Right-click the menu bar item to open or quit the app.
 
-### Optional hooks
+### Removed: Codex hooks
 
-Connection's status/install/remove controls invoke the bundled helper's actual `hooks status/install/uninstall` commands. Before installation or removal, a native confirmation shows the selected `CODEX_HOME/hooks.json`, backup behavior, and manual trust requirements. Unrelated handlers are preserved; no backup is needed when there is no existing file.
-
-Tokloom does not automatically install hooks, enable their feature, or grant trust. Review and trust the exact definitions yourself in Codex `/hooks`. Installed does not mean trusted or runtime-verified. Check status again after a failure or timeout.
-
-Hooks provide **activity hints, not token usage**. Signals apply only when the exact session/turn matches the logs; Stop and similar signals are completion candidates.
+Earlier versions could install optional Codex hooks. They are gone: Tokloom reads only logs and never touches `hooks.json`. If you installed them, delete the entries whose command path contains `CodexHub/hooks` from `CODEX_HOME/hooks.json`.
 
 ## Experimental managed runs
 
@@ -182,7 +178,7 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - **Same measurement** — each message's `output_tokens` (including thinking) divided by the time from the last user/tool-result entry to the message's last block. Tool execution falls between those entries, so it is excluded, as for Codex. Server queue and prefill time remain included.
 - **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview shows a column per provider with its own speed and chart.
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
-- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged), hooks and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
+- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged) and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
 - Collection starts only after the Codex home connects. The 60-minute chart history of Claude sessions is saved and restored with the Codex history.
 
 ## Account usage limits
@@ -220,11 +216,11 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 Completed checks include 88 Core/Collector tests, 111 synthetic UI/process checks (UI01–UI105 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
-The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
+The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete provider execution paths.
 
 - [Original design PRD (archived; the product has since moved to log collection and Claude Code support)](docs/Codex_Hub_PRD.md)
 - [Native UI and regression checks](docs/verification/native-ui.md)
 - [Collector verification](docs/verification/collector.md)
 - [Server timing verification](docs/verification/server-timing.md)
 - [Managed helper contract](docs/managed-helper.md)
-- [Live estimator](docs/live-estimator.md) · [Optional hooks](docs/optional-hooks.md) · [Collector input contract](docs/collector-live-hooks.md)
+- [Live estimator](docs/live-estimator.md) · [Collector input contract](docs/collector-live-hooks.md)

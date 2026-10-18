@@ -5,7 +5,7 @@ Canonical meanings follow PRD sections 6–10 and the approved S1 plan.
 - **Run**: Hub execution lifetime, identified independently from a Codex thread; never inferred from cwd or PID alone.
 - **Thread key**: Codex home identity + optional Hub run identity + Codex thread identity. Unknown run remains nil, not a fabricated PID mapping.
 - **Process identity**: PID + OS start time. Reused PID is a different process.
-- **Authority**: the single verified usage source for a thread counter epoch. Hook is state-only. Secondary sources never add usage.
+- **Authority**: the single verified usage source for a thread counter epoch. Secondary sources never add usage.
 - **Epoch**: an explicitly reconciled counter interval. Counter regression suspends measurement until an adapter explicitly establishes a new epoch or reconciled authority.
 - **Baseline**: first known cumulative snapshot, excluded from current throughput. Zero is allowed only for a verified empty thread.
 - **Reported output**: outputTokens, including reasoningOutputTokens as a subset; never total + last.
