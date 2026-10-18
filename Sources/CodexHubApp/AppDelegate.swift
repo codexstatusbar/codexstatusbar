@@ -269,8 +269,8 @@ import CodexHubCollector
         }.sorted()
         model.refreshedAt = Date()
         model.error = nil
-        // The archive is scoped to the Codex home; Claude rows are not persisted across restarts yet.
-        let persisted = model.usageHistory.filter { $0.key.homeID == chartHomePath }
+        // The archive is scoped to the Codex home and also carries Claude rows, which use their own claude: home.
+        let persisted = model.usageHistory.filter { UsageHistoryArchive.isPersisted($0.key, home: chartHomePath) }
         if savedChartHistory != persisted, let collector {
             let history = persisted
             do {

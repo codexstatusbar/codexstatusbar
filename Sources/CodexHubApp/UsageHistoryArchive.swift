@@ -5,17 +5,23 @@ import CodexHubCore
 enum UsageHistoryArchive {
     enum Failure: Error { case invalid }
     private struct Point: Codable { let timestamp: Double; let output: Int }
-    private struct Entry: Codable { let thread: String; let run: String?; let points: [Point] }
+    private struct Entry: Codable { let thread: String; let run: String?; let points: [Point]; var home: String? = nil }
     private struct Archive: Codable { let version: Int; let home: String; let entries: [Entry] }
     static let maximumBytes = 4_194_304
+    static let claudePrefix = "claude:"
+
+    /// Claude sessions are keyed by their own home; Codex rows by the archive home.
+    static func isPersisted(_ key: ThreadKey, home: String) -> Bool {
+        key.homeID == home || key.homeID.hasPrefix(claudePrefix)
+    }
 
     static func encode(_ history: [ThreadKey: [UsageHistoryPoint]], home: String, monotonic: Double, wall: Double) throws -> Data {
         guard monotonic.isFinite, monotonic >= 0, wall.isFinite else { throw Failure.invalid }
-        guard history.keys.allSatisfy({ $0.homeID == home }) else { throw Failure.invalid }
+        guard history.keys.allSatisfy({ isPersisted($0, home: home) }) else { throw Failure.invalid }
         let entries = history.map { key, points in
             Entry(thread: key.threadID, run: key.runID, points: points.filter {
                 $0.time.isFinite && $0.time > monotonic - UsageHistoryPoint.windowSeconds && $0.time <= monotonic && $0.outputTokens > 0
-            }.suffix(UsageHistoryPoint.maximumPoints).map { Point(timestamp: wall - (monotonic - $0.time), output: $0.outputTokens) })
+            }.suffix(UsageHistoryPoint.maximumPoints).map { Point(timestamp: wall - (monotonic - $0.time), output: $0.outputTokens) }, home: key.homeID == home ? nil : key.homeID)
         }.filter { !$0.points.isEmpty }
         guard entries.count <= 1000 else { throw Failure.invalid }
         let data = try JSONEncoder().encode(Archive(version: 1, home: home, entries: entries))
@@ -33,7 +39,9 @@ enum UsageHistoryArchive {
         for entry in archive.entries {
             guard !entry.thread.isEmpty, entry.thread.utf8.count <= 256, (entry.run?.utf8.count ?? 0) <= 256,
                   entry.points.count <= UsageHistoryPoint.maximumPoints else { throw Failure.invalid }
-            let key = ThreadKey(homeID: home, runID: entry.run, threadID: entry.thread)
+            let entryHome = entry.home ?? home
+            guard isPersisted(ThreadKey(homeID: entryHome, runID: nil, threadID: ""), home: home), (entry.home?.utf8.count ?? 0) <= 1024 else { throw Failure.invalid }
+            let key = ThreadKey(homeID: entryHome, runID: entry.run, threadID: entry.thread)
             guard seen.insert(key).inserted else { throw Failure.invalid }
             var last = -Double.infinity
             var restored: [UsageHistoryPoint] = []

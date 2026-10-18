@@ -314,6 +314,11 @@ import CodexHubCollector
         let pathArchive = try UsageHistoryArchive.encode(pathHistory, home: pathKey.homeID, monotonic: 11, wall: 100)
         let pathRestored = try UsageHistoryArchive.decode(pathArchive, home: pathKey.homeID, monotonic: 20, wall: 102)
         precondition(pathRestored[pathKey]?.first?.outputTokens == 42, "UI74 collector path identity survives chart persistence")
+        let claudeKey = ThreadKey(homeID: "claude:/tmp/claude-home", runID: nil, threadID: "session")
+        let mixedArchive = try UsageHistoryArchive.encode([pathKey: pathHistory[pathKey]!, claudeKey: [UsageHistoryPoint(time: 10, outputTokens: 7)]], home: pathKey.homeID, monotonic: 11, wall: 100)
+        let mixedRestored = try UsageHistoryArchive.decode(mixedArchive, home: pathKey.homeID, monotonic: 20, wall: 102)
+        precondition(mixedRestored[claudeKey]?.first?.outputTokens == 7 && mixedRestored[pathKey]?.first?.outputTokens == 42, "UI74 Claude chart history survives restarts beside Codex history")
+        precondition((try? UsageHistoryArchive.encode([ThreadKey(homeID: "/other", runID: nil, threadID: "x"): [UsageHistoryPoint(time: 10, outputTokens: 1)]], home: pathKey.homeID, monotonic: 11, wall: 100)) == nil, "UI74 foreign Codex homes still cannot enter the archive")
         var quotaSession = model.sessions[0]
         quotaSession.usageDetails = try JSONDecoder().decode(SessionUsageDetails.self, from: Data(#"{"limits":[{"name":"primary","usedPercent":43,"windowMinutes":10080,"resetsAt":586800}]}"#.utf8))
         precondition(quotaSession.limitDescriptions(now: Date(timeIntervalSince1970: 0)) == ["57% 남음 · 6d 19h"], "UI75 reset countdown uses deadline, not quota window, and reports remaining percent")
