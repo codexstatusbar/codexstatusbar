@@ -265,12 +265,14 @@ struct ObservedTokenChart: View {
     var wallClockOffset: Double = 0
     /// Seconds mode shows the last 30 s in 1 s bars, minutes mode the last 30 min in 1 min bars; both read the same 30 min of history.
     var unit = RateUnit.minute
+    /// Number of bars: 30 by default, 60 for the combined overview chart (60 s or 60 min).
+    var bars = 30
     // Declared without the @State macro, which the Command Line Tools toolchain cannot expand.
     private let hover = State<Double?>(initialValue: nil)
     private var hoveredX: Double? { hover.wrappedValue }
 
     private var binSeconds: Double { unit == .second ? 1 : UsageHistoryPoint.binSeconds }
-    private var windowSeconds: Double { unit == .second ? 30 : UsageHistoryPoint.windowSeconds }
+    private var windowSeconds: Double { Double(bars) * binSeconds }
 
     struct Bin: Identifiable {
         let id: Double
@@ -300,8 +302,9 @@ struct ObservedTokenChart: View {
                     .frame(maxWidth: .infinity, minHeight: compact ? 56 : 110)
             } else {
                 let hovered = hoveredBin(bins)
+                GeometryReader { geometry in
                 Chart(bins) { bin in
-                    BarMark(x: .value("Time", bin.id + binSeconds / 2 - windowEnd), y: .value("Output tokens", bin.tokens / binSeconds * unit.multiplier), width: .fixed(compact ? 4 : 9))
+                    BarMark(x: .value("Time", bin.id + binSeconds / 2 - windowEnd), y: .value("Output tokens", bin.tokens / binSeconds * unit.multiplier), width: .fixed(compact ? max(1.5, geometry.size.width / Double(bars) * 0.7) : 9))
                         .foregroundStyle(LinearGradient(colors: [.blue, .indigo], startPoint: .top, endPoint: .bottom))
                         .cornerRadius(2)
                         .opacity(hovered == nil || hovered?.id == bin.id ? 1 : 0.45)
@@ -317,6 +320,7 @@ struct ObservedTokenChart: View {
                 .chartXScale(domain: -windowSeconds...0.0)
                 .chartXAxis(.hidden)
                 .chartYAxis { if !compact { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) } }
+                }
                 .frame(height: compact ? 56 : 110)
             }
         }

@@ -196,8 +196,10 @@ import CodexHubCollector
         historyModel.recordUsageHistory([SessionPresentation(monitor: historyMonitor)], at: 305)
         precondition(historyModel.usageHistory[historyMonitor.key]?.count == 1, "UI64 chart samples survive beyond five minutes")
         historyModel.recordUsageHistory([SessionPresentation(monitor: historyMonitor)], at: 1805)
-        precondition(historyModel.usageHistory[historyMonitor.key]?.isEmpty == true, "UI53 chart history expires after thirty minutes")
-        historyModel.recordUsageHistory([], at: 1806)
+        precondition(historyModel.usageHistory[historyMonitor.key]?.count == 1, "UI53 chart history is kept for the sixty minutes the combined chart shows")
+        historyModel.recordUsageHistory([SessionPresentation(monitor: historyMonitor)], at: 3605)
+        precondition(historyModel.usageHistory[historyMonitor.key]?.isEmpty == true, "UI105 chart history expires after sixty minutes")
+        historyModel.recordUsageHistory([], at: 3606)
         precondition(historyModel.usageHistory.isEmpty, "UI54 exited processes do not retain charts")
         precondition(historyModel.menuTitle.isEmpty, "UI55 unavailable speed uses an icon rather than status text")
         var newTurn = ThreadMonitor(key: historyMonitor.key, source: .rolloutLog, epoch: "new", verifiedEmptyThread: true)
@@ -345,7 +347,7 @@ import CodexHubCollector
         precondition(restartedModel.usageHistory == restoredHistory, "UI66 initial discovery does not erase restored charts")
         restartedModel.recordUsageHistory([SessionPresentation(monitor: newTurn)], at: 4)
         precondition(restartedModel.usageHistory[newTurn.key]?.count == restoredHistory[newTurn.key]?.count, "UI67 restored charts never restore live counter anchors or invent catch-up")
-        let expiredHistory = try UsageHistoryArchive.decode(archive, home: "fixture", monotonic: 3, wall: 12000)
+        let expiredHistory = try UsageHistoryArchive.decode(archive, home: "fixture", monotonic: 3, wall: 14000)
         precondition(expiredHistory.isEmpty, "UI68 expired samples are not restored")
         precondition((try? UsageHistoryArchive.decode(archive, home: "other-home", monotonic: 3, wall: 10060)) == nil, "UI69 homes cannot share chart archives")
         precondition((try? UsageHistoryArchive.decode(Data("broken".utf8), home: "fixture", monotonic: 3, wall: 10060)) == nil, "UI70 corrupt chart archives are rejected")
@@ -458,7 +460,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI104 and P01–P07; fixture PNGs: \(output)")
+        print("PASS UI01–UI105 and P01–P07; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

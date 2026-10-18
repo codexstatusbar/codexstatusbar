@@ -104,9 +104,9 @@ enum RateUnit: String, CaseIterable {
 }
 
 struct UsageHistoryPoint: Identifiable, Equatable {
-    static let windowSeconds: Double = 1800
+    static let windowSeconds: Double = 3600
     static let binSeconds: Double = 60
-    static let maximumPoints = 3600
+    static let maximumPoints = 7200
     let time: Double
     let outputTokens: Int
     var id: Double { time }

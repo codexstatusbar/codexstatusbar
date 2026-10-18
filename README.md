@@ -21,7 +21,7 @@ Tokloom is a native menu bar monitor for developers using Codex or Claude Code. 
 - **Codex and Claude Code together** — running Claude Code sessions appear beside Codex ones, each marked with its own icon, and their speeds add up to one combined number (see [Claude Code sessions](#claude-code-sessions)).
 - **Follow your work** — menu bar `t/s` or `t/m`, per-process speed, and working/idle states.
 - **See your limits** — the 5-hour session and weekly remaining usage of Codex and Claude, in the menu bar and in a column per provider on the overview, with time until reset (see [Account usage limits](#account-usage-limits)).
-- **Keep 30 minutes of history** — minute-by-minute output charts that survive app restarts.
+- **Keep 60 minutes of history** — output charts (the last 30 seconds or minutes per session, 60 for the combined chart) that survive app restarts.
 - **Inspect each session** — model, reasoning effort, context utilization, input/output tokens, and remaining usage allowance.
 - **Feel at home on macOS** — a compact 460pt popover, translucent glass styling, light/dark appearances, and language settings.
 
@@ -33,7 +33,7 @@ Tokloom is a native menu bar monitor for developers using Codex or Claude Code. 
   <tr>
     <td width="50%" align="center" valign="top">
       <h3>01 · Work at a glance</h3>
-      <p>Combined Codex and Claude speed, active sessions,<br />and observed output over the last 30 minutes.</p>
+      <p>Combined Codex and Claude speed, active sessions,<br />and observed output over the last 60 seconds or minutes.</p>
       <a href="docs/images/overview-en.png"><img src="docs/images/overview-en.png" alt="Tokloom overview showing combined Codex and Claude Code speed, output history and session status" width="340" /></a>
     </td>
     <td width="50%" align="center" valign="top">
@@ -138,9 +138,9 @@ Profiles, CLI overrides, and the server's actual response tier can differ from t
 
 ## Charts and local history
 
-Overview and Details chart **newly observed output-token increments** over the last 30 minutes. Fixed one-minute buckets start at second `00` of each wall-clock minute. Without new observations, bar totals stay unchanged; the displayed window advances once per minute. These are output-volume charts, not speed charts, and are unaffected by the `t/s`/`t/m` setting. The overview also draws one chart per provider beside that provider's usage limits.
+Overview and Details chart **newly observed output-token increments**. With `t/s` each bar is one second and the chart shows the last 30 seconds (60 for the combined overview chart); with `t/m` each bar is one minute, starting at second `00` of the wall-clock minute, and the chart shows the last 30 minutes (60 for the combined overview chart). Without new observations, bar totals stay unchanged while the window advances one bar at a time. These are output-volume charts, not speed charts; the unit only changes the bar size and range, and 60 minutes of history is always kept. The overview also draws one chart per provider beside that provider's usage limits.
 
-Samples are saved in a protected SQLite metadata database. On app restart or reboot, the last 30 minutes are restored using stored timestamps. Live cumulative-counter anchors are not restored, so growth while the app was closed is not added as newly observed output. The overview chart includes only currently connected independent CLI roots and is hidden during collection errors.
+Samples are saved in a protected SQLite metadata database. On app restart or reboot, the last 60 minutes are restored using stored timestamps. Live cumulative-counter anchors are not restored, so growth while the app was closed is not added as newly observed output. The overview chart includes only currently connected independent CLI roots and is hidden during collection errors.
 
 Clearing collected metadata also clears chart history. Original Codex logs remain intact. Empty or unsaved history from older versions affected by the persistence bug cannot be recovered.
 
@@ -183,7 +183,7 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview shows a column per provider with its own speed and chart.
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
 - **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged), hooks and managed runs. Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
-- Collection starts only after the Codex home connects. The 30-minute chart history of Claude sessions is saved and restored with the Codex history.
+- Collection starts only after the Codex home connects. The 60-minute chart history of Claude sessions is saved and restored with the Codex history.
 
 ## Account usage limits
 
@@ -218,7 +218,7 @@ Deletion and retention apply to Tokloom metadata. Managed files are cleaned up o
 
 ## Verification and documentation
 
-Completed checks include 88 Core/Collector tests, 111 synthetic UI/process checks (UI01–UI104 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 88 Core/Collector tests, 112 synthetic UI/process checks (UI01–UI105 and P01–P07), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, Live tokenizer equivalence, and complete hook/provider execution paths. A user-installed hook is separate from automated execution/trust verification.
 
