@@ -158,7 +158,9 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - **Same measurement** — each message's `output_tokens` (including thinking) divided by the time from the last user/tool-result entry to the message's last block. Tool execution falls between those entries, so it is excluded, as for Codex. Server queue and prefill time remain included.
 - **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview shows a column per provider with its own speed and chart.
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
-- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged). Subagent (sidechain) output is excluded from counters and the combined speed. Only CLI sessions count toward the combined speed.
+- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged).
+- **Subagents** — Claude Code writes each subagent's transcript in its own file (`<session>/subagents/agent-*.jsonl`). Tokloom reads those files and adds their output to the parent session's totals, speed and chart, so work done by subagents is not invisible; they never change the parent's model, effort or tool-wait state, and they are not listed as separate sessions. Subagents running at the same time add up in the chart but blend into one average in the parent's speed number. A subagent file seen for the first time with old content counts toward the totals but not toward the current speed.
+- Only CLI sessions count toward the combined speed.
 - Collection starts only after the Codex home connects. The 60-minute chart history of Claude sessions is saved and restored with the Codex history.
 
 ## Account usage limits
@@ -187,7 +189,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 85 Core/Collector tests, 111 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 89 Core/Collector tests, 111 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 
