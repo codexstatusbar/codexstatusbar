@@ -128,3 +128,94 @@ private final class ClaudeSandbox {
     #expect(abs(try #require(frame.tokensPerSecond) - 250) < 1e-6)
     #expect(frame.measuredRuns == 2)
 }
+
+private extension ClaudeSandbox {
+    var subagents: URL { transcript.deletingLastPathComponent().appendingPathComponent("\(sessionID)/subagents") }
+    /// One record of a subagent transcript; those live in their own file with `isSidechain: true`.
+    func subRecord(_ type: String, _ id: String, _ at: Double, output: Int = 0, block: String = "text", stop: String = "end_turn", model: String = "claude-haiku-4-5") -> String {
+        if type == "user" {
+            return "{\"type\":\"user\",\"isSidechain\":true,\"agentId\":\"a1\",\"timestamp\":\"\(stamp(at))\",\"message\":{\"role\":\"user\",\"content\":\"probe\"}}\n"
+        }
+        return "{\"type\":\"assistant\",\"isSidechain\":true,\"agentId\":\"a1\",\"timestamp\":\"\(stamp(at))\",\"cwd\":\"/sub/cwd\",\"effort\":\"low\",\"message\":{\"id\":\"\(id)\",\"model\":\"\(model)\",\"stop_reason\":\"\(stop)\",\"content\":[{\"type\":\"\(block)\",\"id\":\"sub-tool-\(id)\"}],\"usage\":{\"input_tokens\":1,\"output_tokens\":\(output),\"service_tier\":\"standard\"}}}\n"
+    }
+    /// `finished` writes the `agent-a1.meta.json` Claude Code keeps beside the transcript.
+    func writeSubagent(_ text: String, finished: Bool? = nil, modified: Double? = nil) throws {
+        try FileManager.default.createDirectory(at: subagents, withIntermediateDirectories: true)
+        let file = subagents.appendingPathComponent("agent-a1.jsonl")
+        try Data(text.utf8).write(to: file)
+        if let finished { try Data("{\"agentType\":\"Explore\",\"finished\":\(finished)}".utf8).write(to: subagents.appendingPathComponent("agent-a1.meta.json")) }
+        if let modified { try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: modified)], ofItemAtPath: file.path) }
+    }
+}
+
+private func child(of snapshot: CollectorSnapshot) -> SessionSnapshot? { snapshot.sessions.first { $0.parentThreadID == sessionID } }
+
+@Test func K01SubagentAppearsAsItsOwnSessionLinkedToItsParent() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    let collector = s.collector()
+    _ = await collector.refresh(at: 100, wall: base)
+    try s.status("busy")
+    try s.append(s.user(10) + s.assistant("m2", 14, output: 400, block: "tool_use", stop: "tool_use"))
+    try s.writeSubagent(s.subRecord("user", "", 20) + s.subRecord("assistant", "s1", 30, output: 1000), finished: false)
+    let snapshot = await collector.refresh(at: 101, wall: base)
+    #expect(snapshot.sessions.count == 2)
+    let parent = try #require(snapshot.sessions.first { $0.parentThreadID == nil })
+    let sub = try #require(child(of: snapshot))
+    #expect(sub.provider == .claude && sub.observedCLIRoot == false && sub.process == parent.process)
+    #expect(sub.monitor.counter.baseline?.outputTokens == 1000)       // its own tokens...
+    #expect(parent.monitor.counter.baseline?.outputTokens == 450)     // ...never added to the parent's
+    #expect(sub.model == "claude-haiku-4-5" && parent.model == "claude-opus-5-5")
+    #expect(sub.monitor.key.threadID != parent.monitor.key.threadID)
+    let subRate = try #require(try sub.monitor.workAverageRate(at: 101))
+    #expect(abs(subRate - 100) < 1e-6)   // 1000 tokens over 10 s
+}
+
+@Test func K02RunningSubagentIsWorkingAndFinishedOneGoesIdle() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    let collector = s.collector()
+    _ = await collector.refresh(at: 100, wall: base)
+    try s.status("busy")
+    try s.writeSubagent(s.subRecord("user", "", 20) + s.subRecord("assistant", "s1", 30, output: 100, block: "tool_use", stop: "tool_use"), finished: false)
+    let running = try #require(child(of: await collector.refresh(at: 101, wall: base)))
+    #expect(running.activity != .idle && running.activity != .unknown)
+    try s.writeSubagent(s.subRecord("user", "", 20) + s.subRecord("assistant", "s1", 30, output: 100), finished: true)
+    let done = try #require(child(of: await collector.refresh(at: 102, wall: base)))
+    #expect(done.activity == .idle)
+}
+
+@Test func K03SubagentHistoryCountsButIsNotRatedAndOldFinishedOnesAreSkipped() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 700), finished: true, modified: base - 60)
+    let sub = try #require(child(of: await s.collector().refresh(at: 100, wall: base)))
+    #expect(sub.monitor.counter.baseline?.outputTokens == 700)
+    #expect(try sub.monitor.workAverageRate(at: 100) == nil)
+    // A finished subagent untouched for hours would flood a long-lived session's list.
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 700), finished: true, modified: base - 7_200)
+    #expect(child(of: await s.collector().refresh(at: 100, wall: base)) == nil)
+}
+
+@Test func K04SubagentsLeaveWithTheirSession() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 700), finished: false)
+    #expect(await s.collector(alive: false).refresh(at: 100, wall: base).sessions.isEmpty)
+}
+
+@Test func K05SubagentOutputLeavesTheParentRateAlone() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    let collector = s.collector()
+    _ = await collector.refresh(at: 100, wall: base)
+    try s.status("busy")
+    try s.append(s.user(10) + s.assistant("m2", 14, output: 400, block: "tool_use", stop: "tool_use"))
+    let alone = try #require(await collector.refresh(at: 101, wall: base).sessions.first)
+    let before = try #require(try alone.monitor.workAverageRate(at: 101))
+    try s.writeSubagent(s.subRecord("user", "", 20) + s.subRecord("assistant", "s1", 30, output: 5000), finished: false)
+    let snapshot = await collector.refresh(at: 102, wall: base)
+    let parent = try #require(snapshot.sessions.first { $0.parentThreadID == nil })
+    let after = try #require(try parent.monitor.workAverageRate(at: 102))
+    #expect(abs(after - before) < 1e-6)
+}

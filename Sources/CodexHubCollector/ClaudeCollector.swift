@@ -63,6 +63,8 @@ public actor ClaudeCollector {
         var fileID: String
         let process: ProcessIdentity
         let root: Bool
+        /// The session this subagent belongs to; nil for a session's own transcript.
+        let parent: String?
         var monitor: ThreadMonitor
         let epoch: String
         var offset: Int64 = 0
@@ -85,9 +87,9 @@ public actor ClaudeCollector {
         var tier: ServiceTier?
         var updated: Double
 
-        init(id: String, path: String, fileID: String, process: ProcessIdentity, root: Bool, epoch: String, monitor: ThreadMonitor, updated: Double) {
+        init(id: String, path: String, fileID: String, process: ProcessIdentity, root: Bool, parent: String? = nil, epoch: String, monitor: ThreadMonitor, updated: Double) {
             self.epoch = epoch; self.id = id; self.path = path; self.fileID = fileID; self.process = process
-            self.root = root; self.monitor = monitor; self.updated = updated
+            self.root = root; self.parent = parent; self.monitor = monitor; self.updated = updated
         }
     }
 
@@ -100,6 +102,9 @@ public actor ClaudeCollector {
     private let maximumHistory: Int64 = 64 * 1_048_576
     private let maximumLine = 16 * 1_048_576
     private let remembered = 64
+    private let maximumSubagents = 64
+    /// A finished subagent untouched for this long no longer belongs on a live session's list.
+    private let subagentWindow = 1_800.0
 
     public init(claudeHome: URL,
                 processStart: @escaping @Sendable (Int32) -> (identity: ProcessIdentity, seconds: Double)? = ClaudeCollector.liveProcessStart) {
@@ -132,9 +137,14 @@ public actor ClaudeCollector {
         for name in sessionFiles() {
             guard let entry = liveEntry(directory, name: name, wall: wall) else { continue }
             live.insert(entry.sessionID)
+            let watched = tracked[entry.sessionID]?.loaded == true
             do {
                 guard let session = try track(directory, entry: entry, now: now, wall: wall, gap: gap) else { continue }
                 snapshots.append(snapshot(session))
+                for sub in trackSubagents(directory, parent: session, entry: entry, now: now, wall: wall, gap: gap, parentWatched: watched) {
+                    live.insert(sub.id)
+                    snapshots.append(snapshot(sub))
+                }
             } catch {
                 tracked.removeValue(forKey: entry.sessionID)
                 diagnostics.append(CollectorDiagnostic(fileIdentity: nil, error: (error as? CollectorError) ?? .invalidRecord))
@@ -255,7 +265,7 @@ public actor ClaudeCollector {
         guard line.range(of: Self.assistantMarker) != nil || line.range(of: Self.userMarker) != nil,
               let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               let type = object["type"] as? String, type == "assistant" || type == "user",
-              object["isSidechain"] as? Bool != true,
+              t.parent != nil || object["isSidechain"] as? Bool != true,
               let stamp = object["timestamp"] as? String, let time = iso.date(from: stamp)?.timeIntervalSince1970 else { return }
         if let cwd = object["cwd"] as? String, !cwd.isEmpty { t.cwd = cwd }
         let message = object["message"] as? [String: Any]
@@ -356,10 +366,76 @@ public actor ClaudeCollector {
         t.endedTools.removeAll()
     }
 
+    /// Claude Code writes each subagent's transcript next to the session's, as `<session>/subagents/agent-<id>.jsonl`
+    /// with an `agent-<id>.meta.json` that says when it finished. Each one is its own session, linked to its parent
+    /// like a Codex auxiliary session: its tokens and speed are not added to the parent's.
+    private func trackSubagents(_ directory: SafeDirectory, parent: Tracked, entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> [Tracked] {
+        let folder = String(parent.path.dropLast(".jsonl".count)) + "/subagents"
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent(folder).path)) ?? [])
+            .filter { $0.hasPrefix("agent-") && $0.hasSuffix(".jsonl") && !$0.contains("/") }.sorted().prefix(maximumSubagents)
+        return names.compactMap { name in
+            let agent = String(name.dropFirst("agent-".count).dropLast(".jsonl".count))
+            guard !agent.isEmpty else { return nil }
+            return trackSubagent(directory, folder: folder, name: name, agent: agent, parent: parent, entry: entry, now: now, wall: wall, gap: gap, parentWatched: parentWatched)
+        }
+    }
+
+    private func trackSubagent(_ directory: SafeDirectory, folder: String, name: String, agent: String, parent: Tracked,
+                               entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> Tracked? {
+        let key = parent.id + "/" + agent
+        guard let fd = try? directory.openFile(folder + "/" + name) else { tracked.removeValue(forKey: key); return nil }
+        defer { close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0 else { return nil }
+        let modified = Double(info.st_mtimespec.tv_sec)
+        let finished = subagentFinished(directory, folder: folder, name: name, modified: modified, wall: wall)
+        if finished && modified < wall - subagentWindow { tracked.removeValue(forKey: key); return nil }
+        let fileID = "\(info.st_dev):\(info.st_ino)", size = Int64(info.st_size)
+        var session = tracked[key]
+        if let current = session, current.fileID != fileID || size < current.offset { session = nil }
+        let t: Tracked
+        if let session { t = session } else {
+            let epoch = UUID().uuidString
+            var monitor = ThreadMonitor(key: ThreadKey(homeID: homeID, runID: nil, threadID: agent), source: .rolloutLog, epoch: epoch)
+            guard (try? monitor.setConnectivity(.connected, at: now)) != nil else { return nil }
+            t = Tracked(id: key, path: folder + "/" + name, fileID: fileID, process: entry.process, root: false, parent: entry.sessionID,
+                        epoch: epoch, monitor: monitor, updated: wall)
+            if size > maximumHistory { t.offset = size; t.hasGap = true }
+            // A subagent that starts while its session is already being watched is live; one found at startup is history.
+            if parentWatched && !gap {
+                t.loaded = true
+                // Like a loaded history, start from a zero baseline so its first message counts as new output.
+                if let zero = try? t.totals.tokenUsage() {
+                    try? t.monitor.observeUsage(zero, turnID: "history", source: .rolloutLog, epoch: epoch, at: now, historical: true)
+                }
+            }
+            tracked[key] = t
+        }
+        t.historicalPass = !t.loaded || gap
+        if gap { t.hasGap = true; try? t.monitor.markGap(at: now) }
+        let before = t.offset
+        pump(t, fd: fd, size: size)
+        if t.offset != before { t.updated = wall }
+        guard (try? apply(t, status: finished ? "idle" : "busy", now: now)) != nil else { tracked.removeValue(forKey: key); return nil }
+        return t
+    }
+
+    /// The meta file says it outright; without one, a transcript that stopped growing counts as finished.
+    private func subagentFinished(_ directory: SafeDirectory, folder: String, name: String, modified: Double, wall: Double) -> Bool {
+        let meta = folder + "/" + String(name.dropLast(".jsonl".count)) + ".meta.json"
+        if let fd = try? directory.openFile(meta) {
+            defer { close(fd) }
+            if let data = readChunk(fd, at: 0, limit: 16_384),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let finished = object["finished"] as? Bool { return finished }
+        }
+        return wall - modified > 120
+    }
+
     private func snapshot(_ t: Tracked) -> SessionSnapshot {
         SessionSnapshot(id: "claude:" + t.id, cwd: t.cwd, model: t.model, monitor: t.monitor, lastObserved: t.updated,
                         hasGap: t.hasGap, sourceReconciliationPending: false, activity: t.monitor.activity,
-                        observedCLIRoot: t.root, parentThreadID: nil,
+                        observedCLIRoot: t.root, parentThreadID: t.parent,
                         usageDetails: SessionUsageDetails(reasoningEffort: t.effort, serviceTier: t.tier),
                         provider: .claude, process: t.process)
     }
