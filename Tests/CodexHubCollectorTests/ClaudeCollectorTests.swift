@@ -223,6 +223,7 @@ private func child(of snapshot: CollectorSnapshot) -> SessionSnapshot? { snapsho
 @Test func K06ContextIsTheLastRequestsInputAgainstTheModelsWindow() async throws {
     let s = try ClaudeSandbox()
     // The helper's usage is input 2 + cache read 100 + cache write 10 per request; output never counts toward context.
+    try s.writeModelCatalog(["claude-opus-5-5": 1_000_000])
     try s.write(s.user(0) + s.assistant("m1", 4, output: 900) + s.user(6) + s.assistant("m2", 8, output: 50))
     let row = try #require(await s.collector().refresh(at: 100, wall: base).sessions.first)
     #expect(row.usageDetails?.contextTokens == 112)
@@ -256,12 +257,16 @@ private extension ClaudeSandbox {
     #expect(row.usageDetails?.contextWindow == 200_000)
 }
 
-@Test func K09ModelsMissingFromTheCatalogFallBackToTheDocumentedTable() async throws {
+@Test func K09ModelsMissingFromTheCatalogHaveNoWindowAndNothingIsGuessed() async throws {
     let s = try ClaudeSandbox()
     try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
-    try s.writeModelCatalog(["claude-haiku-4-5-20251001": 200_000])
-    let row = try #require(await s.collector().refresh(at: 100, wall: base).sessions.first)
-    #expect(row.usageDetails?.contextWindow == 1_000_000)
+    // No catalog at all: the context tokens are known, the window is not.
+    let without = try #require(await s.collector().refresh(at: 100, wall: base).sessions.first)
+    #expect(without.usageDetails?.contextTokens == 112 && without.usageDetails?.contextWindow == nil)
+    // A catalog that lists other models only, even a family the model belongs to, says nothing about this one.
+    try s.writeModelCatalog(["claude-opus-5": 1_000_000, "claude-haiku-4-5-20251001": 200_000])
+    let other = try #require(await s.collector().refresh(at: 100, wall: base).sessions.first)
+    #expect(other.usageDetails?.contextWindow == nil)
 }
 
 @Test func K10ACatalogThatChangesIsReloaded() async throws {

@@ -460,9 +460,9 @@ public actor ClaudeCollector {
         catalog = (newest.0.path, newest.1, (try? Data(contentsOf: newest.0)).map(ModelContext.windows(fromCatalog:)) ?? [:])
     }
 
-    /// The window of the session's model, from the catalog or else the documented table; dropped when the observed context already exceeds it, since then the table is wrong.
+    /// The window of the session's model from the catalog; dropped when the observed context already exceeds it, since then the catalog entry cannot be right.
     private func contextWindow(_ t: Tracked) -> Int? {
-        guard let window = t.model.flatMap({ ModelContext.window(forClaudeModel: $0, catalog: catalog.windows) }) else { return nil }
+        guard let window = t.model.flatMap({ catalog.windows[$0] }) else { return nil }
         return (t.contextTokens ?? 0) <= window ? window : nil
     }
 

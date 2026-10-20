@@ -468,17 +468,6 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(ProviderQuota(provider: .codex, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1001)).isCurrent(at: now))
 }
 
-@Test func C23ClaudeContextWindowComesFromTheDocumentedModelTableAndIsNeverGuessed() {
-    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-5-5") == 1_000_000)
-    #expect(ModelContext.window(forClaudeModel: "claude-opus-5-5") == 1_000_000)
-    #expect(ModelContext.window(forClaudeModel: "claude-haiku-5-5") == 1_000_000)
-    #expect(ModelContext.window(forClaudeModel: "claude-fable-5-1") == 1_000_000)
-    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-4-6[1m]") == 1_000_000)   // an explicit 1M variant
-    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-4-6") == nil)             // older models are not guessed
-    #expect(ModelContext.window(forClaudeModel: "claude-opus-4-8") == nil)
-    #expect(ModelContext.window(forClaudeModel: "<synthetic>") == nil)
-}
-
 @Test func C24ModelCatalogGivesEachModelsInputWindowAndIgnoresMalformedEntries() {
     let catalog = Data(#"""
     {"version":2,"catalog":{"surface":"cc","config":{"models":[
@@ -492,7 +481,4 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     """#.utf8)
     #expect(ModelContext.windows(fromCatalog: catalog) == ["claude-opus-5-5": 1_000_000, "claude-haiku-4-5-20251001": 200_000])
     #expect(ModelContext.windows(fromCatalog: Data("not json".utf8)).isEmpty)
-    // The catalog is authoritative; the documented table only fills in when a model is missing from it.
-    #expect(ModelContext.window(forClaudeModel: "claude-opus-5-5", catalog: ["claude-opus-5-5": 200_000]) == 200_000)
-    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-5-5", catalog: ["claude-opus-5-5": 200_000]) == 1_000_000)
 }
