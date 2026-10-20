@@ -115,7 +115,7 @@ The menu bar and overview sum only observed CLI roots with verified independent 
 
 ## Session groups
 
-Explicitly linked auxiliary sessions share one overview row with their main session, marked with an auxiliary count. Details lays out auxiliary sessions in a two-column grid, keeping each child's state, speed and 30-minute output chart separate, with each chart opening its full details when clicked. An active child keeps its group visible even when the parent is idle. The main row's numeric speed remains the main session's own rate; inherited parent/child counters are not blindly added. Same project names or PIDs alone never establish parentage. Missing, ambiguous or cyclic parent links remain separate.
+Explicitly linked auxiliary sessions share one overview row with their main session, marked with an auxiliary count. Details lays out auxiliary sessions in a two-column grid, keeping each child's state, speed and 30-minute output chart separate, with each chart opening its full details when clicked. An active child keeps its group visible even when the parent is idle. The main row's numeric speed remains the main session's own rate; inherited parent/child counters are not blindly added. Same project names or PIDs alone never establish parentage. Missing, ambiguous or cyclic parent links remain separate. Logs keep every helper a session ever started, so an auxiliary session that is not working and was last seen more than ten minutes ago is left out of the list and the count; a working one, or one whose last activity is unknown, stays.
 
 ## Per-process information
 
@@ -160,7 +160,7 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
 - **Context usage** — the input of the latest request (input plus cache reads and writes, like Claude Code's own gauge) against the model's window, which Tokloom reads from Claude Code's own local model catalog (`~/.claude/cache/model-catalog/*.json`, `max_input_tokens` per model) so it follows new models and 200k/1M variants. Nothing is guessed from a model's name: a model the catalog does not list, or a Claude Code without a catalog, shows no percentage. Subagents each show their own.
 - **Not available for Claude per session**: the remaining usage allowance of that session (account limits are shown separately, see below).
-- **Subagents** — Claude Code writes each subagent's transcript in its own file (`<session>/subagents/agent-*.jsonl`, with a `.meta.json` that says when it finished). Tokloom shows each one as an auxiliary session of its parent, like Codex auxiliary sessions: its own model, speed and chart, working while it runs and idle once it has finished. Its tokens are not added to the parent's totals or to the combined speed. A finished subagent that has not been touched for 30 minutes is no longer listed.
+- **Subagents** — Claude Code writes each subagent's transcript in its own file (`<session>/subagents/agent-*.jsonl`, with a `.meta.json` that says when it finished). Tokloom shows each one as an auxiliary session of its parent, like Codex auxiliary sessions: its own model, speed and chart, working while it runs and idle once it has finished. Its tokens are not added to the parent's totals or to the combined speed. See the auxiliary-session rule above for how long a finished one stays listed.
 - Only CLI sessions count toward the combined speed.
 - Collection starts only after the Codex home connects. The 60-minute chart history of Claude sessions is saved and restored with the Codex history.
 
@@ -190,7 +190,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 96 Core/Collector tests, 111 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 96 Core/Collector tests, 112 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 

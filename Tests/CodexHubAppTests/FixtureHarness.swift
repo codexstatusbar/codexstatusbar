@@ -483,12 +483,23 @@ import CodexHubCollector
         try capture(groupedModel, "auxiliary-grid-five-dark", output, dark: true, height: 1800)
         groupedModel.language = .english
         try capture(groupedModel, "auxiliary-grid-five-narrow", output, dark: false, height: 1800, width: 380)
+        // Auxiliary sessions that finished long ago are leftover history; working, recent and untimed ones stay.
+        let seen = Date(timeIntervalSince1970: 100_000)
+        groupedModel.clock = { seen }
+        var recentIdle = gridChildren[0]; recentIdle.observedActivity = .idle; recentIdle.lastObserved = seen.addingTimeInterval(-300)
+        var oldIdle = gridChildren[1]; oldIdle.observedActivity = .idle; oldIdle.lastObserved = seen.addingTimeInterval(-3_600)
+        var oldWorking = gridChildren[2]; oldWorking.observedActivity = .working; oldWorking.lastObserved = seen.addingTimeInterval(-3_600)
+        groupedModel.sessions = [parentRow, recentIdle, oldIdle, oldWorking, gridChildren[3]]
+        precondition(groupedModel.auxiliarySessions(for: parentRow).map(\.id.threadID) == ["auxiliary-1", "auxiliary-3", "auxiliary-4"],
+                     "UI112 an auxiliary session that is idle and was last seen long ago is no longer listed")
+        groupedModel.sessions = [parentRow] + gridChildren
+        groupedModel.clock = { Date() }
         let hiddenModel = HubPresentation()
         hiddenModel.unattachedProcesses = [ProcessIdentity(pid: 1, osStartTime: "fixture")]
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI111 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI112 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

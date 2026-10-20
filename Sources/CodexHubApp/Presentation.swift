@@ -307,8 +307,17 @@ enum MenuWindows: String, CaseIterable {
         return groups
     }
 
+    /// How long an auxiliary session that has stopped working stays on the list.
+    static let auxiliaryLingerSeconds: TimeInterval = 600
+    /// Logs keep every helper a session ever started. One that is not working and was last seen long ago is leftover
+    /// history, not information; a session whose last activity is unknown is kept, since it cannot be shown stale.
+    private func isLeftover(_ session: SessionPresentation) -> Bool {
+        guard let seen = session.lastObserved,
+              ![.working, .generating, .toolRunning, .approvalWait].contains(session.activity) else { return false }
+        return clock().timeIntervalSince(seen) > Self.auxiliaryLingerSeconds
+    }
     func auxiliarySessions(for session: SessionPresentation) -> [SessionPresentation] {
-        (sessionGroups[session.id] ?? []).filter { $0.id != session.id }.sorted { $0.id.threadID < $1.id.threadID }
+        (sessionGroups[session.id] ?? []).filter { $0.id != session.id && !isLeftover($0) }.sorted { $0.id.threadID < $1.id.threadID }
     }
     func mainSession(for session: SessionPresentation) -> SessionPresentation? {
         guard let key = sessionGroups.first(where: { $0.key != session.id && $0.value.contains { $0.id == session.id } })?.key else { return nil }
