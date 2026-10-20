@@ -494,12 +494,34 @@ import CodexHubCollector
                      "UI112 an auxiliary session that is idle and was last seen long ago is no longer listed")
         groupedModel.sessions = [parentRow] + gridChildren
         groupedModel.clock = { Date() }
+        // A detail page whose session has ended must not stay open with nothing to show.
+        var tick = Date(timeIntervalSince1970: 200_000)
+        groupedModel.clock = { tick }
+        groupedModel.sessions = [parentRow]
+        groupedModel.page = .detail(parentRow.id)
+        groupedModel.reconcileDetailPage()
+        precondition(groupedModel.page == .detail(parentRow.id), "UI113 a detail page stays while its session exists")
+        groupedModel.sessions = []
+        groupedModel.reconcileDetailPage()
+        tick += 3
+        groupedModel.reconcileDetailPage()
+        precondition(groupedModel.page == .detail(parentRow.id), "UI114 a session missing for a moment keeps its page")
+        groupedModel.sessions = [parentRow]; groupedModel.reconcileDetailPage()         // it came back: the wait starts over
+        groupedModel.sessions = []; groupedModel.reconcileDetailPage()
+        tick += 4
+        groupedModel.reconcileDetailPage()
+        precondition(groupedModel.page == .detail(parentRow.id), "UI115 the wait restarts when the session returns")
+        tick += 2
+        groupedModel.reconcileDetailPage()
+        precondition(groupedModel.page == .overview, "UI116 a detail page whose session stayed gone returns to the overview")
+        groupedModel.sessions = [parentRow] + gridChildren
+        groupedModel.clock = { Date() }
         let hiddenModel = HubPresentation()
         hiddenModel.unattachedProcesses = [ProcessIdentity(pid: 1, osStartTime: "fixture")]
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI112 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI116 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

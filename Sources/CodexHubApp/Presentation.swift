@@ -142,6 +142,17 @@ enum MenuWindows: String, CaseIterable {
     var saveLanguage: ((AppLanguage) -> Void)?
     func text(_ value: String) -> String { language.text(value) }
     var page = HubPage.overview
+    /// How long a detail page waits for its session to come back before the overview replaces it.
+    static let detailGraceSeconds: TimeInterval = 5
+    private var detailMissingSince: Date?
+    /// A session that ended while its detail page was open (or hidden) leaves a page with nothing to show; go back to the
+    /// overview once it has been gone for a moment. The short wait keeps one refresh that misses the session from kicking the user out.
+    func reconcileDetailPage() {
+        guard case .detail(let key) = page, !sessions.contains(where: { $0.id == key }) else { detailMissingSince = nil; return }
+        let since = detailMissingSince ?? clock()
+        detailMissingSince = since
+        if clock().timeIntervalSince(since) >= Self.detailGraceSeconds { page = .overview; detailMissingSince = nil }
+    }
     /// What the menu bar title shows; the icon stays when nothing selected has a value.
     var menuSpeed = MenuSpeed.combined
     var menuUsage = MenuUsage.all

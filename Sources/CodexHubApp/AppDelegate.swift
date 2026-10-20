@@ -177,6 +177,7 @@ import CodexHubCollector
         model.configuredServiceTier = observed.1
         guard let running = observed.0 else {
             model.sessions = []; model.unattachedProcesses = []; model.frame = nil
+            model.reconcileDetailPage()
             model.recordUsageHistory([], at: snapshot.observedAt)
             model.error = "Running Codex processes could not be inspected."
             return
@@ -210,6 +211,7 @@ import CodexHubCollector
         let frame = try ReportedFrame(monitors: allRows.map(\.monitor), verifiedIndependentThreads: Set(allRows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
         model.recordUsageHistory(allRows, at: snapshot.observedAt)
         model.sessions = allRows
+        model.reconcileDetailPage()
         model.frame = frame
         model.diagnostics = Dictionary(grouping: snapshot.diagnostics + (claude?.diagnostics ?? []), by: \.message).map { message, occurrences in
             occurrences.count == 1 ? message : "\(message) (\(occurrences.count) occurrences)"
