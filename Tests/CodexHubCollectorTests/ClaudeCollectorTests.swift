@@ -219,3 +219,21 @@ private func child(of snapshot: CollectorSnapshot) -> SessionSnapshot? { snapsho
     let after = try #require(try parent.monitor.workAverageRate(at: 102))
     #expect(abs(after - before) < 1e-6)
 }
+
+@Test func K06ContextIsTheLastRequestsInputAgainstTheModelsWindow() async throws {
+    let s = try ClaudeSandbox()
+    // The helper's usage is input 2 + cache read 100 + cache write 10 per request; output never counts toward context.
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 900) + s.user(6) + s.assistant("m2", 8, output: 50))
+    let row = try #require(await s.collector().refresh(at: 100, wall: base).sessions.first)
+    #expect(row.usageDetails?.contextTokens == 112)
+    #expect(row.usageDetails?.contextWindow == 1_000_000)
+}
+
+@Test func K07UnknownModelsShowContextTokensButNoWindow() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 70, model: "claude-haiku-4-5"), finished: true, modified: base - 60)
+    let sub = try #require(child(of: await s.collector().refresh(at: 100, wall: base)))
+    #expect(sub.usageDetails?.contextTokens == 1)        // the helper's subagent usage is input 1
+    #expect(sub.usageDetails?.contextWindow == nil)
+}

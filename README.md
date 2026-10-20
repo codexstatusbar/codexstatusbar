@@ -158,7 +158,8 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - **Same measurement** — each message's `output_tokens` (including thinking) divided by the time from the last user/tool-result entry to the message's last block. Tool execution falls between those entries, so it is excluded, as for Codex. Server queue and prefill time remain included.
 - **One combined speed** — the menu bar and overview sum observed CLI roots across Codex and Claude. When both are present, the overview shows a column per provider with its own speed and chart.
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
-- **Not available for Claude per session**: remaining usage allowance, context utilization (the window size is not logged).
+- **Context usage** — the input of the latest request (input plus cache reads and writes, like Claude Code's own gauge) against the model's documented window: 1M tokens for the Claude 5 models. Claude Code does not log the window, so a model that is not in Tokloom's table shows no percentage instead of a guess. Subagents each show their own.
+- **Not available for Claude per session**: the remaining usage allowance of that session (account limits are shown separately, see below).
 - **Subagents** — Claude Code writes each subagent's transcript in its own file (`<session>/subagents/agent-*.jsonl`, with a `.meta.json` that says when it finished). Tokloom shows each one as an auxiliary session of its parent, like Codex auxiliary sessions: its own model, speed and chart, working while it runs and idle once it has finished. Its tokens are not added to the parent's totals or to the combined speed. A finished subagent that has not been touched for 30 minutes is no longer listed.
 - Only CLI sessions count toward the combined speed.
 - Collection starts only after the Codex home connects. The 60-minute chart history of Claude sessions is saved and restored with the Codex history.
@@ -189,7 +190,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 90 Core/Collector tests, 111 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 93 Core/Collector tests, 111 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 

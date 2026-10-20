@@ -467,3 +467,14 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(!ProviderQuota(provider: .codex, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 999)).isCurrent(at: now))
     #expect(ProviderQuota(provider: .codex, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1001)).isCurrent(at: now))
 }
+
+@Test func C23ClaudeContextWindowComesFromTheDocumentedModelTableAndIsNeverGuessed() {
+    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-5-5") == 1_000_000)
+    #expect(ModelContext.window(forClaudeModel: "claude-opus-5-5") == 1_000_000)
+    #expect(ModelContext.window(forClaudeModel: "claude-haiku-5-5") == 1_000_000)
+    #expect(ModelContext.window(forClaudeModel: "claude-fable-5-1") == 1_000_000)
+    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-4-6[1m]") == 1_000_000)   // an explicit 1M variant
+    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-4-6") == nil)             // older models are not guessed
+    #expect(ModelContext.window(forClaudeModel: "claude-opus-4-8") == nil)
+    #expect(ModelContext.window(forClaudeModel: "<synthetic>") == nil)
+}

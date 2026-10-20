@@ -85,6 +85,8 @@ public actor ClaudeCollector {
         var model: String?
         var effort: String?
         var tier: ServiceTier?
+        /// Input of the latest request (input + cache reads + cache writes), like Claude Code's own context gauge.
+        var contextTokens: Int?
         var updated: Double
 
         init(id: String, path: String, fileID: String, process: ProcessIdentity, root: Bool, parent: String? = nil, epoch: String, monitor: ThreadMonitor, updated: Double) {
@@ -297,6 +299,7 @@ public actor ClaudeCollector {
         if let effort = object["effort"] as? String { t.effort = effort }
         if let tier = usage?["service_tier"] as? String { t.tier = ServiceTier(rawValue: tier == "standard" ? "default" : tier) }
         t.messages[id] = current
+        t.contextTokens = current.counts.input + current.counts.cacheRead + current.counts.cacheWrite
         // stop_reason is final on every block, so the last block is the one that ends the message.
         if let stop = current.stop, stop == "tool_use" ? current.lastBlock == "tool_use" : current.lastBlock == "text" {
             complete(id, t)
@@ -436,8 +439,14 @@ public actor ClaudeCollector {
         SessionSnapshot(id: "claude:" + t.id, cwd: t.cwd, model: t.model, monitor: t.monitor, lastObserved: t.updated,
                         hasGap: t.hasGap, sourceReconciliationPending: false, activity: t.monitor.activity,
                         observedCLIRoot: t.root, parentThreadID: t.parent,
-                        usageDetails: SessionUsageDetails(reasoningEffort: t.effort, serviceTier: t.tier),
+                        usageDetails: SessionUsageDetails(reasoningEffort: t.effort, serviceTier: t.tier, contextTokens: t.contextTokens, contextWindow: contextWindow(t)),
                         provider: .claude, process: t.process)
+    }
+
+    /// The documented window of the session's model; dropped when the observed context already exceeds it, since then the table is wrong.
+    private func contextWindow(_ t: Tracked) -> Int? {
+        guard let window = t.model.flatMap(ModelContext.window(forClaudeModel:)) else { return nil }
+        return (t.contextTokens ?? 0) <= window ? window : nil
     }
 
     /// `procStart` is written in UTC, e.g. "Sat Oct 17 18:18:23 2026".
