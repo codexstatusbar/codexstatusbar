@@ -8,7 +8,7 @@ struct SessionGraphics: View {
     let wide: Bool
     @Environment(\.colorScheme) private var colorScheme
 
-    private var points: [UsageHistoryPoint] { model.usageHistory[session.id] ?? [] }
+    private var points: [UsageHistoryPoint] { model.hasSubagents(session) ? model.familyHistory(for: session) : (model.usageHistory[session.id] ?? []) }
     private var context: Double? {
         guard let used = session.usageDetails?.contextTokens,
               let window = session.usageDetails?.contextWindow, window > 0 else { return nil }
@@ -19,6 +19,8 @@ struct SessionGraphics: View {
     }
 
     private var baseline: TokenUsage? { session.monitor.counter.baseline }
+    /// What the totals show: the session with the subagents it has run.
+    private var shownUsage: TokenUsage? { model.familyUsage(of: session) }
     private var lastTurn: TurnRecord? {
         session.monitor.turns.values.filter { $0.outcome != nil }.max { ($0.endedAt ?? 0) < ($1.endedAt ?? 0) }
     }
@@ -48,6 +50,7 @@ struct SessionGraphics: View {
                     VStack(alignment: .leading, spacing: 14) { contextBlock; tokenCounters }
                 }
                 note("누적 토큰에는 이전 이력이 포함될 수 있습니다. 컨텍스트와 사용 한도는 마지막 보고값입니다.")
+                if model.hasSubagents(session) { note("Includes the tokens of its subagents.") }
             }
             section("관측 출력 추이", icon: "chart.bar.xaxis") { usageChart }
             if !model.auxiliarySessions(for: session).isEmpty { auxiliarySessions }
@@ -126,11 +129,11 @@ struct SessionGraphics: View {
 
     private var tokenCounters: some View {
         HStack(alignment: .top, spacing: 16) {
-            counter("누적 입력 토큰", baseline?.inputTokens)
+            counter("누적 입력 토큰", shownUsage?.inputTokens)
             Divider().frame(height: 42)
-            counter("누적 출력 토큰", baseline?.outputTokens)
+            counter("누적 출력 토큰", shownUsage?.outputTokens)
             Divider().frame(height: 42)
-            counter("캐시 입력 토큰", baseline?.cachedInputTokens)
+            counter("캐시 입력 토큰", shownUsage?.cachedInputTokens)
         }.frame(maxWidth: .infinity)
     }
 
@@ -141,12 +144,13 @@ struct SessionGraphics: View {
     }
 
     private var auxiliarySessions: some View {
-        section("Auxiliary sessions", icon: "point.3.connected.trianglepath.dotted", showsDivider: false) {
-            note("Each session keeps its own speed and chart. Inherited counters are not added together.")
+        section("Sessions", icon: "point.3.connected.trianglepath.dotted", showsDivider: false) {
+            note(session.provider == .claude ? "The totals, speed and chart above add these sessions up; each card shows one session on its own."
+                                              : "Each session keeps its own speed and chart. Inherited counters are not added together.")
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)], alignment: .leading, spacing: 16) {
-                ForEach(model.auxiliarySessions(for: session)) { child in
+                ForEach([session] + model.auxiliarySessions(for: session)) { child in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(model.text("Auxiliary") + " · " + String(child.id.threadID.suffix(8)))
+                        Text(model.text(child.id == session.id ? "Main" : "Auxiliary") + " · " + String(child.id.threadID.suffix(8)))
                             .font(.system(size: 12, weight: .semibold)).lineLimit(1).help(child.id.threadID)
                         Text(child.modelDescription).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                             .help(child.modelDescription)
@@ -154,7 +158,7 @@ struct SessionGraphics: View {
                             Text(model.status(for: child)).font(.system(size: 10)).lineLimit(1)
                                 .foregroundStyle(ProcessTint.status(child, failed: model.error != nil, dark: colorScheme == .dark))
                             Spacer(minLength: 4)
-                            Text(model.rate(for: child) + " " + model.rateUnit.suffix)
+                            Text(model.ownRate(for: child) + " " + model.rateUnit.suffix)
                                 .font(.system(size: 11, weight: .medium)).monospacedDigit().lineLimit(1)
                         }
                         Button { model.page = .detail(child.id) } label: {
@@ -164,7 +168,7 @@ struct SessionGraphics: View {
                                                    emptyText: model.text("새 로그 대기"), compact: true, wallClockOffset: model.chartWallClockOffset, unit: model.rateUnit)
                                     .allowsHitTesting(false)
                             }.frame(maxWidth: .infinity, minHeight: 56).contentShape(Rectangle())
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.plain).disabled(child.id == session.id)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(model.text("상세정보") + " " + String(child.id.threadID.suffix(8)))
                             .help(model.text("상세정보"))
@@ -189,6 +193,9 @@ struct SessionGraphics: View {
             }.font(.system(size: 10)).foregroundStyle(.secondary)
             Text(model.text("저장된 최근 30분 관측값입니다. 누적 사용량을 새 데이터로 추가하지 않습니다."))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
+            if model.hasSubagents(session) {
+                Text(model.text("Main and subagent sessions combined.")).font(.system(size: 10)).foregroundStyle(.secondary)
+            }
         }
     }
 

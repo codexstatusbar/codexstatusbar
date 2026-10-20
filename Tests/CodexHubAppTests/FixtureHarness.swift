@@ -494,6 +494,41 @@ import CodexHubCollector
                      "UI112 an auxiliary session that is idle and was last seen long ago is no longer listed")
         groupedModel.sessions = [parentRow] + gridChildren
         groupedModel.clock = { Date() }
+        // Claude subagents write only their own tokens, so they add up into their session and into the totals above it.
+        func makeClaudeMonitor(_ thread: String, output: Int) throws -> ThreadMonitor {
+            var monitor = ThreadMonitor(key: .init(homeID: "claude:fixture", runID: nil, threadID: thread), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
+            try monitor.setConnectivity(.connected, at: 0)
+            try monitor.startTurn("turn", at: 1)
+            try monitor.observeUsage(TokenUsage(outputTokens: output), turnID: "turn", source: .rolloutLog, epoch: "fixture", at: 6)
+            return monitor
+        }
+        let claudeMain = try makeClaudeMonitor("claude-main", output: 100), claudeSub = try makeClaudeMonitor("claude-sub", output: 50)
+        var claudeMainRow = SessionPresentation(monitor: claudeMain, cwd: "/Synthetic/project", model: "Fixture model", rootObserved: true)
+        claudeMainRow.provider = .claude
+        claudeMainRow.descendantUsage = try TokenUsage(outputTokens: 150, inputTokens: 40)     // every subagent so far, listed or not
+        var claudeSubRow = SessionPresentation(monitor: claudeSub, cwd: "/Synthetic/project", model: "Fixture model", parentThreadID: "claude-main")
+        claudeSubRow.provider = .claude
+        var codexSubRow = claudeSubRow; codexSubRow.provider = .codex
+        precondition(claudeSubRow.contributes && !codexSubRow.contributes, "UI117 a Claude subagent counts toward the totals, a Codex child does not")
+        let family = HubPresentation()
+        family.sessions = [claudeMainRow, claudeSubRow]
+        family.frame = try ReportedFrame(monitors: [claudeMain, claudeSub], verifiedIndependentThreads: [claudeMain.key, claudeSub.key], at: 6)
+        family.restoreUsageHistory([claudeMainRow.id: [UsageHistoryPoint(time: 4, outputTokens: 100)], claudeSubRow.id: [UsageHistoryPoint(time: 5, outputTokens: 50)]])
+        precondition(family.familyUsage(of: claudeMainRow)?.outputTokens == 250 && family.familyUsage(of: claudeMainRow)?.inputTokens == 40,
+                     "UI118 the session total is its own counter plus every subagent's, not the listed rows again")
+        precondition(family.rate(for: claudeMainRow) == "30" && family.ownRate(for: claudeMainRow) == "20" && family.rate(for: claudeSubRow) == "10",
+                     "UI119 the session speed adds its subagents; each card keeps its own")
+        precondition(family.familyHistory(for: claudeMainRow).count == 2 && family.overviewUsageHistory.count == 2 && family.overviewUsageHistory(for: .claude).count == 2,
+                     "UI120 the session chart and the overview charts include the subagents")
+        precondition(family.aggregateRate == 30 && family.providerRate(.claude) == 30, "UI121 the combined and the per-provider speed include the subagents")
+        family.language = .korean
+        family.page = .detail(claudeMainRow.id)
+        try capture(family, "claude-session-with-subagent", output, dark: true, height: 1500)
+        let plain = HubPresentation()
+        plain.sessions = [claudeMainRow]
+        plain.frame = try ReportedFrame(monitors: [claudeMain], verifiedIndependentThreads: [claudeMain.key], at: 6)
+        precondition(plain.familyUsage(of: claudeMainRow)?.outputTokens == 250 && plain.rate(for: claudeMainRow) == "20",
+                     "UI122 a total outlives the listing of its subagents while the live speed does not")
         // A detail page whose session has ended must not stay open with nothing to show.
         var tick = Date(timeIntervalSince1970: 200_000)
         groupedModel.clock = { tick }
@@ -521,7 +556,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI116 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI122 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

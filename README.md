@@ -160,7 +160,7 @@ Running Claude Code CLI sessions appear beside Codex sessions, read-only, from `
 - Repeated stream blocks are counted once per `message.id`; input includes cache reads and writes so it matches Codex's meaning.
 - **Context usage** — the input of the latest request (input plus cache reads and writes, like Claude Code's own gauge) against the model's window, which Tokloom reads from Claude Code's own local model catalog (`~/.claude/cache/model-catalog/*.json`, `max_input_tokens` per model) so it follows new models and 200k/1M variants. Nothing is guessed from a model's name: a model the catalog does not list, or a Claude Code without a catalog, shows no percentage. Subagents each show their own.
 - **Not available for Claude per session**: the remaining usage allowance of that session (account limits are shown separately, see below).
-- **Subagents** — Claude Code writes each subagent's transcript in its own file (`<session>/subagents/agent-*.jsonl`, with a `.meta.json` that says when it finished). Tokloom shows each one as an auxiliary session of its parent, like Codex auxiliary sessions: its own model, speed and chart, working while it runs and idle once it has finished. Its tokens are not added to the parent's totals or to the combined speed. See the auxiliary-session rule above for how long a finished one stays listed.
+- **Subagents** — Claude Code writes each subagent's transcript in its own file (`<session>/subagents/agent-*.jsonl`, with a `.meta.json` that says when it finished). A session adds up with its subagents: its detail page shows the combined totals, speed and output chart (a subagent writes only its own tokens, so nothing is counted twice), and a *Sessions* section lists the main session and every subagent as its own card with its model, speed and chart. The overview's combined speed, the combined and per-provider charts and the menu bar include subagents too. A subagent's tokens stay in the session total after it leaves the list (ten minutes after it finished). A session without subagents shows just itself. Codex child sessions keep their own cards but are not added in, because they inherit their parent's counters.
 - Only CLI sessions count toward the combined speed.
 - Collection starts only after the Codex home connects. The 60-minute chart history of Claude sessions is saved and restored with the Codex history.
 
@@ -190,7 +190,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 96 Core/Collector tests, 116 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 99 Core/Collector tests, 122 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 

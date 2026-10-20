@@ -145,10 +145,13 @@ public actor ClaudeCollector {
             let watched = tracked[entry.sessionID]?.loaded == true
             do {
                 guard let session = try track(directory, entry: entry, now: now, wall: wall, gap: gap) else { continue }
-                snapshots.append(snapshot(session))
-                for sub in trackSubagents(directory, parent: session, entry: entry, now: now, wall: wall, gap: gap, parentWatched: watched) {
-                    live.insert(sub.id)
-                    snapshots.append(snapshot(sub))
+                let subs = trackSubagents(directory, parent: session, entry: entry, now: now, wall: wall, gap: gap, parentWatched: watched)
+                var subTotal = Counts()
+                for sub in subs { subTotal.add(sub.tracked.totals) }
+                snapshots.append(snapshot(session, subagentUsage: subs.isEmpty ? nil : try? subTotal.tokenUsage()))
+                for sub in subs {
+                    live.insert(sub.tracked.id)
+                    if sub.listed { snapshots.append(snapshot(sub.tracked)) }
                 }
             } catch {
                 tracked.removeValue(forKey: entry.sessionID)
@@ -375,7 +378,7 @@ public actor ClaudeCollector {
     /// Claude Code writes each subagent's transcript next to the session's, as `<session>/subagents/agent-<id>.jsonl`
     /// with an `agent-<id>.meta.json` that says when it finished. Each one is its own session, linked to its parent
     /// like a Codex auxiliary session: its tokens and speed are not added to the parent's.
-    private func trackSubagents(_ directory: SafeDirectory, parent: Tracked, entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> [Tracked] {
+    private func trackSubagents(_ directory: SafeDirectory, parent: Tracked, entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> [(tracked: Tracked, listed: Bool)] {
         let folder = String(parent.path.dropLast(".jsonl".count)) + "/subagents"
         let names = ((try? FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent(folder).path)) ?? [])
             .filter { $0.hasPrefix("agent-") && $0.hasSuffix(".jsonl") && !$0.contains("/") }.sorted().prefix(maximumSubagents)
@@ -383,11 +386,12 @@ public actor ClaudeCollector {
             let agent = String(name.dropFirst("agent-".count).dropLast(".jsonl".count))
             guard !agent.isEmpty else { return nil }
             return trackSubagent(directory, folder: folder, name: name, agent: agent, parent: parent, entry: entry, now: now, wall: wall, gap: gap, parentWatched: parentWatched)
+                .map { (tracked: $0.tracked, listed: $0.listed) }
         }
     }
 
     private func trackSubagent(_ directory: SafeDirectory, folder: String, name: String, agent: String, parent: Tracked,
-                               entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> Tracked? {
+                               entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> (tracked: Tracked, listed: Bool)? {
         let key = parent.id + "/" + agent
         guard let fd = try? directory.openFile(folder + "/" + name) else { tracked.removeValue(forKey: key); return nil }
         defer { close(fd) }
@@ -395,7 +399,8 @@ public actor ClaudeCollector {
         guard fstat(fd, &info) == 0 else { return nil }
         let modified = Double(info.st_mtimespec.tv_sec)
         let finished = subagentFinished(directory, folder: folder, name: name, modified: modified, wall: wall)
-        if finished && modified < wall - subagentWindow { tracked.removeValue(forKey: key); return nil }
+        // A finished subagent untouched for a while leaves the list but stays tracked: its tokens still belong to the session.
+        let listed = !(finished && modified < wall - subagentWindow)
         let fileID = "\(info.st_dev):\(info.st_ino)", size = Int64(info.st_size)
         var session = tracked[key]
         if let current = session, current.fileID != fileID || size < current.offset { session = nil }
@@ -423,7 +428,7 @@ public actor ClaudeCollector {
         pump(t, fd: fd, size: size)
         if t.offset != before { t.updated = wall }
         guard (try? apply(t, status: finished ? "idle" : "busy", now: now)) != nil else { tracked.removeValue(forKey: key); return nil }
-        return t
+        return (t, listed)
     }
 
     /// The meta file says it outright; without one, a transcript that stopped growing counts as finished.
@@ -438,12 +443,14 @@ public actor ClaudeCollector {
         return wall - modified > 120
     }
 
-    private func snapshot(_ t: Tracked) -> SessionSnapshot {
-        SessionSnapshot(id: "claude:" + t.id, cwd: t.cwd, model: t.model, monitor: t.monitor, lastObserved: t.updated,
+    private func snapshot(_ t: Tracked, subagentUsage: TokenUsage? = nil) -> SessionSnapshot {
+        var snapshot = SessionSnapshot(id: "claude:" + t.id, cwd: t.cwd, model: t.model, monitor: t.monitor, lastObserved: t.updated,
                         hasGap: t.hasGap, sourceReconciliationPending: false, activity: t.monitor.activity,
                         observedCLIRoot: t.root, parentThreadID: t.parent,
                         usageDetails: SessionUsageDetails(reasoningEffort: t.effort, serviceTier: t.tier, contextTokens: t.contextTokens, contextWindow: contextWindow(t)),
                         provider: .claude, process: t.process)
+        snapshot.subagentUsage = subagentUsage
+        return snapshot
     }
 
     private func refreshCatalog() {

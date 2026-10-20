@@ -44,6 +44,8 @@ public struct SessionSnapshot: Sendable {
     public let parentThreadID: String?
     public let usageDetails: SessionUsageDetails?
     public var provider: SessionProvider = .codex
+    /// Total of every subagent this session has run, listed or not; nil when it has none.
+    public var subagentUsage: TokenUsage?
     /// Set only by providers that prove process ownership themselves.
     public var process: ProcessIdentity?
 }

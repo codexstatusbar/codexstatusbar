@@ -279,3 +279,44 @@ private extension ClaudeSandbox {
     try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: s.home.appendingPathComponent("cache/model-catalog/catalog-2.json").path)
     #expect(try #require(await collector.refresh(at: 101, wall: base).sessions.first).usageDetails?.contextWindow == 500_000)
 }
+
+private extension ClaudeSandbox {
+    /// A second subagent file, so a session can have several.
+    func writeSecondSubagent(_ text: String, finished: Bool, modified: Double) throws {
+        try FileManager.default.createDirectory(at: subagents, withIntermediateDirectories: true)
+        let file = subagents.appendingPathComponent("agent-a2.jsonl")
+        try Data(text.utf8).write(to: file)
+        try Data("{\"finished\":\(finished)}".utf8).write(to: subagents.appendingPathComponent("agent-a2.meta.json"))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: modified)], ofItemAtPath: file.path)
+    }
+}
+
+@Test func K11TheParentCarriesTheTotalOfAllItsSubagentsEvenThoseNoLongerListed() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 700), finished: false)          // running
+    try s.writeSecondSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s2", 9, output: 500), finished: true, modified: base - 7_200)   // done hours ago
+    let snapshot = await s.collector().refresh(at: 100, wall: base)
+    let parent = try #require(snapshot.sessions.first { $0.parentThreadID == nil })
+    #expect(snapshot.sessions.count == 2)                                   // the old one is not listed...
+    #expect(parent.subagentUsage?.outputTokens == 1_200)                    // ...but its tokens still belong to the session
+    #expect(parent.monitor.counter.baseline?.outputTokens == 50)            // and the parent's own counter is untouched
+}
+
+@Test func K12ASubagentThatAgesOutKeepsCountingTowardTheParent() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 700), finished: true, modified: base - 60)
+    let collector = s.collector()
+    let early = await collector.refresh(at: 100, wall: base)
+    #expect(early.sessions.count == 2 && early.sessions.first { $0.parentThreadID == nil }?.subagentUsage?.outputTokens == 700)
+    let later = await collector.refresh(at: 101, wall: base + 7_200)         // two hours on: long past the listing window
+    #expect(later.sessions.count == 1)
+    #expect(later.sessions.first?.subagentUsage?.outputTokens == 700)       // the session total does not shrink
+}
+
+@Test func K13ASessionWithoutSubagentsHasNoSubagentTotal() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    #expect(try #require(await s.collector().refresh(at: 100, wall: base).sessions.first).subagentUsage == nil)
+}

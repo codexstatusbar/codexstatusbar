@@ -244,7 +244,7 @@ struct HubView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Label(model.status(for: state), systemImage: "circle.fill").font(.system(size: 10)).foregroundStyle(tint).lineLimit(1)
                 Text(model.rate(for: session) + " " + model.rateUnit.suffix).font(.system(size: 11, weight: .medium)).monospacedDigit().lineLimit(1)
-                    .help(model.text("Main session speed; auxiliary sessions are shown separately in Details."))
+                    .help(model.text(model.hasSubagents(session) ? "Speed of this session including its subagents." : "Main session speed; auxiliary sessions are shown separately in Details."))
             }
             Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)
         }.padding(.horizontal, 12).frame(minHeight: 64).contentShape(Rectangle())

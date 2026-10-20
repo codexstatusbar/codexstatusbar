@@ -191,7 +191,7 @@ import CodexHubCollector
             SessionPresentation(monitor: session.monitor, cwd: session.cwd, model: session.model,
                                 lastObserved: Date(timeIntervalSince1970: session.lastObserved),
                                 process: process,
-                                rootObserved: session.observedCLIRoot, parentThreadID: session.parentThreadID,
+                                rootObserved: session.observedCLIRoot, descendantUsage: session.subagentUsage, parentThreadID: session.parentThreadID,
                                 sourceMeasurement: session.measurement,
                                 sourceReconciliationPending: session.sourceReconciliationPending,
                                 observedActivity: session.activity,
@@ -208,7 +208,7 @@ import CodexHubCollector
         let allRows = rows + claudeRows
         let represented = Set(rows.compactMap(\.process))
         model.unattachedProcesses = running.filter { !represented.contains($0.identity) && !$0.isAppServer }.map(\.identity)
-        let frame = try ReportedFrame(monitors: allRows.map(\.monitor), verifiedIndependentThreads: Set(allRows.filter { $0.rootObserved && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
+        let frame = try ReportedFrame(monitors: allRows.map(\.monitor), verifiedIndependentThreads: Set(allRows.filter { $0.contributes && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
         model.recordUsageHistory(allRows, at: snapshot.observedAt)
         model.sessions = allRows
         model.reconcileDetailPage()
