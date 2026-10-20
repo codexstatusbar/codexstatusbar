@@ -57,34 +57,21 @@ public actor ClaudeCollector {
         let historical: Bool
     }
 
-    /// One transcript being read: the session's own, or one subagent's. A session shares its counting state
-    /// (totals, tool waits, completions) across all of its streams; only parsing position and message order are per stream.
-    private final class Stream {
-        let isMain: Bool
-        let path: String
-        var fileID: String
-        var offset: Int64 = 0
-        var carry = Data()
-        var skipping = false
-        var messages: [String: Message] = [:]
-        var order: [String] = []
-        var lastUser: Double?
-
-        init(isMain: Bool, path: String, fileID: String) { self.isMain = isMain; self.path = path; self.fileID = fileID }
-    }
-
     private final class Tracked {
         let id: String
-        let main: Stream
-        /// Subagent transcripts of this session, keyed by their path under the Claude home.
-        var subs: [String: Stream] = [:]
-        var path: String { main.path }
-        var fileID: String { get { main.fileID } set { main.fileID = newValue } }
+        let path: String
+        var fileID: String
         let process: ProcessIdentity
         let root: Bool
         var monitor: ThreadMonitor
         let epoch: String
+        var offset: Int64 = 0
+        var carry = Data()
+        var skipping = false
         var totals = Counts()
+        var messages: [String: Message] = [:]
+        var order: [String] = []
+        var lastUser: Double?
         var pendingTools: Set<String> = []
         var endedTools: Set<String> = []
         var completions: [Completion] = []
@@ -99,7 +86,7 @@ public actor ClaudeCollector {
         var updated: Double
 
         init(id: String, path: String, fileID: String, process: ProcessIdentity, root: Bool, epoch: String, monitor: ThreadMonitor, updated: Double) {
-            self.epoch = epoch; self.id = id; self.main = Stream(isMain: true, path: path, fileID: fileID); self.process = process
+            self.epoch = epoch; self.id = id; self.path = path; self.fileID = fileID; self.process = process
             self.root = root; self.monitor = monitor; self.updated = updated
         }
     }
@@ -113,7 +100,6 @@ public actor ClaudeCollector {
     private let maximumHistory: Int64 = 64 * 1_048_576
     private let maximumLine = 16 * 1_048_576
     private let remembered = 64
-    private let maximumSubagents = 64
 
     public init(claudeHome: URL,
                 processStart: @escaping @Sendable (Int32) -> (identity: ProcessIdentity, seconds: Double)? = ClaudeCollector.liveProcessStart) {
@@ -197,7 +183,7 @@ public actor ClaudeCollector {
         guard fstat(fd, &info) == 0 else { throw CollectorError.inaccessibleSource }
         let fileID = "\(info.st_dev):\(info.st_ino)"
         let size = Int64(info.st_size)
-        if let current = session, current.fileID != fileID || size < current.main.offset || current.process != entry.process {
+        if let current = session, current.fileID != fileID || size < current.offset || current.process != entry.process {
             session = nil
         }
         let t: Tracked
@@ -209,15 +195,14 @@ public actor ClaudeCollector {
             t = Tracked(id: entry.sessionID, path: path, fileID: fileID, process: entry.process, root: entry.root,
                         epoch: epoch, monitor: monitor, updated: wall)
             t.cwd = entry.cwd
-            if size > maximumHistory { t.main.offset = size; t.hasGap = true }
+            if size > maximumHistory { t.offset = size; t.hasGap = true }
             tracked[entry.sessionID] = t
         }
         t.historicalPass = !t.loaded || gap
         if gap { t.hasGap = true; try t.monitor.markGap(at: now) }
-        let before = t.main.offset
-        pump(t, t.main, fd: fd, size: size)
-        let subagentsMoved = pumpSubagents(t, directory)
-        if t.main.offset != before || subagentsMoved { t.updated = wall }
+        let before = t.offset
+        pump(t, fd: fd, size: size)
+        if t.offset != before { t.updated = wall }
         try apply(t, status: entry.status, now: now)
         return t
     }
@@ -241,132 +226,91 @@ public actor ClaudeCollector {
         return count >= 0 ? Data(buffer[..<count]) : nil
     }
 
-    private func pump(_ t: Tracked, _ stream: Stream, fd: Int32, size: Int64) {
+    private func pump(_ t: Tracked, fd: Int32, size: Int64) {
         var passes = 0
-        while stream.offset < size, passes < (t.historicalPass ? 512 : 8) {
+        while t.offset < size, passes < (t.historicalPass ? 512 : 8) {
             passes += 1
-            guard let data = readChunk(fd, at: stream.offset, limit: 1_048_576), !data.isEmpty else { break }
-            stream.offset += Int64(data.count)
+            guard let data = readChunk(fd, at: t.offset, limit: 1_048_576), !data.isEmpty else { break }
+            t.offset += Int64(data.count)
             var start = data.startIndex
             while let newline = data[start...].firstIndex(of: 0x0A) {
-                if stream.skipping { stream.skipping = false } else {
-                    stream.carry.append(data[start..<newline])
-                    handle(stream.carry, t, stream)
+                if t.skipping { t.skipping = false } else {
+                    t.carry.append(data[start..<newline])
+                    handle(t.carry, t)
                 }
-                stream.carry.removeAll(keepingCapacity: true)
+                t.carry.removeAll(keepingCapacity: true)
                 start = data.index(after: newline)
             }
-            if !stream.skipping {
-                stream.carry.append(data[start...])
-                if stream.carry.count > maximumLine { stream.carry.removeAll(); stream.skipping = true; t.hasGap = true }
+            if !t.skipping {
+                t.carry.append(data[start...])
+                if t.carry.count > maximumLine { t.carry.removeAll(); t.skipping = true; t.hasGap = true }
             }
         }
-    }
-
-    /// Claude Code writes each subagent's transcript next to the session's, under `<session>/subagents/agent-*.jsonl`.
-    /// Their output counts toward the session; they never change its model, identity or tool waits.
-    private func pumpSubagents(_ t: Tracked, _ directory: SafeDirectory) -> Bool {
-        let folder = String(t.path.dropLast(".jsonl".count)) + "/subagents"
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent(folder).path)) ?? [])
-            .filter { $0.hasPrefix("agent-") && $0.hasSuffix(".jsonl") && !$0.contains("/") }.sorted().prefix(maximumSubagents)
-        var moved = false
-        for name in names {
-            let relative = folder + "/" + name
-            guard let fd = try? directory.openFile(relative) else { continue }
-            defer { close(fd) }
-            var info = stat()
-            guard fstat(fd, &info) == 0 else { continue }
-            let fileID = "\(info.st_dev):\(info.st_ino)", size = Int64(info.st_size)
-            var stream = t.subs[relative]
-            if stream == nil || stream?.fileID != fileID || size < (stream?.offset ?? 0) {
-                let fresh = Stream(isMain: false, path: relative, fileID: fileID)
-                if size > maximumHistory { fresh.offset = size; t.hasGap = true }
-                t.subs[relative] = fresh
-                stream = fresh
-            }
-            guard let stream else { continue }
-            let before = stream.offset
-            pump(t, stream, fd: fd, size: size)
-            if stream.offset != before { moved = true }
-        }
-        let current = Set(names.map { folder + "/" + $0 })
-        t.subs = t.subs.filter { current.contains($0.key) }
-        return moved
     }
 
     private static let assistantMarker = Data("\"type\":\"assistant\"".utf8)
     private static let userMarker = Data("\"type\":\"user\"".utf8)
 
-    private func handle(_ line: Data, _ t: Tracked, _ stream: Stream) {
+    private func handle(_ line: Data, _ t: Tracked) {
         guard line.range(of: Self.assistantMarker) != nil || line.range(of: Self.userMarker) != nil,
               let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               let type = object["type"] as? String, type == "assistant" || type == "user",
-              stream.isMain ? object["isSidechain"] as? Bool != true : true,
+              object["isSidechain"] as? Bool != true,
               let stamp = object["timestamp"] as? String, let time = iso.date(from: stamp)?.timeIntervalSince1970 else { return }
-        if stream.isMain, let cwd = object["cwd"] as? String, !cwd.isEmpty { t.cwd = cwd }
+        if let cwd = object["cwd"] as? String, !cwd.isEmpty { t.cwd = cwd }
         let message = object["message"] as? [String: Any]
         let blocks = message?["content"] as? [[String: Any]] ?? []
         if type == "user" {
-            stream.lastUser = time
-            if stream.isMain {
-                for block in blocks where block["type"] as? String == "tool_result" {
-                    if let id = block["tool_use_id"] as? String, t.pendingTools.remove(id) != nil { t.endedTools.insert(id) }
-                }
+            t.lastUser = time
+            for block in blocks where block["type"] as? String == "tool_result" {
+                if let id = block["tool_use_id"] as? String, t.pendingTools.remove(id) != nil { t.endedTools.insert(id) }
             }
             return
         }
         guard let message, let id = message["id"] as? String, !id.isEmpty, id.utf8.count <= 128 else { return }
-        if stream.messages[id] == nil {
-            // A new message id means every earlier one of this transcript has finished streaming.
-            for earlier in stream.order where stream.messages[earlier]?.done == false { complete(earlier, t, stream) }
-            stream.messages[id] = Message(start: stream.lastUser, last: time)
-            stream.order.append(id)
+        if t.messages[id] == nil {
+            // A new message id means every earlier one has finished streaming.
+            for earlier in t.order where t.messages[earlier]?.done == false { complete(earlier, t) }
+            t.messages[id] = Message(start: t.lastUser, last: time)
+            t.order.append(id)
         }
-        guard var current = stream.messages[id], !current.done else { return }
+        guard var current = t.messages[id], !current.done else { return }
         current.last = max(current.last, time)
         let usage = message["usage"] as? [String: Any]
         if let usage { current.counts.raise(to: Counts(usage)) }
         current.stop = (message["stop_reason"] as? String) ?? current.stop
         if let kind = blocks.last?["type"] as? String { current.lastBlock = kind }
-        if stream.isMain {
-            for block in blocks where block["type"] as? String == "tool_use" {
-                if let tool = block["id"] as? String, t.pendingTools.count < 256 { t.pendingTools.insert(tool) }
-            }
-            if let model = message["model"] as? String, !model.hasPrefix("<") { t.model = model }
-            if let effort = object["effort"] as? String { t.effort = effort }
-            if let tier = usage?["service_tier"] as? String { t.tier = ServiceTier(rawValue: tier == "standard" ? "default" : tier) }
+        for block in blocks where block["type"] as? String == "tool_use" {
+            if let tool = block["id"] as? String, t.pendingTools.count < 256 { t.pendingTools.insert(tool) }
         }
-        stream.messages[id] = current
+        if let model = message["model"] as? String, !model.hasPrefix("<") { t.model = model }
+        if let effort = object["effort"] as? String { t.effort = effort }
+        if let tier = usage?["service_tier"] as? String { t.tier = ServiceTier(rawValue: tier == "standard" ? "default" : tier) }
+        t.messages[id] = current
         // stop_reason is final on every block, so the last block is the one that ends the message.
         if let stop = current.stop, stop == "tool_use" ? current.lastBlock == "tool_use" : current.lastBlock == "text" {
-            complete(id, t, stream)
+            complete(id, t)
         }
     }
 
-    private func complete(_ id: String, _ t: Tracked, _ stream: Stream) {
-        guard var message = stream.messages[id], !message.done else { return }
+    private func complete(_ id: String, _ t: Tracked) {
+        guard var message = t.messages[id], !message.done else { return }
         message.done = true
-        stream.messages[id] = message
+        t.messages[id] = message
         t.totals.add(message.counts)
         guard let usage = try? t.totals.tokenUsage() else { return }
         var seconds: Double?
         if let start = message.start, message.last > start, message.last - start < 3_600 { seconds = message.last - start }
         t.completions.append(Completion(usage: usage, seconds: seconds, historical: t.historicalPass))
-        while stream.order.count > remembered, let oldest = stream.order.first, stream.messages[oldest]?.done == true {
-            stream.order.removeFirst(); stream.messages.removeValue(forKey: oldest)
-        }
-    }
-
-    private func completeAll(_ t: Tracked) {
-        for stream in [t.main] + t.subs.values.sorted(by: { $0.path < $1.path }) {
-            for id in stream.order where stream.messages[id]?.done == false { complete(id, t, stream) }
+        while t.order.count > remembered, let oldest = t.order.first, t.messages[oldest]?.done == true {
+            t.order.removeFirst(); t.messages.removeValue(forKey: oldest)
         }
     }
 
     private func apply(_ t: Tracked, status: String?, now: Double) throws {
         let idle = status == "idle"
         if !t.loaded {
-            completeAll(t)
+            for id in t.order where t.messages[id]?.done == false { complete(id, t) }
             t.completions.removeAll()
             let epoch = t.epoch
             try t.monitor.observeUsage(try t.totals.tokenUsage(), turnID: "history", source: .rolloutLog,
@@ -385,7 +329,7 @@ public actor ClaudeCollector {
             syncTools(t, now: now)
             return
         }
-        if idle { completeAll(t) }
+        if idle { for id in t.order where t.messages[id]?.done == false { complete(id, t) } }
         if t.monitor.activeTurnID == nil, (status != nil && !idle) || !t.completions.isEmpty {
             t.turns += 1
             try t.monitor.startTurn("turn-\(t.turns)", at: now)
