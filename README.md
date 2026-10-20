@@ -82,7 +82,7 @@ The [macOS bundle workflow](.github/workflows/bundle.yml) runs only when a tag m
 2. `verify`: synthetic UI and isolated process checks, with rendered evidence.
 3. `bundle`: after both checks pass, build the arm64 app, validate signatures/resources, and create a DMG.
 
-Download `Tokloom-macos-arm64.dmg` and its SHA-256 file from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases). The app bundle contains only the app and its icon.
+Download `Tokloom-macos-arm64.dmg` and its SHA-256 file from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases). The app bundle contains only the app and its icon. The release tag is the version: pushing tag `X.Y.Z` builds app version `X.Y.Z` with build number `X·1,000,000 + Y·1,000 + Z`, so a release needs no commit. The repository's `Info.plist` holds `0.0.0` as a placeholder; set `TOKLOOM_VERSION=X.Y.Z` to give a local build a version.
 
 After publication succeeds and both release assets are confirmed, `cleanup` deletes that run's Actions artifacts (bundle copies, rendered evidence and uploaded log files). Release assets, workflow run logs and build caches are retained. Artifacts from failed runs remain available for up to 14 days.
 

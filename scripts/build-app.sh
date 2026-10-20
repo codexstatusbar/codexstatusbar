@@ -22,6 +22,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/CodexHubApp" "$APP/Contents/MacOS/"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+# A release tag is the version: CI passes it in TOKLOOM_VERSION, and the Info.plist in the repository holds a placeholder.
+if [[ -n "${TOKLOOM_VERSION:-}" ]]; then
+    read -r VERSION BUILD < <(python3 "$ROOT/scripts/release-version.py" "$TOKLOOM_VERSION")
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist"
+fi
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/Info.plist"

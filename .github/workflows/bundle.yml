@@ -94,6 +94,8 @@ jobs:
       - name: Build and package arm64 app
         env:
           TOKLOOM_REUSE_COMPILED: ${{ steps.swift-cache.outputs.exact-hit }}
+          # The tag is the version; the script rejects anything that is not a plain X.Y.Z.
+          TOKLOOM_VERSION: ${{ github.ref_name }}
         run: ./scripts/package-app.sh 2>&1 | tee bundle.log
       - name: Upload app bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

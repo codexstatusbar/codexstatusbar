@@ -82,7 +82,7 @@ open '.build/Tokloom.app'
 2. `verify`: 기존 합성 UI·격리된 프로세스 검증과 화면 증거 수집.
 3. `bundle`: 두 검증이 성공하면 arm64 앱을 빌드하고 서명·리소스를 확인한 뒤 DMG 생성.
 
-[Releases](https://github.com/codexstatusbar/codexstatusbar/releases)에서 `Tokloom-macos-arm64.dmg`와 SHA-256 파일을 받으세요. 앱 번들에는 앱과 아이콘만 들어 있습니다.
+[Releases](https://github.com/codexstatusbar/codexstatusbar/releases)에서 `Tokloom-macos-arm64.dmg`와 SHA-256 파일을 받으세요. 앱 번들에는 앱과 아이콘만 들어 있습니다. 릴리스 태그가 곧 버전입니다. 태그 `X.Y.Z`를 푸시하면 앱 버전 `X.Y.Z`, 빌드 번호 `X·1,000,000 + Y·1,000 + Z`로 빌드되므로 릴리스에 별도 커밋이 필요 없습니다. 저장소의 `Info.plist`에는 자리표시자 `0.0.0`이 들어 있고, 로컬 빌드에 버전을 주려면 `TOKLOOM_VERSION=X.Y.Z`를 지정하세요.
 
 릴리스 게시가 성공하고 두 파일의 업로드를 확인하면 `cleanup`이 해당 실행의 Actions 아티팩트(DMG 사본·검증 이미지·업로드한 로그 파일)를 삭제합니다. 릴리스 파일, 워크플로 실행 로그와 빌드 캐시는 유지합니다. 실패한 실행의 아티팩트는 최대 14일 보관합니다.
 
