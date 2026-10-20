@@ -237,3 +237,40 @@ private func child(of snapshot: CollectorSnapshot) -> SessionSnapshot? { snapsho
     #expect(sub.usageDetails?.contextTokens == 1)        // the helper's subagent usage is input 1
     #expect(sub.usageDetails?.contextWindow == nil)
 }
+
+private extension ClaudeSandbox {
+    /// Claude Code keeps the models' limits in `cache/model-catalog/<id>.json`.
+    func writeModelCatalog(_ models: [String: Int], name: String = "catalog-1.json") throws {
+        let directory = home.appendingPathComponent("cache/model-catalog")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let entries = models.map { "{\"id\":\"\($0.key)\",\"runtime\":{\"max_input_tokens\":\($0.value)}}" }.joined(separator: ",")
+        try Data("{\"version\":2,\"catalog\":{\"config\":{\"models\":[\(entries)]}}}".utf8).write(to: directory.appendingPathComponent(name))
+    }
+}
+
+@Test func K08ContextWindowIsReadFromClaudeCodesModelCatalog() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeModelCatalog(["claude-opus-5-5": 200_000])      // overrides the 1M the documented table would say
+    let row = try #require(await s.collector().refresh(at: 100, wall: base).sessions.first)
+    #expect(row.usageDetails?.contextWindow == 200_000)
+}
+
+@Test func K09ModelsMissingFromTheCatalogFallBackToTheDocumentedTable() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeModelCatalog(["claude-haiku-4-5-20251001": 200_000])
+    let row = try #require(await s.collector().refresh(at: 100, wall: base).sessions.first)
+    #expect(row.usageDetails?.contextWindow == 1_000_000)
+}
+
+@Test func K10ACatalogThatChangesIsReloaded() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    try s.writeModelCatalog(["claude-opus-5-5": 200_000])
+    let collector = s.collector()
+    #expect(try #require(await collector.refresh(at: 100, wall: base).sessions.first).usageDetails?.contextWindow == 200_000)
+    try s.writeModelCatalog(["claude-opus-5-5": 500_000], name: "catalog-2.json")   // a newer file replaces it
+    try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: s.home.appendingPathComponent("cache/model-catalog/catalog-2.json").path)
+    #expect(try #require(await collector.refresh(at: 101, wall: base).sessions.first).usageDetails?.contextWindow == 500_000)
+}

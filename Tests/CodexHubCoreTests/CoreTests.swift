@@ -478,3 +478,21 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(ModelContext.window(forClaudeModel: "claude-opus-4-8") == nil)
     #expect(ModelContext.window(forClaudeModel: "<synthetic>") == nil)
 }
+
+@Test func C24ModelCatalogGivesEachModelsInputWindowAndIgnoresMalformedEntries() {
+    let catalog = Data(#"""
+    {"version":2,"catalog":{"surface":"cc","config":{"models":[
+      {"id":"claude-opus-5-5","runtime":{"max_input_tokens":1000000,"max_output_tokens":128000}},
+      {"id":"claude-haiku-4-5-20251001","runtime":{"max_input_tokens":200000}},
+      {"id":"no-runtime"},
+      {"id":"negative","runtime":{"max_input_tokens":-5}},
+      {"id":"text","runtime":{"max_input_tokens":"1000000"}},
+      {"runtime":{"max_input_tokens":123}}
+    ]}}}
+    """#.utf8)
+    #expect(ModelContext.windows(fromCatalog: catalog) == ["claude-opus-5-5": 1_000_000, "claude-haiku-4-5-20251001": 200_000])
+    #expect(ModelContext.windows(fromCatalog: Data("not json".utf8)).isEmpty)
+    // The catalog is authoritative; the documented table only fills in when a model is missing from it.
+    #expect(ModelContext.window(forClaudeModel: "claude-opus-5-5", catalog: ["claude-opus-5-5": 200_000]) == 200_000)
+    #expect(ModelContext.window(forClaudeModel: "claude-sonnet-5-5", catalog: ["claude-opus-5-5": 200_000]) == 1_000_000)
+}

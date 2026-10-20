@@ -105,6 +105,8 @@ public actor ClaudeCollector {
     private let maximumLine = 16 * 1_048_576
     private let remembered = 64
     private let maximumSubagents = 64
+    /// Windows from Claude Code's model catalog, reloaded when its newest file changes.
+    private var catalog: (path: String, modified: Double, windows: [String: Int]) = ("", 0, [:])
     /// A finished subagent untouched for this long no longer belongs on a live session's list.
     private let subagentWindow = 1_800.0
 
@@ -127,6 +129,7 @@ public actor ClaudeCollector {
     @discardableResult
     public func refresh(at time: Double, wall: Double = Date().timeIntervalSince1970) -> CollectorSnapshot {
         let now = max(time, lastFrame)
+        refreshCatalog()
         let gap = lastFrame > 0 && now - lastFrame > 5
         lastFrame = now
         var diagnostics: [CollectorDiagnostic] = []
@@ -443,9 +446,23 @@ public actor ClaudeCollector {
                         provider: .claude, process: t.process)
     }
 
-    /// The documented window of the session's model; dropped when the observed context already exceeds it, since then the table is wrong.
+    private func refreshCatalog() {
+        let directory = home.appendingPathComponent("cache/model-catalog")
+        let files = ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey])) ?? [])
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> (URL, Double, Int)? in
+                guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+                      let modified = values.contentModificationDate?.timeIntervalSince1970, let size = values.fileSize else { return nil }
+                return (url, modified, size)
+            }
+        guard let newest = files.max(by: { $0.1 < $1.1 }), newest.2 <= 4 * 1_048_576 else { catalog = ("", 0, [:]); return }
+        if catalog.path == newest.0.path, catalog.modified == newest.1 { return }
+        catalog = (newest.0.path, newest.1, (try? Data(contentsOf: newest.0)).map(ModelContext.windows(fromCatalog:)) ?? [:])
+    }
+
+    /// The window of the session's model, from the catalog or else the documented table; dropped when the observed context already exceeds it, since then the table is wrong.
     private func contextWindow(_ t: Tracked) -> Int? {
-        guard let window = t.model.flatMap(ModelContext.window(forClaudeModel:)) else { return nil }
+        guard let window = t.model.flatMap({ ModelContext.window(forClaudeModel: $0, catalog: catalog.windows) }) else { return nil }
         return (t.contextTokens ?? 0) <= window ? window : nil
     }
 
