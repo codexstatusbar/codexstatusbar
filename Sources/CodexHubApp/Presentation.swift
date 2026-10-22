@@ -139,6 +139,8 @@ enum MenuWindows: String, CaseIterable {
     var frame: ReportedFrame?
     /// Session and weekly windows of the providers that have a login; a provider without one is absent.
     var quotas: [ProviderQuota] = []
+    /// Credits that cover the plan once its windows run out, per provider that has some.
+    var credits: [ProviderCredits] = []
     var clock: () -> Date = { Date() }
     var rateUnit = RateUnit.second
     var updateRateUnit: ((RateUnit) -> Void)?
@@ -440,6 +442,16 @@ enum MenuWindows: String, CaseIterable {
         guard minutes > 0 else { return nil }
         if minutes >= 1440 { return "\(minutes / 1440)d \(minutes % 1440 / 60)h" }
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+    }
+    /// The credits value as shown: a plain number for Codex credits, money for Claude, or "unlimited".
+    func creditsValue(_ credits: ProviderCredits) -> String {
+        if credits.unlimited { return text("Unlimited") }
+        let remaining = credits.remaining ?? 0
+        let locale = Locale(identifier: language.resolved == .korean ? "ko_KR" : "en_US")
+        switch credits.unit {
+        case .credits: return remaining.formatted(.number.precision(.fractionLength(remaining < 100 ? 0...1 : 0...0)).locale(locale))
+        case .currency(let code): return remaining.formatted(.currency(code: code).locale(locale))
+        }
     }
     /// Session windows are named by their length, e.g. "5h".
     func windowLabel(_ quota: ProviderQuota) -> String {

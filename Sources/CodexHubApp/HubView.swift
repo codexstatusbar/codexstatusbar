@@ -140,6 +140,15 @@ struct HubView: View {
                     }
                 }
             }
+            if let credits = model.credits.first(where: { $0.provider == provider }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "creditcard").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)
+                    Text(model.text("Credits")).font(.system(size: 10)).foregroundStyle(secondary)
+                    Spacer(minLength: 4)
+                    Text(model.creditsValue(credits)).font(.system(size: 12, weight: .medium)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                }.accessibilityElement(children: .combine)
+                    .accessibilityLabel(provider.displayName + " " + model.text("Credits") + " " + model.creditsValue(credits))
+            }
         }.padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(inset, in: RoundedRectangle(cornerRadius: 8))
     }

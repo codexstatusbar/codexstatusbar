@@ -46,6 +46,8 @@ enum AppLanguage: String, CaseIterable {
         "Session": "세션",
         "Menu bar": "상태바",
         "Log connection": "로그 연결",
+        "Credits": "크레딧",
+        "Unlimited": "무제한",
         "Sessions": "세션",
         "Main": "메인",
         "Includes the tokens of its subagents.": "서브에이전트가 쓴 토큰까지 합산한 값입니다.",

@@ -482,3 +482,34 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(ModelContext.windows(fromCatalog: catalog) == ["claude-opus-5-5": 1_000_000, "claude-haiku-4-5-20251001": 200_000])
     #expect(ModelContext.windows(fromCatalog: Data("not json".utf8)).isEmpty)
 }
+
+@Test func C25CodexCreditsComeFromTheRateLimitsOfTheLog() {
+    func line(_ credits: String) -> String { #"{"payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":100.0,"window_minutes":10080,"resets_at":1},"credits":"# + credits + "}}}" }
+    let real = QuotaParser.codexCredits(rolloutLine: line(#"{"has_credits":true,"unlimited":false,"balance":"61949.2565750000"}"#))
+    #expect(real?.provider == .codex && real?.unit == .credits && real?.unlimited == false)
+    #expect(real?.remaining == 61949.256575)
+    #expect(QuotaParser.codexCredits(rolloutLine: line(#"{"has_credits":true,"unlimited":false,"balance":12.5}"#))?.remaining == 12.5)      // a plain number works too
+    #expect(QuotaParser.codexCredits(rolloutLine: line(#"{"has_credits":true,"unlimited":true,"balance":"0"}"#))?.unlimited == true)
+    #expect(QuotaParser.codexCredits(rolloutLine: line(#"{"has_credits":false,"unlimited":false,"balance":"0"}"#)) == nil)        // no credits on this account
+    #expect(QuotaParser.codexCredits(rolloutLine: line(#"{"has_credits":true,"unlimited":false,"balance":"-5"}"#)) == nil)
+    #expect(QuotaParser.codexCredits(rolloutLine: line(#"{"has_credits":true,"unlimited":false,"balance":"abc"}"#)) == nil)
+    #expect(QuotaParser.codexCredits(rolloutLine: line("null")) == nil)
+    #expect(QuotaParser.codexCredits(rolloutLine: "not json rate_limits") == nil)
+}
+
+@Test func C26ClaudeCreditsComeFromTheSpendOrTheLegacyExtraUsageOfTheUsageResponse() {
+    func credits(_ json: String) -> ProviderCredits? { QuotaParser.claudeCredits(usageJSON: Data(json.utf8)) }
+    // Usage credits that cover a plan limit: the spend cap minus what was used.
+    let capped = credits(#"{"spend":{"enabled":true,"used":{"amount_minor":300,"currency":"USD","exponent":2},"limit":{"amount_minor":2000,"currency":"USD","exponent":2},"balance":null}}"#)
+    #expect(capped?.provider == .claude && capped?.unit == .currency("USD") && capped?.remaining == 17)
+    // A prepaid balance wins over the cap, as a money object or a plain number.
+    #expect(credits(#"{"spend":{"enabled":true,"used":{"amount_minor":0,"currency":"EUR","exponent":2},"balance":{"amount_minor":1234,"currency":"EUR","exponent":2}}}"#)?.remaining == 12.34)
+    #expect(credits(#"{"spend":{"enabled":true,"balance":7.5}}"#)?.remaining == 7.5)
+    // Older responses only send extra_usage, in minor units.
+    #expect(credits(#"{"extra_usage":{"is_enabled":true,"monthly_limit":2000,"used_credits":300,"currency":"USD","decimal_places":2}}"#)?.remaining == 17)
+    // This account's real answer: credits are not enabled, so there is nothing to show.
+    #expect(credits(#"{"spend":{"enabled":false,"used":{"amount_minor":0,"currency":"USD","exponent":2},"limit":null,"balance":null},"extra_usage":{"is_enabled":false,"monthly_limit":null,"used_credits":null}}"#) == nil)
+    #expect(credits(#"{"spend":{"enabled":true,"used":{"amount_minor":5,"currency":"USD","exponent":2}}}"#) == nil)            // neither a cap nor a balance
+    #expect(credits(#"{"spend":{"enabled":true,"limit":{"amount_minor":100,"exponent":2},"used":{"amount_minor":900,"exponent":2}}}"#)?.remaining == 0)   // overspent never goes negative
+    #expect(credits("not json") == nil)
+}

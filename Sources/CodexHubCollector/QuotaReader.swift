@@ -3,46 +3,57 @@ import CodexHubCore
 
 /// Reads each provider's weekly window. Codex writes it into its own session logs; Claude only
 /// reports it through the usage endpoint that its logged-in OAuth token may call.
+/// What a provider reports about its plan: the usage windows and, when there are any, the credits spent once they run out.
+public struct ProviderUsage: Sendable {
+    public var windows: [ProviderQuota] = []
+    public var credits: ProviderCredits?
+    public init(windows: [ProviderQuota] = [], credits: ProviderCredits? = nil) { self.windows = windows; self.credits = credits }
+}
+
 public enum QuotaReader {
     private static let tailBytes = 512 * 1024
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     /// Windows of the newest `rate_limits` found in the tail of the most recently written rollout files.
-    public static func codexWindows(home: URL, now: Date = Date()) -> [ProviderQuota] {
+    public static func codexUsage(home: URL, now: Date = Date()) -> ProviderUsage {
         guard FileManager.default.fileExists(atPath: home.appendingPathComponent("auth.json").path),
               let walker = FileManager.default.enumerator(at: home.appendingPathComponent("sessions"),
-                                                           includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
+                                                           includingPropertiesForKeys: [.contentModificationDateKey]) else { return ProviderUsage() }
         var files: [(URL, Date)] = []
         for case let url as URL in walker where url.pathExtension == "jsonl" {
             files.append((url, (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast))
         }
+        var credits: ProviderCredits?
+        var creditsSeen = false
         for (url, _) in files.sorted(by: { $0.1 > $1.1 }).prefix(5) {
             guard let handle = try? FileHandle(forReadingFrom: url) else { continue }
             defer { try? handle.close() }
             guard let size = try? handle.seekToEnd() else { continue }
             try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
             let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
-            for line in text.split(separator: "\n").reversed() {
+            for line in text.split(separator: "\n").reversed() where line.contains("\"rate_limits\"") {
+                // The newest report decides the credits, even after every window in it has reset.
+                if !creditsSeen { credits = QuotaParser.codexCredits(rolloutLine: String(line)); creditsSeen = true }
                 let windows = QuotaParser.codexWindows(rolloutLine: String(line)).filter { $0.isCurrent(at: now) }
-                if !windows.isEmpty { return windows }
+                if !windows.isEmpty { return ProviderUsage(windows: windows, credits: credits) }
             }
         }
-        return []
+        return ProviderUsage(credits: credits)
     }
 
     /// Empty when no Claude Code login exists in the keychain or the endpoint refuses the token.
-    public static func claudeWindows() async -> [ProviderQuota] {
+    public static func claudeUsage() async -> ProviderUsage {
         // The keychain read can wait on a macOS permission prompt, so it runs on a GCD thread, not a cooperative one.
         let token = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async { continuation.resume(returning: claudeToken()) }
         }
-        guard let token else { return [] }
+        guard let token else { return ProviderUsage() }
         var request = URLRequest(url: usageURL, timeoutInterval: 10)
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         guard let (body, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-        return QuotaParser.claudeWindows(usageJSON: body)
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return ProviderUsage() }
+        return ProviderUsage(windows: QuotaParser.claudeWindows(usageJSON: body), credits: QuotaParser.claudeCredits(usageJSON: body))
     }
 
     /// The stored credential JSON is read through the system `security` tool and never kept or logged.

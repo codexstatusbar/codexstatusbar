@@ -94,10 +94,11 @@ import CodexHubCollector
         // The usage endpoint is rate limited, so the weekly windows refresh every five minutes.
         quotaPolling = Task { [weak self] in
             while !Task.isCancelled {
-                let codex = await Task.detached { QuotaReader.codexWindows(home: canonicalHome) }.value
-                let claude = await QuotaReader.claudeWindows()
+                let codex = await Task.detached { QuotaReader.codexUsage(home: canonicalHome) }.value
+                let claude = await QuotaReader.claudeUsage()
                 guard let self, !Task.isCancelled else { return }
-                model.quotas = codex + claude
+                model.quotas = codex.windows + claude.windows
+                model.credits = [codex.credits, claude.credits].compactMap { $0 }
                 do { try await Task.sleep(for: .seconds(300)) } catch { return }
             }
         }

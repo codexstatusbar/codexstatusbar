@@ -752,8 +752,28 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     defer { try? FileManager.default.removeItem(at: home) }
     let line = #"{"payload":{"rate_limits":{"primary":{"used_percent":25,"window_minutes":10080,"resets_at":4102444800}}}}"#
     try ("{}\n" + line + "\n{\"x\":1}\n").write(to: day.appendingPathComponent("a.jsonl"), atomically: true, encoding: .utf8)
-    #expect(QuotaReader.codexWindows(home: home).isEmpty)   // no auth.json: not logged in
+    #expect(QuotaReader.codexUsage(home: home).windows.isEmpty)   // no auth.json: not logged in
     try "{}".write(to: home.appendingPathComponent("auth.json"), atomically: true, encoding: .utf8)
-    #expect(QuotaReader.codexWindows(home: home).first?.remainingPercent == 75)
-    #expect(QuotaReader.codexWindows(home: home, now: Date(timeIntervalSince1970: 4102444801)).isEmpty)   // window already reset
+    #expect(QuotaReader.codexUsage(home: home).windows.first?.remainingPercent == 75)
+    #expect(QuotaReader.codexUsage(home: home, now: Date(timeIntervalSince1970: 4102444801)).windows.isEmpty)   // window already reset
+}
+
+@Test func S260CodexCreditsComeFromTheNewestReportEvenWhenEveryWindowHasReset() throws {
+    let home = FileManager.default.temporaryDirectory.appendingPathComponent("credits-" + UUID().uuidString)
+    let day = home.appendingPathComponent("sessions/2026/10/22")
+    try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+    try "{}".write(to: home.appendingPathComponent("auth.json"), atomically: true, encoding: .utf8)
+    func report(_ balance: String, resets: Int) -> String {
+        #"{"payload":{"rate_limits":{"primary":{"used_percent":100,"window_minutes":10080,"resets_at":"# + String(resets) + #"},"credits":{"has_credits":true,"unlimited":false,"balance":""# + balance + #""}}}}"# + "\n"
+    }
+    try (report("500", resets: 4102444800) + report("480.5", resets: 4102444800)).write(to: day.appendingPathComponent("a.jsonl"), atomically: true, encoding: .utf8)
+    let live = QuotaReader.codexUsage(home: home)
+    #expect(live.windows.count == 1 && live.credits?.remaining == 480.5)     // the newest report, not the older one
+    // The week reset after the last report; the window is gone but the credits are still what was reported.
+    let later = QuotaReader.codexUsage(home: home, now: Date(timeIntervalSince1970: 4102444801))
+    #expect(later.windows.isEmpty && later.credits?.remaining == 480.5)
+    try FileManager.default.removeItem(at: home.appendingPathComponent("auth.json"))
+    let loggedOut = QuotaReader.codexUsage(home: home)
+    #expect(loggedOut.windows.isEmpty && loggedOut.credits == nil)
 }

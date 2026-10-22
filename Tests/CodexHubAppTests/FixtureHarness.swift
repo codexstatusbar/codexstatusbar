@@ -353,6 +353,15 @@ import CodexHubCollector
             NSGraphicsContext.restoreGraphicsState()
             try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: output).appendingPathComponent(dark ? "menubar-dark.png" : "menubar-light.png"))
         }
+        readme.credits = [ProviderCredits(provider: .codex, unit: .credits, remaining: 61949.256575)]
+        precondition(readme.creditsValue(readme.credits[0]) == "61,949", "UI123 Codex credits are shown as a rounded number")
+        let creditWords = HubPresentation()
+        let small = ProviderCredits(provider: .codex, unit: .credits, remaining: 12.34), unlimited = ProviderCredits(provider: .codex, unit: .credits, remaining: nil, unlimited: true)
+        creditWords.language = .korean
+        precondition(creditWords.creditsValue(small) == "12.3" && creditWords.creditsValue(unlimited) == "무제한", "UI124 small balances keep a decimal and unlimited is named")
+        creditWords.language = .english
+        precondition(creditWords.creditsValue(small) == "12.3" && creditWords.creditsValue(unlimited) == "Unlimited", "UI124 the same in English")
+        precondition(readme.creditsValue(ProviderCredits(provider: .claude, unit: .currency("USD"), remaining: 17)).contains("17.00"), "UI125 Claude credits are shown as money")
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
         try capture(readme, "readme-overview-en", output, dark: true)
@@ -556,7 +565,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI122 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI125 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

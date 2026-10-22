@@ -171,6 +171,7 @@ The overview shows one column per provider, and the menu bar can list the same n
 - **Codex** — read from the newest `rate_limits` in the local session logs (`~/.codex/sessions`), only while `auth.json` exists. Windows that have already reset are hidden.
 - **Claude** — Claude Code does not log its limits, so Tokloom asks Anthropic's usage endpoint (`api.anthropic.com/api/oauth/usage`) with the OAuth token Claude Code already stored in the macOS Keychain (`Claude Code-credentials`). The token is read through `/usr/bin/security`, sent only to that endpoint, and never saved or logged. macOS may ask once to allow keychain access. Without a Claude Code login, or with an expired token, nothing is shown.
 - Windows are named by their length from the data: `5h` for the session and weekly for 10080 minutes. A window the provider does not report is left out and its slot stays empty so the weekly bar keeps its place.
+- **Credits** — once the windows run out, the plan spends credits, and the overview shows what is left under the provider's bars. Codex's balance comes from `rate_limits.credits` in the same log report (the newest report decides, even after its windows have reset; unlimited accounts say so). Claude's comes from `spend` (a prepaid balance, or the spend cap minus what was used) or, in older responses, `extra_usage`, and only when usage credits are enabled on the account: an account without them shows no credits line.
 
 ## Current scope
 
@@ -190,7 +191,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 99 Core/Collector tests, 122 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 102 Core/Collector tests, 125 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 
