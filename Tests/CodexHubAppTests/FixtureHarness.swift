@@ -362,6 +362,9 @@ import CodexHubCollector
         creditWords.language = .english
         precondition(creditWords.creditsValue(small) == "12.3" && creditWords.creditsValue(unlimited) == "Unlimited", "UI124 the same in English")
         precondition(readme.creditsValue(ProviderCredits(provider: .claude, unit: .currency("USD"), remaining: 17)).contains("17.00"), "UI125 Claude credits are shown as money")
+        let scopedModel = HubPresentation()
+        scopedModel.quotas = [ProviderQuota(provider: .claude, windowMinutes: 300, usedPercent: 10, resetsAt: nil), ProviderQuota(provider: .claude, usedPercent: 2, resetsAt: nil), ProviderQuota(provider: .claude, usedPercent: 40, resetsAt: nil, scope: "Fable")]
+        precondition(scopedModel.menuTitle.contains("98%") && !scopedModel.menuTitle.contains("60%") && scopedModel.quotaText(scopedModel.quotas[2]).contains("Fable"), "UI126 a model-scoped weekly limit stays out of the menu bar and is named where shown")
         precondition(historyModel.quotas.isEmpty && !historyModel.menuTitle.contains("%"), "UI98 providers without a login are not shown")
         readme.language = .english
         try capture(readme, "readme-overview-en", output, dark: true)
@@ -565,7 +568,7 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI125 and P01–P06; fixture PNGs: \(output)")
+        print("PASS UI01–UI126 and P01–P06; fixture PNGs: \(output)")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

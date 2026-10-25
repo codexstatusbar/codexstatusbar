@@ -401,7 +401,7 @@ enum MenuWindows: String, CaseIterable {
         for provider in SessionProvider.allCases where menuSpeed.showsProviders {
             if let rate = providerRate(provider) { parts.append(MenuPart(provider: provider, kind: .speed, mark: unit, value: displayRate(rate))) }
         }
-        let shown = quotas.filter { menuUsage.includes($0.provider) }.filter(menuWindows.includes).sorted {
+        let shown = quotas.filter { $0.scope == nil && menuUsage.includes($0.provider) }.filter(menuWindows.includes).sorted {
             $0.provider != $1.provider ? $0.provider == .codex : $0.windowMinutes < $1.windowMinutes
         }
         return parts + shown.map {
@@ -433,7 +433,7 @@ enum MenuWindows: String, CaseIterable {
     /// "Codex 61%" (menu bar: "CX 61%", a session window "CX 5h 90%") is the share of that window still unused.
     func quotaText(_ quota: ProviderQuota, short: Bool = false) -> String {
         let name = short ? (quota.provider == .codex ? "CX" : "CL") : quota.provider.displayName
-        return name + (quota.isWeekly ? "" : " " + windowLabel(quota)) + " " + String(Int(quota.remainingPercent.rounded())) + "%"
+        return name + (quota.scope.map { " " + $0 } ?? "") + (quota.isWeekly ? "" : " " + windowLabel(quota)) + " " + String(Int(quota.remainingPercent.rounded())) + "%"
     }
     /// Time until the window resets, compact: "3d 4h", "2h 13m", "45m".
     func remainingTime(_ quota: ProviderQuota) -> String? {

@@ -460,6 +460,13 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(QuotaParser.claudeWindows(usageJSON: Data(#"{"seven_day":{}}"#.utf8)).isEmpty)
 }
 
+@Test func C29ClaudeModelScopedWeeklyLimitIsKeptApartFromThePlanWindows() {
+    let body = Data(#"{"five_hour":{"utilization":15,"resets_at":null},"seven_day":{"utilization":2,"resets_at":null},"limits":[{"kind":"session","percent":15},{"kind":"weekly_all","percent":2},{"kind":"weekly_scoped","percent":7,"resets_at":"2026-10-29T10:00:00+00:00","scope":{"model":{"id":null,"display_name":"Fable"}}},{"kind":"weekly_scoped","percent":9,"scope":{"model":{"display_name":""}}},{"kind":"weekly_scoped","percent":9,"scope":null}]}"#.utf8)
+    let windows = QuotaParser.claudeWindows(usageJSON: body)
+    #expect(windows.map(\.scope) == [nil, nil, "Fable"])
+    #expect(windows.last?.usedPercent == 7 && windows.last?.isWeekly == true && windows.last?.resetsAt != nil)
+}
+
 @Test func C22QuotaIsClampedAndExpiresAfterReset() {
     let now = Date(timeIntervalSince1970: 1000)
     #expect(ProviderQuota(provider: .codex, usedPercent: 130, resetsAt: nil).remainingPercent == 0)

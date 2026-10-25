@@ -191,7 +191,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 102 Core/Collector tests, 125 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 103 Core/Collector tests, 126 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 

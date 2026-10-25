@@ -105,7 +105,7 @@ struct HubView: View {
     private func quotaRow(_ quota: ProviderQuota) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                Text(model.text(quota.isWeekly ? "Weekly" : "Session") + (quota.isWeekly ? "" : " " + model.windowLabel(quota)))
+                Text((quota.scope.map { $0 + " " } ?? "") + model.text(quota.isWeekly ? "Weekly" : "Session") + (quota.isWeekly ? "" : " " + model.windowLabel(quota)))
                     .font(.system(size: 10)).foregroundStyle(secondary)
                 Spacer(minLength: 4)
                 Text(String(Int(quota.remainingPercent.rounded())) + "%").font(.system(size: 12, weight: .medium)).monospacedDigit()
@@ -132,14 +132,15 @@ struct HubView: View {
                 .accessibilityLabel(provider.displayName + " " + model.text("관측 출력 토큰"))
             // Fixed slots keep each window at the same height in every column; a missing window leaves its slot empty.
             ForEach([true, false], id: \.self) { weekly in
-                if model.quotas.contains(where: { $0.isWeekly == weekly }) {
-                    if let quota = model.quotas.first(where: { $0.provider == provider && $0.isWeekly == weekly }) {
+                if model.quotas.contains(where: { $0.scope == nil && $0.isWeekly == weekly }) {
+                    if let quota = model.quotas.first(where: { $0.provider == provider && $0.scope == nil && $0.isWeekly == weekly }) {
                         quotaRow(quota)
                     } else {
                         quotaRow(ProviderQuota(provider: provider, windowMinutes: weekly ? QuotaParser.weeklyMinutes : 300, usedPercent: 0, resetsAt: nil)).hidden()
                     }
                 }
             }
+            ForEach(model.quotas.filter { $0.provider == provider && $0.scope != nil }, id: \.scope) { quotaRow($0) }
             if let credits = model.credits.first(where: { $0.provider == provider }) {
                 HStack(spacing: 6) {
                     Image(systemName: "creditcard").font(.system(size: 10)).foregroundStyle(secondary).accessibilityHidden(true)

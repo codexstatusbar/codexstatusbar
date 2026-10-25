@@ -6,9 +6,12 @@ public struct ProviderQuota: Equatable, Sendable {
     public let windowMinutes: Int
     public let usedPercent: Double
     public let resetsAt: Date?
+    /// The model a weekly limit is scoped to (Claude's "Fable"); nil for the plan's own session and weekly windows.
+    public let scope: String?
 
-    public init(provider: SessionProvider, windowMinutes: Int = QuotaParser.weeklyMinutes, usedPercent: Double, resetsAt: Date?) {
+    public init(provider: SessionProvider, windowMinutes: Int = QuotaParser.weeklyMinutes, usedPercent: Double, resetsAt: Date?, scope: String? = nil) {
         self.provider = provider
+        self.scope = scope
         self.windowMinutes = windowMinutes
         self.usedPercent = min(max(usedPercent.isFinite ? usedPercent : 0, 0), 100)
         self.resetsAt = resetsAt
@@ -58,19 +61,29 @@ public enum QuotaParser {
     /// Claude `/api/oauth/usage` body: `five_hour` and `seven_day`, each `{utilization, resets_at}` with an ISO-8601 reset time.
     public static func claudeWindows(usageJSON data: Data) -> [ProviderQuota] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
-        return [("five_hour", 300), ("seven_day", weeklyMinutes)].compactMap { key, minutes in
+        let plan = [("five_hour", 300), ("seven_day", weeklyMinutes)].compactMap { key, minutes -> ProviderQuota? in
             guard let window = root[key] as? [String: Any],
                   let used = (window["utilization"] as? NSNumber)?.doubleValue else { return nil }
-            var reset: Date?
-            if let text = window["resets_at"] as? String {
-                let fractional = ISO8601DateFormatter()
-                fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                reset = fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
-            } else if let seconds = (window["resets_at"] as? NSNumber)?.doubleValue {
-                reset = Date(timeIntervalSince1970: seconds)
-            }
-            return ProviderQuota(provider: .claude, windowMinutes: minutes, usedPercent: used, resetsAt: reset)
+            return ProviderQuota(provider: .claude, windowMinutes: minutes, usedPercent: used, resetsAt: resetDate(window["resets_at"]))
         }
+        // Per-model weekly limits come as `limits` entries of kind `weekly_scoped`, named by `scope.model.display_name`.
+        let scoped = (root["limits"] as? [[String: Any]] ?? []).compactMap { limit -> ProviderQuota? in
+            guard limit["kind"] as? String == "weekly_scoped",
+                  let name = ((limit["scope"] as? [String: Any])?["model"] as? [String: Any])?["display_name"] as? String, !name.isEmpty,
+                  let used = (limit["percent"] as? NSNumber)?.doubleValue else { return nil }
+            return ProviderQuota(provider: .claude, windowMinutes: weeklyMinutes, usedPercent: used, resetsAt: resetDate(limit["resets_at"]), scope: name)
+        }
+        return plan + scoped
+    }
+
+    /// A reset time as an ISO-8601 string (with or without fractional seconds) or as epoch seconds.
+    private static func resetDate(_ value: Any?) -> Date? {
+        if let text = value as? String {
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+        }
+        return (value as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
     }
 
     /// Codex rollout line: `payload.rate_limits.credits` is `{has_credits, unlimited, balance}` with the balance as a string.
