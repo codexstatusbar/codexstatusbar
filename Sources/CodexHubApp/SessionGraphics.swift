@@ -50,7 +50,7 @@ struct SessionGraphics: View {
                     VStack(alignment: .leading, spacing: 14) { contextBlock; tokenCounters }
                 }
                 note("누적 토큰에는 이전 이력이 포함될 수 있습니다. 컨텍스트와 사용 한도는 마지막 보고값입니다.")
-                if model.hasSubagents(session) { note("Includes the tokens of its subagents.") }
+                if session.provider == .claude && model.hasSubagents(session) { note("Includes the tokens of its subagents.") }
             }
             section("관측 출력 추이", icon: "chart.bar.xaxis") { usageChart }
             if !model.auxiliarySessions(for: session).isEmpty { auxiliarySessions }

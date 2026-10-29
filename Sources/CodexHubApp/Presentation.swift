@@ -19,9 +19,8 @@ struct SessionPresentation: Identifiable {
     var usageDetails: SessionUsageDetails?
     var provider = SessionProvider.codex
     var activity: Activity { observedActivity ?? monitor.activity }
-    /// Whether this session's output counts toward the totals above it. A CLI root always does; a Claude subagent writes only
-    /// its own tokens, so it does too. A Codex child inherits its parent's counters and stays out.
-    var contributes: Bool { rootObserved || (provider == .claude && parentThreadID != nil) }
+    /// Rates and chart deltas exclude inherited snapshots; explicitly identified children contribute their new output.
+    var contributes: Bool { rootObserved || parentThreadID != nil }
     var measurement: CodexHubCore.Measurement { sourceMeasurement ?? monitor.measurement }
     var id: ThreadKey { monitor.key }
     var title: String { cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Session \(id.threadID.prefix(8))" }
@@ -458,13 +457,13 @@ enum MenuWindows: String, CaseIterable {
         quota.windowMinutes % 60 == 0 ? "\(quota.windowMinutes / 60)h" : "\(quota.windowMinutes)m"
     }
     func status(for session: SessionPresentation) -> String { text(error == nil ? session.status : "상태 미확인") }
-    /// The Claude subagents shown with a session; their output adds up into it. Other providers keep their children separate.
+    /// Linked subagents contribute their own rates and newly observed output.
     func subagents(of session: SessionPresentation) -> [SessionPresentation] {
-        session.provider == .claude ? auxiliarySessions(for: session) : []
+        auxiliarySessions(for: session)
     }
     /// Whether the session's totals stand for more than itself: it has listed subagents, or has run some that left the list.
     func hasSubagents(_ session: SessionPresentation) -> Bool {
-        session.provider == .claude && (session.descendantUsage != nil || !subagents(of: session).isEmpty)
+        (session.provider == .claude && session.descendantUsage != nil) || !subagents(of: session).isEmpty
     }
     /// The session's own counter plus every subagent it has run (the total the session carries, not the listed rows again).
     func familyUsage(of session: SessionPresentation) -> TokenUsage? {
@@ -494,7 +493,7 @@ enum MenuWindows: String, CaseIterable {
             .compactMap { try? $0.monitor.workAverageRate(at: frame?.time ?? 0) }
         return displayRate(rates.isEmpty ? nil : rates.reduce(0, +))
     }
-    // Group coverage as reported frames do; only observed CLI root counters contribute.
+    // Group coverage as reported frames do.
     private struct RunKey: Hashable {
         let home: String
         let run: String?
@@ -507,7 +506,7 @@ enum MenuWindows: String, CaseIterable {
     var aggregateRate: Double? {
         return frame?.tokensPerSecond
     }
-    /// Summed work-average rate of one provider's measured root sessions; nil when none is measured.
+    /// Summed work-average rate of one provider's measured roots and children; nil when none is measured.
     func providerRate(_ provider: SessionProvider) -> Double? {
         guard error == nil, let time = frame?.time else { return nil }
         let rates = sessions.filter { $0.provider == provider && $0.contributes && ($0.measurement == .reported || $0.measurement == .warmingUp) }

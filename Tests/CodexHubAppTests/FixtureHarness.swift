@@ -521,7 +521,7 @@ import CodexHubCollector
         var claudeSubRow = SessionPresentation(monitor: claudeSub, cwd: "/Synthetic/project", model: "Fixture model", parentThreadID: "claude-main")
         claudeSubRow.provider = .claude
         var codexSubRow = claudeSubRow; codexSubRow.provider = .codex
-        precondition(claudeSubRow.contributes && !codexSubRow.contributes, "UI117 a Claude subagent counts toward the totals, a Codex child does not")
+        precondition(claudeSubRow.contributes && codexSubRow.contributes, "UI117 both providers count subagents after their inherited baseline")
         let family = HubPresentation()
         family.sessions = [claudeMainRow, claudeSubRow]
         family.frame = try ReportedFrame(monitors: [claudeMain, claudeSub], verifiedIndependentThreads: [claudeMain.key, claudeSub.key], at: 6)
@@ -541,6 +541,24 @@ import CodexHubCollector
         plain.frame = try ReportedFrame(monitors: [claudeMain], verifiedIndependentThreads: [claudeMain.key], at: 6)
         precondition(plain.familyUsage(of: claudeMainRow)?.outputTokens == 250 && plain.rate(for: claudeMainRow) == "20",
                      "UI122 a total outlives the listing of its subagents while the live speed does not")
+        // Codex children inherit a snapshot; only output observed after that baseline adds to speed/history.
+        var codexMain = claudeMainRow; codexMain.provider = .codex; codexMain.descendantUsage = nil
+        var inheritedChildMonitor = ThreadMonitor(key: .init(homeID: codexMain.id.homeID, runID: nil, threadID: "codex-child"), source: .rolloutLog, epoch: "fixture")
+        try inheritedChildMonitor.setConnectivity(.connected, at: 0)
+        try inheritedChildMonitor.observeUsage(TokenUsage(outputTokens: 10_000), turnID: "old", source: .rolloutLog, epoch: "fixture", at: 0, historical: true)
+        try inheritedChildMonitor.startTurn("new", at: 1)
+        let codexFamily = HubPresentation()
+        codexFamily.sessions = [codexMain, SessionPresentation(monitor: inheritedChildMonitor, parentThreadID: codexMain.id.threadID)]
+        codexFamily.recordUsageHistory(codexFamily.sessions, at: 2)
+        try inheritedChildMonitor.observeUsage(TokenUsage(outputTokens: 10_050), turnID: "new", source: .rolloutLog, epoch: "fixture", at: 6, rateInterval: .excludingTools(5))
+        let codexChild = SessionPresentation(monitor: inheritedChildMonitor, parentThreadID: codexMain.id.threadID)
+        codexFamily.sessions = [codexMain, codexChild]
+        codexFamily.recordUsageHistory(codexFamily.sessions, at: 6)
+        codexFamily.frame = try ReportedFrame(monitors: codexFamily.sessions.map(\.monitor), verifiedIndependentThreads: Set(codexFamily.sessions.filter { $0.contributes }.map(\.id)), at: 6)
+        precondition(codexFamily.rate(for: codexMain) == "30" && codexFamily.ownRate(for: codexChild) == "10", "Codex family adds independent rates, not the inherited 10000 tokens")
+        precondition(codexFamily.aggregateRate == 30 && codexFamily.providerRate(.codex) == 30, "Codex combined and provider totals include child speed once")
+        precondition(codexFamily.familyHistory(for: codexMain).reduce(0) { $0 + $1.outputTokens } == 50 && codexFamily.overviewUsageHistory.reduce(0) { $0 + $1.outputTokens } == 50, "Codex family and overview charts exclude inherited output")
+        precondition(codexFamily.familyUsage(of: codexMain)?.outputTokens == 100, "Codex cumulative snapshots are not added together")
         // A detail page whose session has ended must not stay open with nothing to show.
         var tick = Date(timeIntervalSince1970: 200_000)
         groupedModel.clock = { tick }
