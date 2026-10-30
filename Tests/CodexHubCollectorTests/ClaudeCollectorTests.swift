@@ -320,3 +320,13 @@ private extension ClaudeSandbox {
     try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
     #expect(try #require(await s.collector().refresh(at: 100, wall: base).sessions.first).subagentUsage == nil)
 }
+
+@Test func K14TwoProcessesOnTheSameSessionListItOnce() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    let json = "{\"pid\":4343,\"sessionId\":\"\(sessionID)\",\"cwd\":\"/proj/x\",\"procStart\":\"\(procStart)\",\"kind\":\"interactive\",\"entrypoint\":\"cli\",\"status\":\"busy\"}"
+    try Data(json.utf8).write(to: s.home.appendingPathComponent("sessions/4343.json"))
+    let rows = await s.collector().refresh(at: 100, wall: base).sessions
+    #expect(rows.count == 1 && Set(rows.map(\.monitor.key)).count == rows.count)
+    #expect(rows.first?.process?.pid == 4343)
+}

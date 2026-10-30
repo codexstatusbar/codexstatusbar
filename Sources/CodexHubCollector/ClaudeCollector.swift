@@ -139,8 +139,7 @@ public actor ClaudeCollector {
         }
         var live: Set<String> = []
         var snapshots: [SessionSnapshot] = []
-        for name in sessionFiles() {
-            guard let entry = liveEntry(directory, name: name, wall: wall) else { continue }
+        for entry in owners(directory, wall: wall) {
             live.insert(entry.sessionID)
             let watched = tracked[entry.sessionID]?.loaded == true
             do {
@@ -168,6 +167,20 @@ public actor ClaudeCollector {
         let status: String?
         let process: ProcessIdentity
         let root: Bool
+        let started: Double
+    }
+
+    /// One live entry per session. Two processes can hold the same session (a resumed one next to the original); both
+    /// would report the same thread key, so the most recently started process owns it, the higher pid on a tie.
+    private func owners(_ directory: SafeDirectory, wall: Double) -> [Entry] {
+        var bySession: [String: Entry] = [:]
+        for name in sessionFiles() {
+            guard let entry = liveEntry(directory, name: name, wall: wall) else { continue }
+            if let other = bySession[entry.sessionID],
+               (other.started, other.process.pid) >= (entry.started, entry.process.pid) { continue }
+            bySession[entry.sessionID] = entry
+        }
+        return bySession.values.sorted { $0.process.pid < $1.process.pid }
     }
 
     private func sessionFiles() -> [String] {
@@ -188,7 +201,7 @@ public actor ClaudeCollector {
               let started = (object["procStart"] as? String).flatMap(Self.parseProcStart),
               let process = processStart(pid), abs(process.seconds - started) <= 2 else { return nil }
         return Entry(sessionID: session, cwd: object["cwd"] as? String, status: object["status"] as? String,
-                     process: process.identity, root: object["entrypoint"] as? String == "cli")
+                     process: process.identity, root: object["entrypoint"] as? String == "cli", started: process.seconds)
     }
 
     private func track(_ directory: SafeDirectory, entry: Entry, now: Double, wall: Double, gap: Bool) throws -> Tracked? {

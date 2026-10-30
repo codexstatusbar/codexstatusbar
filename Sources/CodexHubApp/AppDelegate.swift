@@ -206,7 +206,9 @@ import CodexHubCollector
         // Claude shares the Codex frame time so one clock orders every monitor.
         let claude = await claudeCollector?.refresh(at: snapshot.observedAt)
         let claudeRows = (claude?.sessions ?? []).compactMap { session in session.process.map { presentation(session, process: $0) } }
-        let allRows = rows + claudeRows
+        // One repeated thread key would make the whole frame throw and hide every provider's sessions, so keep the first of each.
+        var seen: Set<ThreadKey> = []
+        let allRows = (rows + claudeRows).filter { seen.insert($0.id).inserted }
         let represented = Set(rows.compactMap(\.process))
         model.unattachedProcesses = running.filter { !represented.contains($0.identity) && !$0.isAppServer }.map(\.identity)
         let frame = try ReportedFrame(monitors: allRows.map(\.monitor), verifiedIndependentThreads: Set(allRows.filter { $0.contributes && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
