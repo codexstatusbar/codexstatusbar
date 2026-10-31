@@ -4,7 +4,7 @@ import Foundation
 import os
 
 public enum ControlServerError: Error, Equatable {
-    case pathTooLong, inUse, unsafePath, socketFailed
+    case pathTooLong, inUse, unsafePath, socketFailed, notRunning, noReply
 }
 
 /// One request per line, one reply per line, over a Unix socket that only this user can reach.
@@ -52,7 +52,7 @@ public final class ControlServer: Sendable {
         unlink(path)
     }
 
-    private static func address(_ path: String) throws -> sockaddr_un {
+    fileprivate static func address(_ path: String) throws -> sockaddr_un {
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
         let bytes = Array(path.utf8)
@@ -75,13 +75,23 @@ public final class ControlServer: Sendable {
     }
 
     private static func answers(_ path: String) -> Bool {
-        guard var address = try? self.address(path) else { return false }
-        let probe = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard probe >= 0 else { return false }
-        defer { close(probe) }
-        return withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(probe, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
-        } == 0
+        guard let probe = try? connected(path) else { return false }
+        close(probe)
+        return true
+    }
+
+    fileprivate static func connected(_ path: String) throws -> Int32 {
+        var address = try address(path)
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw ControlServerError.socketFailed }
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        guard result == 0 else {
+            close(descriptor)
+            throw ControlServerError.notRunning
+        }
+        return descriptor
     }
 
     private func accept(from descriptor: Int32) {
@@ -124,14 +134,14 @@ public final class ControlServer: Sendable {
             Task { [self] in
                 let reply = await handler(line)
                 DispatchQueue.global().async { [self] in
-                    guard send(reply + [10], to: client) else { return finish(client) }
+                    guard Self.send(reply + [10], to: client) else { return finish(client) }
                     serve(client, buffered: rest)
                 }
             }
         }
     }
 
-    private func send(_ data: Data, to client: Int32) -> Bool {
+    fileprivate static func send(_ data: Data, to client: Int32) -> Bool {
         data.withUnsafeBytes { bytes in
             var sent = 0
             while sent < bytes.count {
@@ -147,5 +157,27 @@ public final class ControlServer: Sendable {
     private func finish(_ client: Int32) {
         close(client)
         connections.withLock { $0 -= 1 }
+    }
+}
+
+public enum ControlClient {
+    /// Sends one request line and returns its reply line. The default outlasts the longest wait of a server operation.
+    public static func exchange(path: String, line: Data, timeoutSeconds: Int = 60) throws -> Data {
+        let client = try ControlServer.connected(path)
+        defer { close(client) }
+        var noSignal: Int32 = 1
+        var timeout = timeval(tv_sec: timeoutSeconds, tv_usec: 0)
+        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        guard ControlServer.send(line + [10], to: client) else { throw ControlServerError.noReply }
+        var received = Data()
+        var chunk = [UInt8](repeating: 0, count: 65_536)
+        while true {
+            let count = read(client, &chunk, chunk.count)
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { throw ControlServerError.noReply }
+            received.append(contentsOf: chunk[..<count])
+            if let end = received.firstIndex(of: 10) { return Data(received[..<end]) }
+        }
     }
 }

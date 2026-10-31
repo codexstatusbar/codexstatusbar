@@ -606,6 +606,14 @@ private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data
     #expect(controlExchange(path, send: Data("small\n".utf8)) == Data("small\n".utf8))
 }
 
+@Test func CS07ControlClientGetsOneReplyAndKnowsWhenNothingListens() throws {
+    let path = controlPath()
+    #expect(throws: ControlServerError.notRunning) { try ControlClient.exchange(path: path, line: Data("a".utf8)) }
+    let server = try ControlServer(path: path) { Data(repeating: 66, count: 300_000) + $0 }
+    defer { server.stop() }
+    #expect(try ControlClient.exchange(path: path, line: Data("a".utf8)) == Data(repeating: 66, count: 300_000) + Data("a".utf8))
+}
+
 @Test func CS06ControlSocketDropsAnIdleClientAndFreesItsSlot() async throws {
     let path = controlPath()
     let server = try ControlServer(path: path, idleSeconds: 1) { $0 }
