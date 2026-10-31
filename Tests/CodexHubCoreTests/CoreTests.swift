@@ -525,7 +525,14 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
 private func controlPath() -> String { "/tmp/tokloom-\(UUID().uuidString.prefix(8)).sock" }
 
 /// A client that sends raw bytes and reads one reply line; nil when the server hangs up first.
-private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data? {
+/// Replies are produced on Swift concurrency, so waiting for one must not occupy a concurrency thread.
+private func controlExchange(_ path: String, send: Data, lines: Int = 1) async -> Data? {
+    await withCheckedContinuation { continuation in
+        DispatchQueue.global().async { continuation.resume(returning: blockingExchange(path, send: send, lines: lines)) }
+    }
+}
+
+private func blockingExchange(_ path: String, send: Data, lines: Int) -> Data? {
     let client = socket(AF_UNIX, SOCK_STREAM, 0)
     defer { close(client) }
     var address = sockaddr_un()
@@ -550,15 +557,15 @@ private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data
     return received
 }
 
-@Test func CS01ControlSocketAnswersEveryLineOfOneConnectionInOrder() throws {
+@Test func CS01ControlSocketAnswersEveryLineOfOneConnectionInOrder() async throws {
     let path = controlPath()
     let server = try ControlServer(path: path) { line in Data("echo:".utf8) + line }
     defer { server.stop() }
-    #expect(controlExchange(path, send: Data("a\n".utf8)) == Data("echo:a\n".utf8))
-    #expect(controlExchange(path, send: Data("a\nb\n".utf8), lines: 2) == Data("echo:a\necho:b\n".utf8))
+    #expect(await controlExchange(path, send: Data("a\n".utf8)) == Data("echo:a\n".utf8))
+    #expect(await controlExchange(path, send: Data("a\nb\n".utf8), lines: 2) == Data("echo:a\necho:b\n".utf8))
 }
 
-@Test func CS02ControlSocketIsPrivateAndGoesAwayWhenStopped() throws {
+@Test func CS02ControlSocketIsPrivateAndGoesAwayWhenStopped() async throws {
     let path = controlPath()
     let server = try ControlServer(path: path) { $0 }
     var info = stat()
@@ -568,12 +575,12 @@ private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data
     #expect(lstat(path, &info) != 0)
 }
 
-@Test func CS03ControlSocketRefusesARunningServerAndAnythingThatIsNotItsOwn() throws {
+@Test func CS03ControlSocketRefusesARunningServerAndAnythingThatIsNotItsOwn() async throws {
     let path = controlPath()
     let first = try ControlServer(path: path) { $0 }
     defer { first.stop() }
     #expect(throws: ControlServerError.inUse) { try ControlServer(path: path) { $0 } }
-    #expect(controlExchange(path, send: Data("still\n".utf8)) == Data("still\n".utf8))
+    #expect(await controlExchange(path, send: Data("still\n".utf8)) == Data("still\n".utf8))
     let file = controlPath()
     #expect(FileManager.default.createFile(atPath: file, contents: Data("keep".utf8)))
     defer { unlink(file) }
@@ -582,7 +589,7 @@ private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data
     #expect(throws: ControlServerError.pathTooLong) { try ControlServer(path: "/tmp/" + String(repeating: "x", count: 200)) { $0 } }
 }
 
-@Test func CS04ControlSocketReplacesTheFileACrashLeftBehind() throws {
+@Test func CS04ControlSocketReplacesTheFileACrashLeftBehind() async throws {
     let path = controlPath()
     let stale = socket(AF_UNIX, SOCK_STREAM, 0)
     var address = sockaddr_un()
@@ -595,23 +602,26 @@ private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data
     close(stale)       // the file stays with nobody listening
     let server = try ControlServer(path: path) { $0 }
     defer { server.stop() }
-    #expect(controlExchange(path, send: Data("new\n".utf8)) == Data("new\n".utf8))
+    #expect(await controlExchange(path, send: Data("new\n".utf8)) == Data("new\n".utf8))
 }
 
-@Test func CS05ControlSocketHangsUpOnAnOversizedRequestAndKeepsServing() throws {
+@Test func CS05ControlSocketHangsUpOnAnOversizedRequestAndKeepsServing() async throws {
     let path = controlPath()
     let server = try ControlServer(path: path) { $0 }
     defer { server.stop() }
-    #expect(controlExchange(path, send: Data(repeating: 65, count: ControlServer.maximumRequestBytes + 2) + [10]) == nil)
-    #expect(controlExchange(path, send: Data("small\n".utf8)) == Data("small\n".utf8))
+    #expect(await controlExchange(path, send: Data(repeating: 65, count: ControlServer.maximumRequestBytes + 2) + [10]) == nil)
+    #expect(await controlExchange(path, send: Data("small\n".utf8)) == Data("small\n".utf8))
 }
 
-@Test func CS07ControlClientGetsOneReplyAndKnowsWhenNothingListens() throws {
+@Test func CS07ControlClientGetsOneReplyAndKnowsWhenNothingListens() async throws {
     let path = controlPath()
     #expect(throws: ControlServerError.notRunning) { try ControlClient.exchange(path: path, line: Data("a".utf8)) }
     let server = try ControlServer(path: path) { Data(repeating: 66, count: 300_000) + $0 }
     defer { server.stop() }
-    #expect(try ControlClient.exchange(path: path, line: Data("a".utf8)) == Data(repeating: 66, count: 300_000) + Data("a".utf8))
+    let reply = await withCheckedContinuation { continuation in
+        DispatchQueue.global().async { continuation.resume(returning: try? ControlClient.exchange(path: path, line: Data("a".utf8))) }
+    }
+    #expect(reply == Data(repeating: 66, count: 300_000) + Data("a".utf8))
 }
 
 @Test func CS06ControlSocketDropsAnIdleClientAndFreesItsSlot() async throws {
@@ -630,7 +640,7 @@ private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data
     }
     defer { held.forEach { close($0) } }
     try await Task.sleep(for: .milliseconds(200))
-    #expect(controlExchange(path, send: Data("full\n".utf8)) == nil)
+    #expect(await controlExchange(path, send: Data("full\n".utf8)) == nil)
     try await Task.sleep(for: .seconds(2))
-    #expect(controlExchange(path, send: Data("free\n".utf8)) == Data("free\n".utf8))
+    #expect(await controlExchange(path, send: Data("free\n".utf8)) == Data("free\n".utf8))
 }
