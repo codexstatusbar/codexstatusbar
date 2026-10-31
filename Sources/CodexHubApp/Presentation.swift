@@ -141,6 +141,7 @@ enum MenuWindows: String, CaseIterable {
     /// Credits that cover the plan once its windows run out, per provider that has some.
     var credits: [ProviderCredits] = []
     var clock: () -> Date = { Date() }
+    static let metadataClearedNotice = "Tokloom metadata cleared. Original Codex logs were preserved."
     var rateUnit = RateUnit.second
     var updateRateUnit: ((RateUnit) -> Void)?
     var configuredServiceTier: ServiceTier?
@@ -186,7 +187,10 @@ enum MenuWindows: String, CaseIterable {
     var updateRetention: ((Int) -> Void)?
     var updateLogin: ((Bool) -> Void)?
     var saveDisplayPreferences: (() -> Void)?
+    var open: (() -> Void)?
     var close: (() -> Void)?
+    var popoverOpen: (() -> Bool)?
+    var connectHome: ((URL) -> Void)?
     var quit: (() -> Void)?
 
     private struct UsageAnchor {
@@ -487,20 +491,17 @@ enum MenuWindows: String, CaseIterable {
         (sessionGroups[session.id] ?? [session]).flatMap { usageHistory[$0.id] ?? [] }
     }
     /// One session on its own.
-    func ownRate(for session: SessionPresentation) -> String {
-        guard error == nil else { return "—" }
-        guard session.measurement == .reported || session.measurement == .warmingUp else { return "—" }
-        return displayRate(try? session.monitor.workAverageRate(at: frame?.time ?? 0))
+    func ownRateValue(for session: SessionPresentation) -> Double? {
+        guard error == nil, session.measurement == .reported || session.measurement == .warmingUp else { return nil }
+        return try? session.monitor.workAverageRate(at: frame?.time ?? 0)
     }
+    func ownRate(for session: SessionPresentation) -> String { displayRate(ownRateValue(for: session)) }
     /// The session's speed: itself plus the subagents working for it.
-    func rate(for session: SessionPresentation) -> String {
-        let members = subagents(of: session)
-        guard !members.isEmpty else { return ownRate(for: session) }
-        guard error == nil else { return "—" }
-        let rates = ([session] + members).filter { $0.measurement == .reported || $0.measurement == .warmingUp }
-            .compactMap { try? $0.monitor.workAverageRate(at: frame?.time ?? 0) }
-        return displayRate(rates.isEmpty ? nil : rates.reduce(0, +))
+    func rateValue(for session: SessionPresentation) -> Double? {
+        let rates = ([session] + subagents(of: session)).compactMap(ownRateValue)
+        return rates.isEmpty ? nil : rates.reduce(0, +)
     }
+    func rate(for session: SessionPresentation) -> String { displayRate(rateValue(for: session)) }
     // Group coverage as reported frames do.
     private struct RunKey: Hashable {
         let home: String

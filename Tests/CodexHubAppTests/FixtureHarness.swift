@@ -594,7 +594,70 @@ import CodexHubCollector
         precondition(hiddenModel.visibleUnattached.count == 1 && hiddenModel.processCount == 1, "UI95 unidentified processes are listed by default")
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
-        print("PASS UI01–UI126 and P01–P06; fixture PNGs: \(output)")
+        try verifyControl()
+        print("PASS UI01–UI126, P01–P06 and CT01–CT08; fixture PNGs: \(output)")
+    }
+    /// Runs one socket line through the commands, pumping the main run loop so asynchronous commands can finish.
+    @MainActor static func control(_ commands: ControlCommands, _ line: String) -> [String: Any] {
+        var reply: Data?
+        Task { reply = await commands.reply(to: Data(line.utf8)) }
+        while reply == nil { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
+        return try! JSONSerialization.jsonObject(with: reply!) as! [String: Any]
+    }
+    @MainActor static func verifyControl() throws {
+        let model = HubPresentation()
+        let commands = ControlCommands(model: model, settleLimit: .milliseconds(200))
+        func code(_ reply: [String: Any]) -> String? { (reply["error"] as? [String: Any])?["code"] as? String }
+        func result(_ line: String) -> [String: Any] {
+            let reply = control(commands, line)
+            precondition(reply["ok"] as? Bool == true, "control request failed: \(line) \(reply)")
+            return reply["result"] as! [String: Any]
+        }
+        // Every command the socket lists answers, and an unknown one is refused by name.
+        for entry in ControlCommands.catalog where !["quit", "session", "metadata.clear", "home.set", "settings.set", "page.show", "popover.open", "popover.close", "refresh"].contains(entry.name) {
+            precondition(control(commands, #"{"id":7,"command":"\#(entry.name)"}"#)["id"] as? Int == 7, "CT01 \(entry.name) answers with the request id")
+        }
+        precondition(code(control(commands, "not json")) == "invalid_request" && code(control(commands, #"{"command":"nope"}"#)) == "unknown_command", "CT02 bad requests are errors, not crashes")
+        // Chosen settings are saved the way the screen saves them, and one bad value changes nothing.
+        var saved = 0, language: AppLanguage?, unit: RateUnit?
+        model.saveDisplayPreferences = { saved += 1 }
+        model.saveLanguage = { language = $0 }
+        model.updateRateUnit = { unit = $0; model.rateUnit = $0 }
+        _ = result(#"{"command":"settings.set","args":{"hideIdle":true,"menuSpeed":"both","language":"en","rateUnit":"minute"}}"#)
+        precondition(model.hideIdle && model.menuSpeed == .both && language == .english && unit == .minute && saved == 1, "CT03 settings change and persist")
+        precondition(code(control(commands, #"{"command":"settings.set","args":{"hideIdle":false,"menuSpeed":"loud"}}"#)) == "invalid_argument" && model.hideIdle, "CT04 a bad value changes nothing")
+        precondition(code(control(commands, #"{"command":"settings.set","args":{"hideIdle":1}}"#)) == "invalid_argument", "CT04 a number is not a boolean")
+        precondition(code(control(commands, #"{"command":"settings.set","args":{"retentionDays":2}}"#)) == "invalid_argument", "CT04 retention stays on the offered values")
+        // Deleting needs the same confirmation the screen asks for, and a failure is reported as one.
+        var cleared = 0
+        model.canManageMetadata = true
+        model.clearMetadata = { cleared += 1; model.notice = "Metadata could not be cleared." }
+        precondition(code(control(commands, #"{"command":"metadata.clear"}"#)) == "confirmation_required" && cleared == 0, "CT05 clearing requires confirm")
+        precondition(code(control(commands, #"{"command":"metadata.clear","args":{"confirm":true}}"#)) == "failed" && cleared == 1, "CT05 a failed clear is not success")
+        // Operations wait for the model to finish, refuse while another runs, and do not hang forever.
+        var refreshed = 0
+        model.refresh = { refreshed += 1; model.busy = true; Task { @MainActor in model.busy = false } }
+        _ = result(#"{"command":"refresh"}"#)
+        precondition(refreshed == 1 && !model.busy, "CT06 refresh waits for the result")
+        model.busy = true
+        precondition(code(control(commands, #"{"command":"refresh"}"#)) == "busy" && refreshed == 1, "CT06 busy refuses a second operation")
+        model.refresh = { model.busy = true }
+        model.busy = false
+        precondition(code(control(commands, #"{"command":"refresh"}"#)) == "timeout", "CT06 a stuck operation times out")
+        model.busy = false
+        // Sessions and pages, with subagents visible and values JSON cannot carry left out.
+        var parent = ThreadMonitor(key: .init(homeID: "h", runID: nil, threadID: "parent"), source: .rolloutLog, epoch: "e", verifiedEmptyThread: true)
+        try parent.setConnectivity(.connected, at: 0)
+        var child = ThreadMonitor(key: .init(homeID: "h", runID: nil, threadID: "child"), source: .rolloutLog, epoch: "e", verifiedEmptyThread: true)
+        try child.setConnectivity(.connected, at: 0)
+        model.sessions = [SessionPresentation(monitor: parent, cwd: "/p"), SessionPresentation(monitor: child, cwd: "/p", parentThreadID: "parent")]
+        let parentRow = result(#"{"command":"session","args":{"id":"parent"}}"#)
+        precondition(parentRow["subagentIDs"] as? [String] == ["child"] && parentRow["tokensPerSecond"] is NSNull, "CT07 a session lists its subagents and no invented rate")
+        precondition(result(#"{"command":"session","args":{"id":"child"}}"#)["parentID"] as? String == "parent", "CT07 a subagent names its parent")
+        precondition(code(control(commands, #"{"command":"session","args":{"id":"missing"}}"#)) == "not_found", "CT07 a missing session is an error")
+        _ = result(#"{"command":"page.show","args":{"id":"child"}}"#)
+        precondition(model.page == .detail(child.key), "CT08 pages can be shown")
+        precondition(code(control(commands, #"{"command":"page.show","args":{"page":"elsewhere"}}"#)) == "invalid_argument" && model.page == .detail(child.key), "CT08 an unknown page changes nothing")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

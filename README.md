@@ -173,6 +173,35 @@ The overview shows one column per provider, and the menu bar can list the same n
 - Windows are named by their length from the data: `5h` for the session and weekly for 10080 minutes. A window the provider does not report is left out and its slot stays empty so the weekly bar keeps its place.
 - **Credits** — once the windows run out, the plan spends credits, and the overview shows what is left under the provider's bars. Codex's balance comes from `rate_limits.credits` in the same log report (the newest report decides, even after its windows have reset; unlimited accounts say so). Claude's comes from `spend` (a prepaid balance, or the spend cap minus what was used) or, in older responses, `extra_usage`, and only when usage credits are enabled on the account: an account without them shows no credits line.
 
+## Control socket
+
+A running Tokloom offers every value and action of its screens over the Unix socket `~/Library/Application Support/CodexHub/control.sock`. Only the current user can reach the socket and its folder (`0600`, `0700`), and the connecting process's user is checked too.
+
+Send one JSON request per line and read one reply per line. A connection can carry several requests and closes after 30 idle seconds. Requests are limited to 64 KB and connections to 8 at a time.
+
+```sh
+SOCK="$HOME/Library/Application Support/CodexHub/control.sock"
+echo '{"id":1,"command":"state"}' | nc -U -w 30 "$SOCK"
+echo '{"command":"settings.set","args":{"hideIdle":true,"rateUnit":"minute"}}' | nc -U -w 30 "$SOCK"
+```
+
+A success is `{"id":1,"ok":true,"result":…}` and a failure is `{"id":1,"ok":false,"error":{"code":"busy","message":"…"}}`. `id` is optional and comes back as sent.
+
+| Command | What it does |
+| --- | --- |
+| `commands` | List the commands |
+| `state` | Every app value except chart points (speed, usage limits, credits, sessions, diagnostics, settings, current page) |
+| `sessions`, `session` (`id`) | Sessions, including subagents and hidden ones; `listed` says whether a row is on the list |
+| `history` (optional `id` or `provider`) | Chart points of the last hour; `time` is Unix seconds |
+| `settings`, `settings.set` | Read or change `language`, `rateUnit`, `menuSpeed`, `menuUsage`, `menuWindows`, `menuShowsReset`, `hideIdle`, `hideUnattached`, `startAtLogin`, `retentionDays`. One bad value changes nothing |
+| `home.set` (`path`) | Switch the Codex home |
+| `refresh` | Check now and wait for the result |
+| `metadata.clear` (`confirm: true`) | Delete Tokloom metadata; original logs are kept |
+| `popover.open`, `popover.close`, `page.show` (`page` or `id`) | Open or close the popover and move between pages |
+| `quit` | Quit Tokloom; Codex and Claude sessions keep running |
+
+`refresh`, `home.set`, `metadata.clear` and a `retentionDays` change reply once they finish. They return `busy` while another operation runs and `timeout` after 30 seconds, in which case the operation keeps going. The first read of large logs can take a while.
+
 ## Current scope
 
 The bundle identifier, `CodexHub` storage paths, and internal module names are retained for compatibility with existing settings and history. The displayed app and distribution files are named Tokloom.
@@ -181,7 +210,7 @@ The bundle identifier, `CodexHub` storage paths, and internal module names are r
 
 | Module | Responsibility |
 | --- | --- |
-| `CodexHubCore` | Activity, cumulative usage, and work/observation averages |
+| `CodexHubCore` | Activity, cumulative usage, work/observation averages, and the control socket |
 | `CodexHubCollector` | Read-only log collection and SQLite checkpoints |
 | `CodexHubApp` | SwiftUI views, AppKit menu bar, preferences, and chart persistence |
 
@@ -191,7 +220,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 104 Core/Collector tests, 126 synthetic UI/process checks (UI and P labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 111 Core/Collector tests, 134 synthetic UI/process checks (UI, P and CT labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 

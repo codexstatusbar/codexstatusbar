@@ -7,6 +7,7 @@ import CodexHubCollector
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = HubPresentation()
     private var menu: NativeMenuController?
+    private var control: ControlServer?
     private var collector: LogCollector?
     private var claudeCollector: ClaudeCollector?
     private var polling: Task<Void, Never>?
@@ -49,6 +50,7 @@ import CodexHubCollector
             defaults.set(model.hideUnattached, forKey: "hideUnattached")
         }
         model.chooseHome = { [weak self] in self?.chooseHome() }
+        model.connectHome = { [weak self] url in self?.changeHome(url) }
         model.refresh = { [weak self] in self?.refresh() }
         model.clearMetadata = { [weak self] in self?.clearMetadata() }
         model.updateRetention = { [weak self] days in self?.updateRetention(days) }
@@ -56,6 +58,18 @@ import CodexHubCollector
         let path = CodexConfig.defaultHome(saved: defaults.string(forKey: "codexHome"),
                                            running: (RunningCodexProcess.capture() ?? []).filter { !$0.isAppServer }.map(\.codexHome))
         connect(home: URL(fileURLWithPath: path))
+        startControl()
+    }
+
+    /// Another running Tokloom keeps the socket; this one then simply has none.
+    private func startControl() {
+        do {
+            let path = try privateDirectory(["CodexHub"]).appendingPathComponent("control.sock").path
+            let commands = ControlCommands(model: model)
+            control = try ControlServer(path: path) { line in await commands.reply(to: line) }
+        } catch {
+            NSLog("Tokloom control socket unavailable: %@", String(describing: error))
+        }
     }
 
     private func chooseHome() {
@@ -67,6 +81,10 @@ import CodexHubCollector
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        changeHome(url)
+    }
+
+    private func changeHome(_ url: URL) {
         defaults.set(url.path, forKey: "codexHome")
         connect(home: url)
     }
@@ -157,15 +175,19 @@ import CodexHubCollector
     }
 
     private func metadataDirectory(homeID: String) throws -> URL {
+        try privateDirectory(["CodexHub", "homes"]).appendingPathComponent(homeID, isDirectory: true)
+    }
+
+    private func privateDirectory(_ components: [String]) throws -> URL {
         var directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).resolvingSymlinksInPath()
-        for component in ["CodexHub", "homes"] {
+        for component in components {
             directory.appendPathComponent(component, isDirectory: true)
             guard mkdir(directory.path, 0o700) == 0 || errno == EEXIST else { throw CollectorError.unsafePath }
             var info = stat()
             guard lstat(directory.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR,
                   info.st_uid == getuid(), info.st_mode & 0o077 == 0 else { throw CollectorError.unsafePath }
         }
-        return directory.appendingPathComponent(homeID, isDirectory: true)
+        return directory
     }
 
     private func apply(_ snapshot: CollectorSnapshot) async throws {
@@ -278,7 +300,7 @@ import CodexHubCollector
                 let snapshot = await collector.snapshot()
                 guard generation == current else { return }
                 try await apply(snapshot)
-                model.notice = "Tokloom metadata cleared. Original Codex logs were preserved."
+                model.notice = HubPresentation.metadataClearedNotice
             } catch { if generation == current { model.notice = "Metadata could not be cleared." } }
         }
     }
@@ -316,6 +338,7 @@ import CodexHubCollector
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        control?.stop()
         polling?.cancel()
         quotaPolling?.cancel()
         backgroundRefresh?.cancel()

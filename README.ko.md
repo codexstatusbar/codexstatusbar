@@ -175,6 +175,35 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 - 창 이름은 데이터의 길이를 따릅니다. 세션은 `5h`, 주간은 10080분입니다. 제공자가 보고하지 않는 창은 빼고, 해당 칸은 비워 두어 주간 막대 위치가 유지됩니다.
 - **크레딧** — 창을 모두 쓰면 요금제가 크레딧을 소비하며, 개요의 제공자 막대 아래에 남은 양을 표시합니다. Codex 잔액은 같은 로그 보고의 `rate_limits.credits`에서 읽고(창이 이미 리셋된 뒤에도 가장 최근 보고가 기준이며, 무제한 계정은 무제한으로 표시), Claude는 사용량 응답의 `spend`(선불 잔액, 또는 지출 한도에서 사용한 양을 뺀 값)나 옛 응답의 `extra_usage`에서 읽습니다. Claude는 계정에 사용량 크레딧이 켜져 있을 때만 값이 있고, 켜져 있지 않으면 크레딧 줄을 표시하지 않습니다.
 
+## 제어 소켓
+
+실행 중인 Tokloom은 Unix 소켓 `~/Library/Application Support/CodexHub/control.sock`으로 화면의 모든 값과 조작을 제공합니다. 소켓과 폴더는 현재 사용자만 접근할 수 있고(`0600`, `0700`), 연결한 프로세스의 사용자도 확인합니다.
+
+한 줄에 JSON 요청 하나를 보내면 한 줄로 응답합니다. 한 연결로 여러 요청을 보낼 수 있고, 30초 동안 요청이 없으면 연결을 닫습니다. 요청은 64KB까지, 동시 연결은 8개까지입니다.
+
+```sh
+SOCK="$HOME/Library/Application Support/CodexHub/control.sock"
+echo '{"id":1,"command":"state"}' | nc -U -w 30 "$SOCK"
+echo '{"command":"settings.set","args":{"hideIdle":true,"rateUnit":"minute"}}' | nc -U -w 30 "$SOCK"
+```
+
+성공 응답은 `{"id":1,"ok":true,"result":…}`, 실패 응답은 `{"id":1,"ok":false,"error":{"code":"busy","message":"…"}}`입니다. `id`는 보낸 값을 그대로 돌려주며 생략할 수 있습니다.
+
+| 명령 | 내용 |
+| --- | --- |
+| `commands` | 명령 목록 |
+| `state` | 차트 점을 뺀 앱의 모든 값(속도, 사용 한도, 크레딧, 세션, 진단, 설정, 현재 페이지) |
+| `sessions`, `session` (`id`) | 서브에이전트와 숨겨진 세션을 포함한 세션 정보. `listed`는 목록 표시 여부 |
+| `history` (`id` 또는 `provider`, 선택) | 최근 1시간 차트 점. `time`은 Unix 시각(초) |
+| `settings`, `settings.set` | 설정 조회·변경. `language`, `rateUnit`, `menuSpeed`, `menuUsage`, `menuWindows`, `menuShowsReset`, `hideIdle`, `hideUnattached`, `startAtLogin`, `retentionDays`. 값 하나가 잘못되면 아무것도 바뀌지 않습니다 |
+| `home.set` (`path`) | Codex 경로 변경 |
+| `refresh` | 지금 확인하고 끝날 때까지 대기 |
+| `metadata.clear` (`confirm: true`) | Tokloom 메타데이터 삭제. 원본 로그는 유지 |
+| `popover.open`, `popover.close`, `page.show` (`page` 또는 `id`) | 팝오버 열기·닫기, 페이지 이동 |
+| `quit` | Tokloom 종료. Codex·Claude 세션은 계속 실행 |
+
+`refresh`, `home.set`, `metadata.clear`, `retentionDays` 변경은 끝날 때까지 응답을 기다리며, 다른 작업이 진행 중이면 `busy`, 30초가 넘으면 `timeout`을 돌려줍니다. `timeout`이어도 작업은 계속 진행됩니다. 큰 로그를 처음 읽는 동안에는 시간이 걸릴 수 있습니다.
+
 ## 현재 범위
 
 기존 설치의 설정·관측 기록을 유지하기 위해 앱 번들 식별자와 `CodexHub` 저장 경로, 내부 모듈 이름은 그대로 사용합니다. 앱 표시 이름과 배포 파일명은 Tokloom입니다.
@@ -183,7 +212,7 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 
 | 모듈 | 역할 |
 | --- | --- |
-| `CodexHubCore` | 상태·누적 사용량·작업/관측 구간 평균 |
+| `CodexHubCore` | 상태·누적 사용량·작업/관측 구간 평균, 제어 소켓 |
 | `CodexHubCollector` | 읽기 전용 로그/관리형 메타데이터 수집과 SQLite 체크포인트 |
 | `CodexHubApp` | SwiftUI 화면, AppKit 메뉴바, 사용자 설정과 차트 저장 |
 
@@ -193,7 +222,7 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 
 ## 검증 상태와 문서
 
-최근 완료한 범위는 Core/Collector 테스트 104개, UI·P 항목의 합성 UI/프로세스 검증 126개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
+최근 완료한 범위는 Core/Collector 테스트 111개, UI·P·CT 항목의 합성 UI/프로세스 검증 134개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
 
 전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기와 전체 provider 실행 경로는 검증이 남아 있습니다.
 
