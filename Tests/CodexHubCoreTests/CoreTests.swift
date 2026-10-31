@@ -1,3 +1,4 @@
+import Darwin
 import Testing
 import Foundation
 import CodexHubCore
@@ -519,4 +520,109 @@ func C19CheckpointRestorePreservesValidationWithoutInventingActivity(partial: Bo
     #expect(credits(#"{"spend":{"enabled":true,"used":{"amount_minor":5,"currency":"USD","exponent":2}}}"#) == nil)            // neither a cap nor a balance
     #expect(credits(#"{"spend":{"enabled":true,"limit":{"amount_minor":100,"exponent":2},"used":{"amount_minor":900,"exponent":2}}}"#)?.remaining == 0)   // overspent never goes negative
     #expect(credits("not json") == nil)
+}
+
+private func controlPath() -> String { "/tmp/tokloom-\(UUID().uuidString.prefix(8)).sock" }
+
+/// A client that sends raw bytes and reads one reply line; nil when the server hangs up first.
+private func controlExchange(_ path: String, send: Data, lines: Int = 1) -> Data? {
+    let client = socket(AF_UNIX, SOCK_STREAM, 0)
+    defer { close(client) }
+    var address = sockaddr_un()
+    address.sun_family = sa_family_t(AF_UNIX)
+    withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: Array(path.utf8)) }
+    let connected = withUnsafePointer(to: &address) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(client, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+    }
+    guard connected == 0 else { return nil }
+    var noSignal: Int32 = 1
+    var timeout = timeval(tv_sec: 5, tv_usec: 0)
+    setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
+    setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+    _ = send.withUnsafeBytes { write(client, $0.baseAddress, $0.count) }
+    var received = Data()
+    var chunk = [UInt8](repeating: 0, count: 4096)
+    while received.filter({ $0 == 10 }).count < lines {
+        let count = read(client, &chunk, chunk.count)
+        guard count > 0 else { return nil }
+        received.append(contentsOf: chunk[..<count])
+    }
+    return received
+}
+
+@Test func CS01ControlSocketAnswersEveryLineOfOneConnectionInOrder() throws {
+    let path = controlPath()
+    let server = try ControlServer(path: path) { line in Data("echo:".utf8) + line }
+    defer { server.stop() }
+    #expect(controlExchange(path, send: Data("a\n".utf8)) == Data("echo:a\n".utf8))
+    #expect(controlExchange(path, send: Data("a\nb\n".utf8), lines: 2) == Data("echo:a\necho:b\n".utf8))
+}
+
+@Test func CS02ControlSocketIsPrivateAndGoesAwayWhenStopped() throws {
+    let path = controlPath()
+    let server = try ControlServer(path: path) { $0 }
+    var info = stat()
+    #expect(lstat(path, &info) == 0)
+    #expect(info.st_mode & 0o777 == 0o600)
+    server.stop()
+    #expect(lstat(path, &info) != 0)
+}
+
+@Test func CS03ControlSocketRefusesARunningServerAndAnythingThatIsNotItsOwn() throws {
+    let path = controlPath()
+    let first = try ControlServer(path: path) { $0 }
+    defer { first.stop() }
+    #expect(throws: ControlServerError.inUse) { try ControlServer(path: path) { $0 } }
+    #expect(controlExchange(path, send: Data("still\n".utf8)) == Data("still\n".utf8))
+    let file = controlPath()
+    #expect(FileManager.default.createFile(atPath: file, contents: Data("keep".utf8)))
+    defer { unlink(file) }
+    #expect(throws: ControlServerError.unsafePath) { try ControlServer(path: file) { $0 } }
+    #expect(FileManager.default.contents(atPath: file) == Data("keep".utf8))
+    #expect(throws: ControlServerError.pathTooLong) { try ControlServer(path: "/tmp/" + String(repeating: "x", count: 200)) { $0 } }
+}
+
+@Test func CS04ControlSocketReplacesTheFileACrashLeftBehind() throws {
+    let path = controlPath()
+    let stale = socket(AF_UNIX, SOCK_STREAM, 0)
+    var address = sockaddr_un()
+    address.sun_family = sa_family_t(AF_UNIX)
+    withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: Array(path.utf8)) }
+    let bound = withUnsafePointer(to: &address) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(stale, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+    }
+    #expect(bound == 0)
+    close(stale)       // the file stays with nobody listening
+    let server = try ControlServer(path: path) { $0 }
+    defer { server.stop() }
+    #expect(controlExchange(path, send: Data("new\n".utf8)) == Data("new\n".utf8))
+}
+
+@Test func CS05ControlSocketHangsUpOnAnOversizedRequestAndKeepsServing() throws {
+    let path = controlPath()
+    let server = try ControlServer(path: path) { $0 }
+    defer { server.stop() }
+    #expect(controlExchange(path, send: Data(repeating: 65, count: ControlServer.maximumRequestBytes + 2) + [10]) == nil)
+    #expect(controlExchange(path, send: Data("small\n".utf8)) == Data("small\n".utf8))
+}
+
+@Test func CS06ControlSocketDropsAnIdleClientAndFreesItsSlot() async throws {
+    let path = controlPath()
+    let server = try ControlServer(path: path, idleSeconds: 1) { $0 }
+    defer { server.stop() }
+    let held = (0..<ControlServer.maximumConnections).map { _ -> Int32 in
+        let client = socket(AF_UNIX, SOCK_STREAM, 0)
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: Array(path.utf8)) }
+        _ = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(client, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        return client
+    }
+    defer { held.forEach { close($0) } }
+    try await Task.sleep(for: .milliseconds(200))
+    #expect(controlExchange(path, send: Data("full\n".utf8)) == nil)
+    try await Task.sleep(for: .seconds(2))
+    #expect(controlExchange(path, send: Data("free\n".utf8)) == Data("free\n".utf8))
 }
