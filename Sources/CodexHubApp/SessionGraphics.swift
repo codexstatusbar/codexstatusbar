@@ -77,7 +77,7 @@ struct SessionGraphics: View {
             }
             section("고급 측정 정보", icon: "waveform.path.ecg") {
                 columns {
-                    information("Thread ID", session.id.threadID, copyable: true)
+                    information("Thread ID", session.providerThreadID, copyable: true)
                     information("Current turn ID", session.monitor.activeTurnID, copyable: true)
                 } right: {
                     information("속도 계산 범위", model.coverage)

@@ -86,7 +86,7 @@ enum ControlCatalog {
         "busy": "Another operation is running (state.busy). Retry when it ends.",
         "timeout": "The operation took over 30 seconds and is still running. Watch state.busy.",
         "not_found": "No session has this id.",
-        "ambiguous": "Several sessions share this id, which can happen across homes.",
+        "ambiguous": "Several sessions share this id. It happens across homes, and when one Claude Code session is continued from several folders; those have their own ids in sessions, which work here.",
         "failed": "The operation ran and failed; the message says why.",
         "internal": "An unexpected error."
     ]

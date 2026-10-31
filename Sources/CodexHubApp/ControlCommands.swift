@@ -204,7 +204,7 @@ import CodexHubCollector
 
     private func session(_ args: [String: Any]) throws -> SessionPresentation {
         guard let id = args["id"] as? String else { throw Failure("invalid_argument", "id is required.") }
-        let matches = model.sessions.filter { $0.id.threadID == id }
+        let matches = model.sessions.filter { $0.id.threadID == id || $0.providerThreadID == id }
         guard matches.count < 2 else { throw Failure("ambiguous", "Several sessions have this id.") }
         guard let match = matches.first else { throw Failure("not_found", "No session has this id.") }
         return match

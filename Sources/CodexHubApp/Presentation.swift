@@ -23,6 +23,8 @@ struct SessionPresentation: Identifiable {
     var contributes: Bool { rootObserved || parentThreadID != nil }
     var measurement: CodexHubCore.Measurement { sourceMeasurement ?? monitor.measurement }
     var id: ThreadKey { monitor.key }
+    /// The id the provider itself uses. Rows of one Claude session continued from several folders share it, so `id` tells them apart.
+    var providerThreadID: String { provider == .claude ? ClaudeCollector.claudeID(ofThread: id.threadID) : id.threadID }
     var title: String { cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Session \(id.threadID.prefix(8))" }
     var source: String { provider == .claude ? "Claude logs" : "Logs" }
     var modelDescription: String {

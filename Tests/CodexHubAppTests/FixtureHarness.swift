@@ -595,7 +595,7 @@ import CodexHubCollector
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
         try verifyControl()
-        print("PASS UI01–UI126, P01–P06 and CT01–CT09; fixture PNGs: \(output)")
+        print("PASS UI01–UI126, P01–P06 and CT01–CT10; fixture PNGs: \(output)")
     }
     /// Runs one socket line through the commands, pumping the main run loop so asynchronous commands can finish.
     @MainActor static func control(_ commands: ControlCommands, _ line: String) -> [String: Any] {
@@ -672,6 +672,21 @@ import CodexHubCollector
         _ = result(#"{"command":"page.show","args":{"id":"child"}}"#)
         precondition(model.page == .detail(child.key), "CT08 pages can be shown")
         precondition(code(control(commands, #"{"command":"page.show","args":{"page":"elsewhere"}}"#)) == "invalid_argument" && model.page == .detail(child.key), "CT08 an unknown page changes nothing")
+        // One Claude session continued from two folders: two rows, each with its own subagent under the same agent id.
+        func claudeRow(_ thread: String, cwd: String, parent: String? = nil) throws -> SessionPresentation {
+            var monitor = ThreadMonitor(key: .init(homeID: "claude:h", runID: nil, threadID: thread), source: .rolloutLog, epoch: "e", verifiedEmptyThread: true)
+            try monitor.setConnectivity(.connected, at: 0)
+            var row = SessionPresentation(monitor: monitor, cwd: cwd, parentThreadID: parent)
+            row.provider = .claude
+            return row
+        }
+        model.sessions = [try claudeRow("s@aaaa1111", cwd: "/a"), try claudeRow("s@bbbb2222", cwd: "/b"),
+                          try claudeRow("agent@aaaa1111", cwd: "/a", parent: "s@aaaa1111"), try claudeRow("agent@bbbb2222", cwd: "/b", parent: "s@bbbb2222")]
+        precondition(model.visibleSessions.map(\.providerThreadID) == ["s", "s"], "CT10 each folder keeps a row and the id Claude Code knows it by")
+        precondition(code(control(commands, #"{"command":"session","args":{"id":"s"}}"#)) == "ambiguous", "CT10 the shared id is ambiguous, not missing")
+        precondition(result(#"{"command":"session","args":{"id":"s@bbbb2222"}}"#)["cwd"] as? String == "/b", "CT10 the row's own id selects it")
+        precondition(result(#"{"command":"session","args":{"id":"s@aaaa1111"}}"#)["subagentIDs"] as? [String] == ["agent@aaaa1111"], "CT10 a subagent joins the transcript that ran it")
+        precondition(result(#"{"command":"session","args":{"id":"agent@bbbb2222"}}"#)["parentID"] as? String == "s@bbbb2222", "CT10 a subagent names that transcript's row")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
