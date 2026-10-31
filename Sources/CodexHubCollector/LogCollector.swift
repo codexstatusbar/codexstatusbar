@@ -224,6 +224,8 @@ public actor LogCollector {
                 }
                 let replacedIDs = nextStates.filter { $0.key != id && $0.value.path == relative }.map(\.key)
                 for replaced in replacedIDs { nextStates.removeValue(forKey: replaced); nextMonitors.removeValue(forKey: replaced) }
+                // A file that appears between two polls is starting now, unlike what the first scan or a long gap finds.
+                let appeared = nextStates[id] == nil && replacedIDs.isEmpty && lastFrame > 0 && now - lastFrame <= 5
                 var state = nextStates[id] ?? FileState(path: relative, historicalUntil: info.st_size, updated: modified, hasGap: !replacedIDs.isEmpty)
                 var monitor = nextMonitors[id]
                 if recovering.contains(id) || monitor?.connectivity == .disconnected || (lastFrame > 0 && now - lastFrame > 5) {
@@ -339,6 +341,11 @@ public actor LogCollector {
                 guard fstat(fd, &after) == 0, after.st_size >= info.st_size,
                       after.st_mtimespec.tv_sec == info.st_mtimespec.tv_sec && after.st_mtimespec.tv_nsec == info.st_mtimespec.tv_nsec || after.st_size > info.st_size else {
                     throw CollectorError.inaccessibleSource
+                }
+                // Its task_started was already on disk at this first read, but the turn is live, not resumed history.
+                if appeared, state.lastTurnState == "active", let turn = state.turnID,
+                   monitor?.activeTurnID == nil, monitor?.turns[turn] == nil {
+                    try monitor?.startTurn(turn, at: now)
                 }
                 state.offset += Int64(consumed)
                 state.boundaryHash = try boundary(fd, offset: state.offset)
@@ -492,6 +499,8 @@ public actor LogCollector {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = object["type"] as? String, let payload = object["payload"] as? [String: Any] else { throw CollectorError.invalidRecord }
         if type == "session_meta" {
+            // A forked child replays its ancestors' metadata after its own.
+            if state.parentThreadID != nil, let id = identifier(payload["id"]), id != state.threadID { return }
             state.cliSource = false
             guard let id = identifier(payload["id"]) else { throw CollectorError.invalidRecord }
             guard state.threadID == nil || state.threadID == id else { throw CollectorError.invalidRecord }

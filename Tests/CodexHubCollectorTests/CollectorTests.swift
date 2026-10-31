@@ -745,6 +745,25 @@ private func writeHeaderLog(_ s: Sandbox, second: Int) throws {
     #expect(try await c.refresh().sessions.first?.parentThreadID == nil)
 }
 
+@Test func S243SubagentStartedBetweenPollsIsLiveFromItsFirstRead() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(10))
+    let c = try s.collector(); _ = try await c.refresh()
+    // Codex writes the child's metadata, its parent's replayed metadata and the turn start at once, between two polls.
+    let child = s.home.appendingPathComponent("sessions/b.jsonl")
+    let timed = { (n: Int, second: Int) in "{\"timestamp\":\"2026-10-31T08:10:\(second).000Z\"," + usage(n).dropFirst() }
+    try Data((#"{"type":"session_meta","payload":{"id":"child","cwd":"/project","forked_from_id":"session-a","source":{"subagent":{"thread_spawn":{"parent_thread_id":"session-a","depth":1}}}}}"# + "\n" + meta + start("t")).utf8).write(to: child)
+    let first = try await c.refresh()
+    #expect(first.diagnostics.isEmpty)
+    let started = try #require(first.sessions.first { $0.monitor.key.threadID == "child" })
+    #expect(started.monitor.activity == .working && started.parentThreadID == "session-a")
+    let handle = try FileHandle(forWritingTo: child)
+    defer { try? handle.close() }
+    try handle.seekToEnd(); try handle.write(contentsOf: Data((timed(100, 10) + timed(200, 20)).utf8))
+    let running = try #require(try await c.refresh().sessions.first { $0.monitor.key.threadID == "child" })
+    #expect(running.monitor.generations.map(\.tokens) == [100])
+    #expect(try running.monitor.workAverageRate(at: 100) == 10)
+}
+
 @Test func S240CodexWeeklyQuotaComesFromNewestRolloutAndNeedsLogin() throws {
     let home = FileManager.default.temporaryDirectory.appendingPathComponent("quota-" + UUID().uuidString)
     let day = home.appendingPathComponent("sessions/2026/10/18")
