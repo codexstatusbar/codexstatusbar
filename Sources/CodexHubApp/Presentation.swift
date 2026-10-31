@@ -260,6 +260,14 @@ enum MenuWindows: String, CaseIterable {
         guard time.isFinite, time >= 0 else { return }
         let keys = Set(rows.map(\.id))
         usageAnchors = usageAnchors.filter { keys.contains($0.key) }
+        // Codex closes a finished child's rollout, which ends its row; what it wrote stays with the parent's charts.
+        for row in sessions where !keys.contains(row.id) {
+            guard let thread = row.parentThreadID, usageHistory[row.id] != nil else { continue }
+            let parent = ThreadKey(homeID: row.id.homeID, runID: nil, threadID: thread)
+            guard keys.contains(parent), let points = usageHistory.removeValue(forKey: row.id) else { continue }
+            let merged = Dictionary((usageHistory[parent, default: []] + points).map { ($0.time, $0.outputTokens) }, uniquingKeysWith: +)
+            usageHistory[parent] = Array(merged.map { UsageHistoryPoint(time: $0.key, outputTokens: $0.value) }.sorted { $0.time < $1.time }.suffix(UsageHistoryPoint.maximumPoints))
+        }
         usageHistory = usageHistory.compactMapValues {
             let kept = $0.filter { $0.time > time - UsageHistoryPoint.windowSeconds && $0.time <= time }
             return kept.isEmpty ? nil : kept
@@ -474,9 +482,9 @@ enum MenuWindows: String, CaseIterable {
                                inputTokens: (own?.inputTokens ?? 0) + sub.inputTokens, cachedInputTokens: (own?.cachedInputTokens ?? 0) + sub.cachedInputTokens,
                                cacheWriteInputTokens: (own?.cacheWriteInputTokens ?? 0) + sub.cacheWriteInputTokens)
     }
-    /// Output history of the session together with its subagents.
+    /// Output history of the session together with its subagents, including those that have left the list.
     func familyHistory(for session: SessionPresentation) -> [UsageHistoryPoint] {
-        ([session] + subagents(of: session)).flatMap { usageHistory[$0.id] ?? [] }
+        (sessionGroups[session.id] ?? [session]).flatMap { usageHistory[$0.id] ?? [] }
     }
     /// One session on its own.
     func ownRate(for session: SessionPresentation) -> String {

@@ -8,7 +8,7 @@ struct SessionGraphics: View {
     let wide: Bool
     @Environment(\.colorScheme) private var colorScheme
 
-    private var points: [UsageHistoryPoint] { model.hasSubagents(session) ? model.familyHistory(for: session) : (model.usageHistory[session.id] ?? []) }
+    private var points: [UsageHistoryPoint] { model.familyHistory(for: session) }
     private var context: Double? {
         guard let used = session.usageDetails?.contextTokens,
               let window = session.usageDetails?.contextWindow, window > 0 else { return nil }

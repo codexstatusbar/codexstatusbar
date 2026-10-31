@@ -559,6 +559,14 @@ import CodexHubCollector
         precondition(codexFamily.aggregateRate == 30 && codexFamily.providerRate(.codex) == 30, "Codex combined and provider totals include child speed once")
         precondition(codexFamily.familyHistory(for: codexMain).reduce(0) { $0 + $1.outputTokens } == 50 && codexFamily.overviewUsageHistory.reduce(0) { $0 + $1.outputTokens } == 50, "Codex family and overview charts exclude inherited output")
         precondition(codexFamily.familyUsage(of: codexMain)?.outputTokens == 100, "Codex cumulative snapshots are not added together")
+        // Codex closes a finished child's rollout, so its row leaves; what it wrote must stay in the charts.
+        codexFamily.recordUsageHistory([codexMain], at: 7)
+        codexFamily.sessions = [codexMain]
+        precondition(codexFamily.familyHistory(for: codexMain).reduce(0) { $0 + $1.outputTokens } == 50 && codexFamily.overviewUsageHistory.reduce(0) { $0 + $1.outputTokens } == 50, "A closed child's output stays in the family and overview charts")
+        var quietChild = codexChild; quietChild.observedActivity = .idle; quietChild.lastObserved = Date(timeIntervalSince1970: 0)
+        codexFamily.sessions = [codexMain, quietChild]
+        codexFamily.restoreUsageHistory([quietChild.id: [UsageHistoryPoint(time: 6, outputTokens: 50)]])
+        precondition(codexFamily.auxiliarySessions(for: codexMain).isEmpty && codexFamily.familyHistory(for: codexMain).reduce(0) { $0 + $1.outputTokens } == 50, "A child that left the list keeps its output in the family chart")
         // A detail page whose session has ended must not stay open with nothing to show.
         var tick = Date(timeIntervalSince1970: 200_000)
         groupedModel.clock = { tick }
