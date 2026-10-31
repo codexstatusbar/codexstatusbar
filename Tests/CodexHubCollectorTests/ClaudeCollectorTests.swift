@@ -330,3 +330,180 @@ private extension ClaudeSandbox {
     #expect(rows.count == 1 && Set(rows.map(\.monitor.key)).count == rows.count)
     #expect(rows.first?.process?.pid == 4343)
 }
+
+private extension ClaudeSandbox {
+    func transcript(in folder: String) -> URL { home.appendingPathComponent("projects/-proj-\(folder)/\(sessionID).jsonl") }
+    func writeTranscript(_ text: String, in folder: String) throws {
+        let file = transcript(in: folder)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.replacingOccurrences(of: "/proj/x", with: "/proj/\(folder)").utf8).write(to: file)
+    }
+    func appendTranscript(_ text: String, in folder: String) throws {
+        let handle = try FileHandle(forWritingTo: transcript(in: folder))
+        defer { try? handle.close() }
+        try handle.seekToEnd(); try handle.write(contentsOf: Data(text.replacingOccurrences(of: "/proj/x", with: "/proj/\(folder)").utf8))
+    }
+    func process(_ pid: Int, in folder: String, status: String = "idle") throws {
+        let json = "{\"pid\":\(pid),\"sessionId\":\"\(sessionID)\",\"cwd\":\"/proj/\(folder)\",\"procStart\":\"\(procStart)\",\"kind\":\"interactive\",\"entrypoint\":\"cli\",\"status\":\"\(status)\"}"
+        try Data(json.utf8).write(to: home.appendingPathComponent("sessions/\(pid).json"))
+    }
+    func exit(_ pid: Int) throws { try FileManager.default.removeItem(at: home.appendingPathComponent("sessions/\(pid).json")) }
+    /// The session continued from a second folder: pid 4242 on /proj/x with 50 tokens, pid 4343 on /proj/y with 70.
+    func continueInSecondFolder() throws {
+        try writeTranscript(user(0) + assistant("m1", 4, output: 50), in: "x")
+        try writeTranscript(user(0) + assistant("m2", 4, output: 70), in: "y")
+        try process(4343, in: "y")
+    }
+    func writeSubagent(_ text: String, in folder: String, finished: Bool = true, modified: Double = base - 60) throws {
+        let directory = transcript(in: folder).deletingPathExtension().appendingPathComponent("subagents")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("agent-a1.jsonl")
+        try Data(text.utf8).write(to: file)
+        try Data("{\"finished\":\(finished)}".utf8).write(to: directory.appendingPathComponent("agent-a1.meta.json"))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: modified)], ofItemAtPath: file.path)
+    }
+}
+
+private func row(_ snapshot: CollectorSnapshot, in folder: String) -> SessionSnapshot? {
+    snapshot.sessions.first { $0.parentThreadID == nil && $0.cwd == "/proj/\(folder)" }
+}
+
+@Test func K15OneSessionIDContinuedFromTwoFoldersListsBothWorks() async throws {
+    let s = try ClaudeSandbox()
+    try s.continueInSecondFolder()
+    let snapshot = await s.collector().refresh(at: 100, wall: base)
+    #expect(snapshot.sessions.count == 2)
+    let x = try #require(row(snapshot, in: "x")), y = try #require(row(snapshot, in: "y"))
+    #expect(x.process?.pid == 4242 && x.monitor.counter.baseline?.outputTokens == 50)
+    #expect(y.process?.pid == 4343 && y.monitor.counter.baseline?.outputTokens == 70)
+    #expect(x.id != y.id && x.monitor.key != y.monitor.key)
+    // One repeated key would throw here and hide every session of every provider.
+    let keys = Set([x.monitor.key, y.monitor.key])
+    #expect((try? ReportedFrame(monitors: [x.monitor, y.monitor], verifiedIndependentThreads: keys, at: 100)) != nil)
+    for thread in [x, y].map(\.monitor.key.threadID) {
+        // The chart archive rejects a thread over 256 bytes, so the id must not grow with the folder's path.
+        #expect(thread.hasPrefix(sessionID + "@") && thread.utf8.count == sessionID.utf8.count + 9)
+        #expect(ClaudeCollector.claudeID(ofThread: thread) == sessionID)
+    }
+}
+
+@Test func K16ProcessesOnOneTranscriptShareARowWhileOtherTranscriptsKeepTheirs() async throws {
+    let s = try ClaudeSandbox()
+    try s.continueInSecondFolder()
+    try s.process(4242, in: "x", status: "busy")
+    try s.process(4343, in: "y", status: "idle")
+    try s.process(4444, in: "y", status: "busy")
+    let tied = await s.collector().refresh(at: 100, wall: base)
+    #expect(tied.sessions.count == 2)
+    #expect(try #require(row(tied, in: "y")).process?.pid == 4444)                       // equal start: the higher pid
+    #expect(try #require(row(tied, in: "y")).activity != .idle)
+    let started = ClaudeCollector.parseProcStart(procStart)!
+    let collector = ClaudeCollector(claudeHome: s.home, processStart: { pid in
+        (ProcessIdentity(pid: pid, osStartTime: "\(pid)"), pid == 4343 ? started + 1 : started)
+    })
+    let later = await collector.refresh(at: 100, wall: base)
+    #expect(later.sessions.count == 2)
+    #expect(try #require(row(later, in: "y")).process?.pid == 4343)                      // the later start wins over a higher pid
+    #expect(try #require(row(later, in: "x")).process?.pid == 4242)
+}
+
+@Test func K17TheWorkingFolderPicksTheTranscriptAndTheScanOnlyFillsIn() async throws {
+    let s = try ClaudeSandbox()
+    try s.writeTranscript(s.user(0) + s.assistant("m1", 4, output: 11), in: "a")         // sorts first, so a scan would take it
+    try s.writeTranscript(s.user(0) + s.assistant("m2", 4, output: 22), in: "y")
+    try FileManager.default.removeItem(at: s.transcript)
+    try s.exit(4242)
+    try s.process(4343, in: "y")
+    let own = await s.collector().refresh(at: 100, wall: base)
+    #expect(own.sessions.count == 1 && own.sessions.first?.monitor.counter.baseline?.outputTokens == 22)
+    // A folder with no transcript of its own joins the one the scan finds instead of adding a row.
+    try s.process(4444, in: "z")
+    let scanned = await s.collector().refresh(at: 100, wall: base)
+    #expect(scanned.sessions.count == 2)
+    let joined = try #require(scanned.sessions.first { $0.process?.pid == 4444 })
+    #expect(joined.monitor.counter.baseline?.outputTokens == 11)
+    #expect(scanned.sessions.first { $0.process?.pid == 4343 }?.monitor.counter.baseline?.outputTokens == 22)
+}
+
+@Test func K18TranscriptsSharingASessionIDNeverTouchEachOthersStateOrUsage() async throws {
+    let s = try ClaudeSandbox()
+    try s.continueInSecondFolder()
+    let collector = s.collector()
+    let first = await collector.refresh(at: 100, wall: base)
+    let epoch = try #require(row(first, in: "x")).monitor.counter.epoch
+    try s.process(4343, in: "y", status: "busy")
+    try s.appendTranscript(s.user(10) + s.assistant("m3", 12, output: 200), in: "y")
+    let second = await collector.refresh(at: 101, wall: base)
+    let x = try #require(row(second, in: "x")), y = try #require(row(second, in: "y"))
+    #expect(y.monitor.counter.baseline?.outputTokens == 270 && y.activity != .idle)
+    let rate = try #require(try y.monitor.workAverageRate(at: 101))
+    #expect(abs(rate - 100) < 1e-6)
+    #expect(x.monitor.counter.baseline?.outputTokens == 50 && x.activity == .idle)
+    #expect(x.monitor.counter.epoch == epoch)                                            // not reloaded by its neighbour
+    #expect(try x.monitor.workAverageRate(at: 101) == nil)
+}
+
+@Test func K19ASharedSessionsIDsSurviveARestartAndDoNotDependOnStartOrder() async throws {
+    let s = try ClaudeSandbox()
+    try s.continueInSecondFolder()
+    let first = await s.collector().refresh(at: 100, wall: base)
+    let x = try #require(row(first, in: "x")), y = try #require(row(first, in: "y"))
+    let again = await s.collector().refresh(at: 100, wall: base)
+    #expect(row(again, in: "x")?.monitor.key == x.monitor.key && row(again, in: "y")?.monitor.key == y.monitor.key)
+    // The same folders under swapped processes, as after restarting both in the other order.
+    try s.process(4242, in: "y")
+    try s.process(4343, in: "x")
+    let swapped = await s.collector().refresh(at: 100, wall: base)
+    #expect(row(swapped, in: "x")?.process?.pid == 4343)
+    #expect(row(swapped, in: "x")?.monitor.key == x.monitor.key && row(swapped, in: "y")?.monitor.key == y.monitor.key)
+}
+
+@Test func K20AProcessThatMovesFolderStopsReadingItsOldTranscript() async throws {
+    let s = try ClaudeSandbox()
+    try s.write(s.user(0) + s.assistant("m1", 4, output: 50))
+    let collector = s.collector()
+    _ = await collector.refresh(at: 100, wall: base)
+    try s.writeTranscript(s.user(0) + s.assistant("m2", 4, output: 70), in: "y")
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 5_000), in: "y", finished: false, modified: base)
+    try s.process(4242, in: "y")
+    let moved = await collector.refresh(at: 101, wall: base)
+    let parent = try #require(row(moved, in: "y"))
+    #expect(parent.monitor.key.threadID == sessionID)                                    // no second transcript is live
+    #expect(parent.monitor.counter.baseline?.outputTokens == 70)
+    // What that transcript already holds is history: it must not reach the charts as new output.
+    let sub = try #require(child(of: moved))
+    #expect(sub.monitor.counter.baseline?.outputTokens == 5_000)
+    #expect(try sub.monitor.workAverageRate(at: 101) == nil)
+}
+
+@Test func K21SubagentsStayWithTheirOwnTranscriptEvenWhenTheirIDsRepeat() async throws {
+    let s = try ClaudeSandbox()
+    try s.continueInSecondFolder()
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s1", 9, output: 300), in: "x")
+    try s.writeSubagent(s.subRecord("user", "", 5) + s.subRecord("assistant", "s2", 9, output: 900), in: "y")
+    let snapshot = await s.collector().refresh(at: 100, wall: base)
+    #expect(snapshot.sessions.count == 4)
+    #expect(Set(snapshot.sessions.map(\.monitor.key)).count == 4)
+    let x = try #require(row(snapshot, in: "x")), y = try #require(row(snapshot, in: "y"))
+    #expect(x.subagentUsage?.outputTokens == 300 && y.subagentUsage?.outputTokens == 900)
+    let subX = try #require(snapshot.sessions.first { $0.parentThreadID == x.monitor.key.threadID })
+    let subY = try #require(snapshot.sessions.first { $0.parentThreadID == y.monitor.key.threadID })
+    #expect(subX.monitor.counter.baseline?.outputTokens == 300 && subY.monitor.counter.baseline?.outputTokens == 900)
+    #expect(subX.process?.pid == 4242 && subY.process?.pid == 4343)
+}
+
+@Test func K22ASurvivorGoesBackToThePlainIDWithoutAddingItsNeighboursUsage() async throws {
+    let s = try ClaudeSandbox()
+    try s.continueInSecondFolder()
+    let collector = s.collector()
+    let shared = try #require(row(await collector.refresh(at: 100, wall: base), in: "y"))
+    try s.exit(4242)
+    let alone = await collector.refresh(at: 101, wall: base)
+    #expect(alone.sessions.count == 1)
+    let survivor = try #require(row(alone, in: "y"))
+    #expect(survivor.monitor.key.threadID == sessionID && survivor.id == "claude:" + sessionID)
+    #expect(survivor.monitor.counter.baseline?.outputTokens == 70)
+    try s.process(4242, in: "x")
+    let back = try #require(row(await collector.refresh(at: 102, wall: base), in: "y"))
+    #expect(back.monitor.key == shared.monitor.key && back.monitor.counter.baseline?.outputTokens == 70)
+}

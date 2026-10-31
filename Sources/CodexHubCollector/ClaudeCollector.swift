@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 import CodexHubCore
 
 /// Read-only Claude Code collector. Live processes come from `sessions/<pid>.json`; usage comes from the
@@ -100,6 +101,8 @@ public actor ClaudeCollector {
     private let processStart: @Sendable (Int32) -> (identity: ProcessIdentity, seconds: Double)?
     private let iso = ISO8601DateFormatter()
     private var tracked: [String: Tracked] = [:]
+    /// Transcripts the bounded scan found, by session and working directory, so a live session is not scanned for every refresh.
+    private var scanned: [String: String] = [:]
     private var lastFrame = 0.0
     private let maximumHistory: Int64 = 64 * 1_048_576
     private let maximumLine = 16 * 1_048_576
@@ -140,10 +143,12 @@ public actor ClaudeCollector {
         var live: Set<String> = []
         var snapshots: [SessionSnapshot] = []
         for entry in owners(directory, wall: wall) {
-            live.insert(entry.sessionID)
-            let watched = tracked[entry.sessionID]?.loaded == true
+            live.insert(entry.id)
+            // A session that has just moved to another transcript has not been watching what that one already holds.
+            let known = tracked[entry.id]
+            let watched = known?.loaded == true && known?.path == entry.path
             do {
-                guard let session = try track(directory, entry: entry, now: now, wall: wall, gap: gap) else { continue }
+                let session = try track(directory, entry: entry, now: now, wall: wall, gap: gap)
                 let subs = trackSubagents(directory, parent: session, entry: entry, now: now, wall: wall, gap: gap, parentWatched: watched)
                 var subTotal = Counts()
                 for sub in subs { subTotal.add(sub.tracked.totals) }
@@ -153,7 +158,7 @@ public actor ClaudeCollector {
                     if sub.listed { snapshots.append(snapshot(sub.tracked)) }
                 }
             } catch {
-                tracked.removeValue(forKey: entry.sessionID)
+                tracked.removeValue(forKey: entry.id)
                 diagnostics.append(CollectorDiagnostic(fileIdentity: nil, error: (error as? CollectorError) ?? .invalidRecord))
             }
         }
@@ -168,19 +173,48 @@ public actor ClaudeCollector {
         let process: ProcessIdentity
         let root: Bool
         let started: Double
+        var path = ""
+        /// Empty unless another live transcript has this session id, so an ordinary session keeps its plain id.
+        var scope = ""
+        var id: String { sessionID + scope }
     }
 
-    /// One live entry per session. Two processes can hold the same session (a resumed one next to the original); both
-    /// would report the same thread key, so the most recently started process owns it, the higher pid on a tie.
+    /// One live entry per transcript file. Two processes can hold the same transcript (a resumed one next to the
+    /// original); both would report the same thread key, so the most recently started process owns it, the higher pid
+    /// on a tie. A session id continued from another folder has its own transcript there, so it is a work of its own.
     private func owners(_ directory: SafeDirectory, wall: Double) -> [Entry] {
-        var bySession: [String: Entry] = [:]
+        var byTranscript: [String: Entry] = [:]
+        let remembered = scanned
+        scanned = [:]
         for name in sessionFiles() {
-            guard let entry = liveEntry(directory, name: name, wall: wall) else { continue }
-            if let other = bySession[entry.sessionID],
-               (other.started, other.process.pid) >= (entry.started, entry.process.pid) { continue }
-            bySession[entry.sessionID] = entry
+            guard var entry = liveEntry(directory, name: name, wall: wall),
+                  let transcript = locate(directory, entry: entry, remembered: remembered) else { continue }
+            entry.path = transcript.path
+            let key = entry.sessionID + ":" + transcript.file
+            var owner = entry
+            if let other = byTranscript[key] {
+                if (other.started, other.process.pid) >= (entry.started, entry.process.pid) { owner = other }
+                owner.path = min(entry.path, other.path)     // a hard link's two names must not make the id depend on the owner
+            }
+            byTranscript[key] = owner
         }
-        return bySession.values.sorted { $0.process.pid < $1.process.pid }
+        let transcripts = Dictionary(byTranscript.values.map { ($0.sessionID, 1) }, uniquingKeysWith: +)
+        return byTranscript.values.map { entry in
+            var entry = entry
+            if transcripts[entry.sessionID, default: 0] > 1 { entry.scope = Self.scope(of: entry.path) }
+            return entry
+        }.sorted { $0.process.pid < $1.process.pid }
+    }
+
+    /// Set apart a session id shared by several live transcripts. Derived from the transcript alone, so it survives a
+    /// restart and ignores start and list order; a hash, since a chart archive entry has to stay under 256 bytes.
+    private static func scope(of path: String) -> String {
+        "@" + SHA256.hash(data: Data(path.utf8)).prefix(4).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The id Claude Code itself knows a session or subagent by, which is what `claude --resume` takes.
+    public static func claudeID(ofThread thread: String) -> String {
+        thread.firstIndex(of: "@").map { String(thread[..<$0]) } ?? thread
     }
 
     private func sessionFiles() -> [String] {
@@ -204,11 +238,9 @@ public actor ClaudeCollector {
                      process: process.identity, root: object["entrypoint"] as? String == "cli", started: process.seconds)
     }
 
-    private func track(_ directory: SafeDirectory, entry: Entry, now: Double, wall: Double, gap: Bool) throws -> Tracked? {
-        var session = tracked[entry.sessionID]
-        let path = try session?.path ?? locate(directory, sessionID: entry.sessionID, cwd: entry.cwd)
-        guard let path else { return nil }
-        let fd = try directory.openFile(path)
+    private func track(_ directory: SafeDirectory, entry: Entry, now: Double, wall: Double, gap: Bool) throws -> Tracked {
+        var session = tracked[entry.id]
+        let fd = try directory.openFile(entry.path)
         defer { close(fd) }
         var info = stat()
         guard fstat(fd, &info) == 0 else { throw CollectorError.inaccessibleSource }
@@ -220,14 +252,14 @@ public actor ClaudeCollector {
         let t: Tracked
         if let session { t = session } else {
             let epoch = UUID().uuidString
-            var monitor = ThreadMonitor(key: ThreadKey(homeID: homeID, runID: nil, threadID: entry.sessionID),
+            var monitor = ThreadMonitor(key: ThreadKey(homeID: homeID, runID: nil, threadID: entry.id),
                                         source: .rolloutLog, epoch: epoch)
             try monitor.setConnectivity(.connected, at: now)
-            t = Tracked(id: entry.sessionID, path: path, fileID: fileID, process: entry.process, root: entry.root,
+            t = Tracked(id: entry.id, path: entry.path, fileID: fileID, process: entry.process, root: entry.root,
                         epoch: epoch, monitor: monitor, updated: wall)
             t.cwd = entry.cwd
             if size > maximumHistory { t.offset = size; t.hasGap = true }
-            tracked[entry.sessionID] = t
+            tracked[entry.id] = t
         }
         t.historicalPass = !t.loaded || gap
         if gap { t.hasGap = true; try t.monitor.markGap(at: now) }
@@ -239,16 +271,26 @@ public actor ClaudeCollector {
     }
 
     /// Claude names each project directory after the working directory; fall back to a bounded scan.
-    private func locate(_ directory: SafeDirectory, sessionID: String, cwd: String?) throws -> String? {
-        var candidates: [String] = []
-        if let cwd { candidates.append(String(cwd.unicodeScalars.map { $0.isASCII && (CharacterSet.alphanumerics.contains($0)) ? Character($0) : "-" })) }
-        let all = (try? FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent("projects").path)) ?? []
-        candidates += all.sorted().prefix(2_000).filter { !candidates.contains($0) && !$0.contains("/") }
-        for slug in candidates {
-            let relative = "projects/\(slug)/\(sessionID).jsonl"
-            if let fd = try? directory.openFile(relative) { close(fd); return relative }
+    private func locate(_ directory: SafeDirectory, entry: Entry, remembered: [String: String]) -> (path: String, file: String)? {
+        func transcript(_ path: String) -> (path: String, file: String)? {
+            guard let fd = try? directory.openFile(path) else { return nil }
+            defer { close(fd) }
+            var info = stat()
+            return fstat(fd, &info) == 0 ? (path, "\(info.st_dev):\(info.st_ino)") : nil
         }
-        return nil
+        if let cwd = entry.cwd {
+            let slug = String(cwd.unicodeScalars.map { $0.isASCII && (CharacterSet.alphanumerics.contains($0)) ? Character($0) : "-" })
+            if let found = transcript("projects/\(slug)/\(entry.sessionID).jsonl") { return found }
+        }
+        let key = entry.sessionID + "\n" + (entry.cwd ?? "")
+        var found = remembered[key].flatMap(transcript)
+        if found == nil {
+            let all = (try? FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent("projects").path)) ?? []
+            found = all.sorted().prefix(2_000).lazy.filter { !$0.contains("/") }
+                .compactMap { transcript("projects/\($0)/\(entry.sessionID).jsonl") }.first
+        }
+        if let found { scanned[key] = found.path }
+        return found
     }
 
     private func readChunk(_ fd: Int32, at offset: Int64, limit: Int) -> Data? {
@@ -420,9 +462,9 @@ public actor ClaudeCollector {
         let t: Tracked
         if let session { t = session } else {
             let epoch = UUID().uuidString
-            var monitor = ThreadMonitor(key: ThreadKey(homeID: homeID, runID: nil, threadID: agent), source: .rolloutLog, epoch: epoch)
+            var monitor = ThreadMonitor(key: ThreadKey(homeID: homeID, runID: nil, threadID: agent + entry.scope), source: .rolloutLog, epoch: epoch)
             guard (try? monitor.setConnectivity(.connected, at: now)) != nil else { return nil }
-            t = Tracked(id: key, path: folder + "/" + name, fileID: fileID, process: entry.process, root: false, parent: entry.sessionID,
+            t = Tracked(id: key, path: folder + "/" + name, fileID: fileID, process: entry.process, root: false, parent: parent.id,
                         epoch: epoch, monitor: monitor, updated: wall)
             if size > maximumHistory { t.offset = size; t.hasGap = true }
             // A subagent that starts while its session is already being watched is live; one found at startup is history.
