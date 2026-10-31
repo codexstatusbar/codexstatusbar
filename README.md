@@ -177,7 +177,16 @@ The overview shows one column per provider, and the menu bar can list the same n
 
 A running Tokloom offers every value and action of its screens over the Unix socket `~/Library/Application Support/CodexHub/control.sock`. Only the current user can reach the socket and its folder (`0600`, `0700`), and the connecting process's user is checked too.
 
-Send one JSON request per line and read one reply per line. A connection can carry several requests and closes after 30 idle seconds. Requests are limited to 64 KB and connections to 8 at a time.
+An AI needs nothing but the app to learn this. `Contents/Resources/AGENTS.md` in the bundle, `CodexHubApp --help` and the socket's `commands` reply describe every command, argument, accepted value and returned field, all generated from `ControlCatalog` in the code. The app's executable can also call it directly:
+
+```sh
+/Applications/Tokloom.app/Contents/MacOS/CodexHubApp control state
+/Applications/Tokloom.app/Contents/MacOS/CodexHubApp control settings.set '{"hideIdle":true}'
+```
+
+Exit status is 0 for success, 1 when the app refused or failed, 2 for bad usage, and 3 when Tokloom is not running.
+
+On the socket, send one JSON request per line and read one reply per line. A connection can carry several requests and closes after 30 idle seconds. Requests are limited to 64 KB and connections to 8 at a time.
 
 ```sh
 SOCK="$HOME/Library/Application Support/CodexHub/control.sock"
@@ -189,7 +198,7 @@ A success is `{"id":1,"ok":true,"result":…}` and a failure is `{"id":1,"ok":fa
 
 | Command | What it does |
 | --- | --- |
-| `commands` | List the commands |
+| `commands` | Describe the protocol, every command and every returned field |
 | `state` | Every app value except chart points (speed, usage limits, credits, sessions, diagnostics, settings, current page) |
 | `sessions`, `session` (`id`) | Sessions, including subagents and hidden ones; `listed` says whether a row is on the list |
 | `history` (optional `id` or `provider`) | Chart points of the last hour; `time` is Unix seconds |
@@ -220,7 +229,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 111 Core/Collector tests, 134 synthetic UI/process checks (UI, P and CT labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 112 Core/Collector tests, 135 synthetic UI/process checks (UI, P and CT labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 

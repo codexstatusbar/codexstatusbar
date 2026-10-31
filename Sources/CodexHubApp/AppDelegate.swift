@@ -64,9 +64,9 @@ import CodexHubCollector
     /// Another running Tokloom keeps the socket; this one then simply has none.
     private func startControl() {
         do {
-            let path = try privateDirectory(["CodexHub"]).appendingPathComponent("control.sock").path
+            _ = try privateDirectory(["CodexHub"])
             let commands = ControlCommands(model: model)
-            control = try ControlServer(path: path) { line in await commands.reply(to: line) }
+            control = try ControlServer(path: ControlCatalog.socketPath) { line in await commands.reply(to: line) }
         } catch {
             NSLog("Tokloom control socket unavailable: %@", String(describing: error))
         }

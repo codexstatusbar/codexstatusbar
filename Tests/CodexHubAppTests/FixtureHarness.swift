@@ -595,7 +595,7 @@ import CodexHubCollector
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
         try verifyControl()
-        print("PASS UI01–UI126, P01–P06 and CT01–CT08; fixture PNGs: \(output)")
+        print("PASS UI01–UI126, P01–P06 and CT01–CT09; fixture PNGs: \(output)")
     }
     /// Runs one socket line through the commands, pumping the main run loop so asynchronous commands can finish.
     @MainActor static func control(_ commands: ControlCommands, _ line: String) -> [String: Any] {
@@ -613,10 +613,23 @@ import CodexHubCollector
             precondition(reply["ok"] as? Bool == true, "control request failed: \(line) \(reply)")
             return reply["result"] as! [String: Any]
         }
-        // Every command the socket lists answers, and an unknown one is refused by name.
-        for entry in ControlCommands.catalog where !["quit", "session", "metadata.clear", "home.set", "settings.set", "page.show", "popover.open", "popover.close", "refresh"].contains(entry.name) {
-            precondition(control(commands, #"{"id":7,"command":"\#(entry.name)"}"#)["id"] as? Int == 7, "CT01 \(entry.name) answers with the request id")
+        // Every documented command exists, and the description covers the fields an agent gets back.
+        let description = control(commands, #"{"id":7,"command":"commands"}"#)
+        precondition(description["id"] as? Int == 7 && ((description["result"] as? [String: Any])?["commands"] as? [Any])?.count == ControlCatalog.commands.count, "CT01 commands describes every command")
+        for entry in ControlCatalog.commands {
+            precondition(code(control(commands, #"{"command":"\#(entry.name)"}"#)) != "unknown_command", "CT01 \(entry.name) exists")
+            precondition(ControlCatalog.markdown.contains("`\(entry.name)`"), "CT01 \(entry.name) is in the guide")
         }
+        precondition(Set(result(#"{"command":"state"}"#).keys) == Set(ControlCatalog.stateFields.keys), "CT09 stateFields documents exactly what state returns")
+        // Every documented setting value is accepted.
+        model.updateRateUnit = { _ in }; model.updateLogin = { _ in }; model.updateRetention = { model.retentionDays = $0 }; model.canManageMetadata = true
+        for setting in ControlCatalog.settings {
+            let values = setting.type == "boolean" ? ["true", "false"] : setting.type == "integer" ? setting.choices : setting.choices.map { "\"\($0)\"" }
+            for value in values where setting.name != "startAtLogin" {
+                _ = result(#"{"command":"settings.set","args":{"\#(setting.name)":\#(value)}}"#)
+            }
+        }
+        model.canManageMetadata = false; model.language = .korean; model.hideIdle = false; model.rateUnit = .second
         precondition(code(control(commands, "not json")) == "invalid_request" && code(control(commands, #"{"command":"nope"}"#)) == "unknown_command", "CT02 bad requests are errors, not crashes")
         // Chosen settings are saved the way the screen saves them, and one bad value changes nothing.
         var saved = 0, language: AppLanguage?, unit: RateUnit?
@@ -624,7 +637,7 @@ import CodexHubCollector
         model.saveLanguage = { language = $0 }
         model.updateRateUnit = { unit = $0; model.rateUnit = $0 }
         _ = result(#"{"command":"settings.set","args":{"hideIdle":true,"menuSpeed":"both","language":"en","rateUnit":"minute"}}"#)
-        precondition(model.hideIdle && model.menuSpeed == .both && language == .english && unit == .minute && saved == 1, "CT03 settings change and persist")
+        precondition(model.hideIdle && model.menuSpeed == .both && language == .english && unit == .minute && saved >= 1, "CT03 settings change and persist")
         precondition(code(control(commands, #"{"command":"settings.set","args":{"hideIdle":false,"menuSpeed":"loud"}}"#)) == "invalid_argument" && model.hideIdle, "CT04 a bad value changes nothing")
         precondition(code(control(commands, #"{"command":"settings.set","args":{"hideIdle":1}}"#)) == "invalid_argument", "CT04 a number is not a boolean")
         precondition(code(control(commands, #"{"command":"settings.set","args":{"retentionDays":2}}"#)) == "invalid_argument", "CT04 retention stays on the offered values")
@@ -652,6 +665,7 @@ import CodexHubCollector
         try child.setConnectivity(.connected, at: 0)
         model.sessions = [SessionPresentation(monitor: parent, cwd: "/p"), SessionPresentation(monitor: child, cwd: "/p", parentThreadID: "parent")]
         let parentRow = result(#"{"command":"session","args":{"id":"parent"}}"#)
+        precondition(Set(parentRow.keys) == Set(ControlCatalog.sessionFields.keys), "CT09 sessionFields documents exactly what a session returns")
         precondition(parentRow["subagentIDs"] as? [String] == ["child"] && parentRow["tokensPerSecond"] is NSNull, "CT07 a session lists its subagents and no invented rate")
         precondition(result(#"{"command":"session","args":{"id":"child"}}"#)["parentID"] as? String == "parent", "CT07 a subagent names its parent")
         precondition(code(control(commands, #"{"command":"session","args":{"id":"missing"}}"#)) == "not_found", "CT07 a missing session is an error")

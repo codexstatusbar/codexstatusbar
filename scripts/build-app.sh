@@ -31,5 +31,7 @@ fi
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/Info.plist"
+# An agent that only has the app learns how to drive it from this file.
+"$APP/Contents/MacOS/CodexHubApp" --help > "$APP/Contents/Resources/AGENTS.md"
 codesign --force --sign - "$APP"
 printf '%s\n' "$APP"

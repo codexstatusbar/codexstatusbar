@@ -179,7 +179,16 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 
 실행 중인 Tokloom은 Unix 소켓 `~/Library/Application Support/CodexHub/control.sock`으로 화면의 모든 값과 조작을 제공합니다. 소켓과 폴더는 현재 사용자만 접근할 수 있고(`0600`, `0700`), 연결한 프로세스의 사용자도 확인합니다.
 
-한 줄에 JSON 요청 하나를 보내면 한 줄로 응답합니다. 한 연결로 여러 요청을 보낼 수 있고, 30초 동안 요청이 없으면 연결을 닫습니다. 요청은 64KB까지, 동시 연결은 8개까지입니다.
+AI는 앱만 있으면 사용법을 알 수 있습니다. 앱 번들의 `Contents/Resources/AGENTS.md`와 `CodexHubApp --help`, 소켓의 `commands` 응답이 같은 내용으로 모든 명령·인자·허용 값·반환 필드를 설명합니다. 이 내용은 코드의 `ControlCatalog` 하나에서 만들어집니다. 앱 실행 파일로 바로 호출할 수도 있습니다.
+
+```sh
+/Applications/Tokloom.app/Contents/MacOS/CodexHubApp control state
+/Applications/Tokloom.app/Contents/MacOS/CodexHubApp control settings.set '{"hideIdle":true}'
+```
+
+종료 코드는 0 성공, 1 앱이 거부·실패, 2 잘못된 사용, 3 Tokloom 미실행입니다.
+
+소켓에는 한 줄에 JSON 요청 하나를 보내면 한 줄로 응답합니다. 한 연결로 여러 요청을 보낼 수 있고, 30초 동안 요청이 없으면 연결을 닫습니다. 요청은 64KB까지, 동시 연결은 8개까지입니다.
 
 ```sh
 SOCK="$HOME/Library/Application Support/CodexHub/control.sock"
@@ -191,7 +200,7 @@ echo '{"command":"settings.set","args":{"hideIdle":true,"rateUnit":"minute"}}' |
 
 | 명령 | 내용 |
 | --- | --- |
-| `commands` | 명령 목록 |
+| `commands` | 프로토콜, 모든 명령과 반환 필드 설명 |
 | `state` | 차트 점을 뺀 앱의 모든 값(속도, 사용 한도, 크레딧, 세션, 진단, 설정, 현재 페이지) |
 | `sessions`, `session` (`id`) | 서브에이전트와 숨겨진 세션을 포함한 세션 정보. `listed`는 목록 표시 여부 |
 | `history` (`id` 또는 `provider`, 선택) | 최근 1시간 차트 점. `time`은 Unix 시각(초) |
@@ -222,7 +231,7 @@ echo '{"command":"settings.set","args":{"hideIdle":true,"rateUnit":"minute"}}' |
 
 ## 검증 상태와 문서
 
-최근 완료한 범위는 Core/Collector 테스트 111개, UI·P·CT 항목의 합성 UI/프로세스 검증 134개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
+최근 완료한 범위는 Core/Collector 테스트 112개, UI·P·CT 항목의 합성 UI/프로세스 검증 135개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
 
 전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기와 전체 provider 실행 경로는 검증이 남아 있습니다.
 

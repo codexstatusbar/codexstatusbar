@@ -11,23 +11,6 @@ import CodexHubCollector
         init(_ code: String, _ message: String) { self.code = code; self.message = message }
     }
 
-    static let catalog: [(name: String, summary: String)] = [
-        ("commands", "List the commands."),
-        ("state", "Everything the app shows, except chart points."),
-        ("sessions", "Every session, including subagents and hidden ones."),
-        ("session", "One session. args: id."),
-        ("history", "Chart points of the last hour. args: optional id or provider."),
-        ("settings", "Current settings."),
-        ("settings.set", "Change settings; args are setting names and values. All are checked before any changes."),
-        ("home.set", "Switch the Codex home. args: path."),
-        ("refresh", "Check the connection now and wait for the result."),
-        ("metadata.clear", "Delete Tokloom metadata; original logs are kept. args: confirm=true."),
-        ("popover.open", "Open the popover."),
-        ("popover.close", "Close the popover."),
-        ("page.show", "Show a page. args: page=overview|preferences, or id of a session."),
-        ("quit", "Quit Tokloom; Codex and Claude sessions keep running.")
-    ]
-
     private let model: HubPresentation
     private let settleLimit: Duration
 
@@ -61,7 +44,7 @@ import CodexHubCollector
 
     private func run(_ command: String, _ args: [String: Any]) async throws -> Any {
         switch command {
-        case "commands": return Self.catalog.map { ["name": $0.name, "summary": $0.summary] }
+        case "commands", "help": return ControlCatalog.description
         case "state": return state
         case "sessions": return model.sessions.map(json)
         case "session": return json(try session(args))
@@ -213,8 +196,8 @@ import CodexHubCollector
     }
 
     private func retention(_ value: Any) throws -> Int {
-        guard Self.bool(value) == nil, let days = value as? Int, [1, 7, 30, 90].contains(days) else {
-            throw Failure("invalid_argument", "retentionDays must be one of: 1, 7, 30, 90.")
+        guard Self.bool(value) == nil, let days = value as? Int, ControlCatalog.retentionChoices.contains(days) else {
+            throw Failure("invalid_argument", "retentionDays must be one of: " + ControlCatalog.retentionChoices.map(String.init).joined(separator: ", ") + ".")
         }
         return days
     }
