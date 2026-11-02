@@ -143,6 +143,29 @@ private extension Sandbox {
     for _ in 0..<3 { #expect(try await c.refresh().diagnostics.contains { $0.error == .oversizedRecord }) }
     #expect(await c.settledFiles == 0)
 }
+
+@Test func S267ARefreshThatChangesNothingDoesNotRewriteTheCheckpointButStillChecksIt() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.settledCollector(); try await s.settle(c)
+    let database = s.metadata.appendingPathComponent("metadata.sqlite")
+    let before = try FileManager.default.attributesOfItem(atPath: database.path)[.modificationDate] as! Date
+    _ = try await c.refresh()
+    #expect(try FileManager.default.attributesOfItem(atPath: database.path)[.modificationDate] as! Date == before)
+    try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: s.metadata.path)
+    do { _ = try await c.refresh(); Issue.record("Expected unsafe metadata failure") } catch {}
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: s.metadata.path)
+}
+
+@Test func S268AStateChangedOutsideARefreshIsStillSaved() async throws {
+    let s = try Sandbox(); try s.write(meta + start("live"))
+    let c = try s.settledCollector(); try await s.settle(c)
+    let store = try await c.refresh().sessions[0].id
+    _ = try await c.bindRunningSessions([store])
+    _ = try await c.refresh()
+    await c.shutdown()
+    let reopened = try MetadataStore(directoryURL: s.metadata, sourceScope: SHA256.hash(data: Data(s.home.resolvingSymlinksInPath().standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined())
+    #expect(try reopened.load()[store]?.hasGap == true)
+}
 private func start(_ id: String) -> String { "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"\(id)\"}}\n" }
 private func complete(_ id: String) -> String { "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"\(id)\",\"last_agent_message\":\"PRIVATE_SENTINEL\"}}\n" }
 private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"output_tokens\":\(n)},\"last_token_usage\":{\"output_tokens\":999999}}}}\n" }

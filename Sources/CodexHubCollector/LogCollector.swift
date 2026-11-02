@@ -13,7 +13,7 @@ public struct RetentionPolicy: Sendable, Equatable {
     }
 }
 
-public struct SessionUsageDetails: Codable, Sendable {
+public struct SessionUsageDetails: Codable, Sendable, Equatable {
     public var reasoningEffort: String?
     public var serviceTier: ServiceTier?
     public var contextTokens: Int?
@@ -21,7 +21,7 @@ public struct SessionUsageDetails: Codable, Sendable {
     public var limits: [UsageLimit]?
 }
 
-public struct UsageLimit: Codable, Sendable {
+public struct UsageLimit: Codable, Sendable, Equatable {
     public let name: String
     public let usedPercent: Double
     public let windowMinutes: Int?
@@ -62,7 +62,7 @@ public struct CollectorSnapshot: Sendable {
     public let observedAt: Double
 }
 
-struct FileState: Codable, Sendable {
+struct FileState: Codable, Sendable, Equatable {
     var path: String
     var isAuthority: Bool?
     var reconciliationPeer: String?

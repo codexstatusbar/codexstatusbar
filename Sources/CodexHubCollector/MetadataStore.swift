@@ -7,6 +7,7 @@ final class MetadataStore: @unchecked Sendable {
     private var db: OpaquePointer?
     private var lockFD: Int32
     private var databaseIdentity: (dev_t, ino_t)?
+    private var saved: (states: [String: FileState], retention: RetentionPolicy)?
 
     init(directoryURL: URL, sourceScope: String) throws {
         directory = try SafeDirectory(directoryURL, createPrivate: true)
@@ -150,6 +151,8 @@ final class MetadataStore: @unchecked Sendable {
 
     func save(_ states: [String: FileState], retention: RetentionPolicy, clearChartHistory: Bool = false) throws {
         try validate()
+        // Every save rewrites each row and syncs; a refresh that changed nothing has no reason to.
+        if !clearChartHistory, let saved, saved.states == states, saved.retention == retention { return }
         try execute("BEGIN IMMEDIATE")
         do {
             if clearChartHistory { try execute("DELETE FROM chart_history") }
@@ -172,6 +175,7 @@ final class MetadataStore: @unchecked Sendable {
             sqlite3_bind_int(settings, 2, Int32(retention.maximumSessions))
             guard sqlite3_step(settings) == SQLITE_DONE else { throw CollectorError.database }
             try execute("COMMIT")
+            saved = (states, retention)
         } catch {
             try? execute("ROLLBACK")
             throw CollectorError.database

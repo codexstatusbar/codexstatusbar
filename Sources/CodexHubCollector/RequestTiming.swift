@@ -1,7 +1,7 @@
 import Foundation
 
 /// Log-time interval accounting; overlapping tool waits are excluded once.
-struct RequestTiming: Codable, Sendable {
+struct RequestTiming: Codable, Sendable, Equatable {
     private var baseline: Double
     private var lastTime: Double
     private var tools: Set<String> = []
