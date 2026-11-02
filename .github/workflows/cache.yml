@@ -1,16 +1,6 @@
 name: Warm Swift caches
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'Sources/**'
-      - 'Tests/**'
-      - 'Resources/**'
-      - 'scripts/**'
-      - 'Package.swift'
-      - 'Package.resolved'
-      - '.github/**'
   workflow_dispatch:
 
 permissions:
