@@ -77,6 +77,8 @@ private func claudeHome(in root: URL) throws -> URL {
     let codex = try LogCollector(codexHome: codexHome(in: root), metadataDirectory: root.appendingPathComponent("metadata"))
     let started = ClaudeCollector.parseProcStart("Sat Oct 17 18:18:23 2026")!
     let claude = try ClaudeCollector(claudeHome: claudeHome(in: root), processStart: { (ProcessIdentity(pid: $0, osStartTime: "1.000000"), started) })
+    // The fixture was just written, and a file is only trusted once it has been quiet for two seconds.
+    try await Task.sleep(for: .seconds(3))
     for _ in 0..<3 { _ = try await codex.refresh(); await claude.refresh(at: ProcessInfo.processInfo.systemUptime) }
     try await measure("LogCollector.refresh") { _ = try await codex.refresh() }
     await measure("ClaudeCollector.refresh") { await claude.refresh(at: ProcessInfo.processInfo.systemUptime) }
