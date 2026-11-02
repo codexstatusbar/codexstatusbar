@@ -1,12 +1,18 @@
 name: Swift build cache
-description: Restore or save compiler outputs and dependencies by toolchain, lockfile, build mode and source commit.
+description: Restore, save, export or promote compiler outputs and dependencies by toolchain, lockfile, build mode and source commit.
 inputs:
   mode:
     description: debug, release or verify
     required: true
   operation:
-    description: restore or save
+    description: restore, save, export (hand the outputs to a later run as an artifact) or promote (save what a run exported)
     default: restore
+  source-sha:
+    description: Commit the outputs were built from.
+    default: ${{ github.sha }}
+  source-run-id:
+    description: Run that exported the outputs, for promote.
+    default: ''
 outputs:
   exact-hit:
     description: True only for this exact toolchain, mode, lockfile and source commit.
@@ -19,7 +25,7 @@ runs:
       env:
         CACHE_MODE: ${{ inputs.mode }}
         LOCK_HASH: ${{ hashFiles('Package.swift', 'Package.resolved') }}
-        SOURCE_SHA: ${{ github.sha }}
+        SOURCE_SHA: ${{ inputs.source-sha }}
       run: |
         case "$CACHE_MODE" in debug|release|verify) ;; *) exit 2 ;; esac
         identity="$({ swiftc --version 2>&1; xcrun --show-sdk-version; xcrun --show-sdk-path; sw_vers -productVersion; pwd -P; } | shasum -a 256 | cut -d ' ' -f 1)"
@@ -28,6 +34,7 @@ runs:
         cat >> "$GITHUB_OUTPUT" <<EOF
         prefix=$prefix
         key=$prefix$SOURCE_SHA
+        archive=swift-cache-$identity.tar.zst
         paths<<PATHS
         .build/checkouts
         .build/repositories
@@ -43,13 +50,42 @@ runs:
         PATHS
         EOF
     - id: cache
-      if: inputs.operation == 'restore'
+      if: inputs.operation == 'restore' || inputs.operation == 'promote'
       uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: ${{ steps.spec.outputs.paths }}
         key: ${{ steps.spec.outputs.key }}
         restore-keys: ${{ steps.spec.outputs.prefix }}
-    - if: inputs.operation == 'save'
+        lookup-only: ${{ inputs.operation == 'promote' }}
+    - if: inputs.operation == 'export'
+      shell: bash
+      env:
+        CACHE_PATHS: ${{ steps.spec.outputs.paths }}
+        ARCHIVE: ${{ steps.spec.outputs.archive }}
+      run: bash "$GITHUB_ACTION_PATH/handoff.sh" pack "$RUNNER_TEMP/swift-cache-handoff/$ARCHIVE"
+    - if: inputs.operation == 'export'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: swift-cache-${{ inputs.mode }}
+        path: ${{ runner.temp }}/swift-cache-handoff
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: 1
+    - if: inputs.operation == 'promote' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: swift-cache-${{ inputs.mode }}
+        path: ${{ runner.temp }}/swift-cache-handoff
+        run-id: ${{ inputs.source-run-id }}
+        github-token: ${{ github.token }}
+    # The archive is named by the toolchain that built it, so another toolchain finds nothing to unpack.
+    - if: inputs.operation == 'promote' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        CACHE_PATHS: ${{ steps.spec.outputs.paths }}
+        ARCHIVE: ${{ steps.spec.outputs.archive }}
+      run: bash "$GITHUB_ACTION_PATH/handoff.sh" unpack "$RUNNER_TEMP/swift-cache-handoff/$ARCHIVE"
+    - if: inputs.operation == 'save' || (inputs.operation == 'promote' && steps.cache.outputs.cache-hit != 'true')
       uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: ${{ steps.spec.outputs.paths }}

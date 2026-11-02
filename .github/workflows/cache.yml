@@ -2,13 +2,16 @@ name: Warm Swift caches
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["macOS bundle"]
+    types: [completed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: swift-cache-main
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'workflow_run' && format('swift-cache-promote-{0}', github.event.workflow_run.id) || 'swift-cache-main' }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
@@ -16,6 +19,7 @@ env:
 
 jobs:
   warm:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: xcode-27
     timeout-minutes: 30
     strategy:
@@ -46,3 +50,55 @@ jobs:
         with:
           mode: ${{ matrix.mode }}
           operation: save
+
+  # A cache saved in a tag run stays with that tag, while this run saves on the default branch,
+  # where later tags can read it. Nothing is rebuilt: the compiled output comes from the tag run.
+  promote:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: xcode-27
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [debug, release, verify]
+    steps:
+      - name: Accept only a version tag
+        shell: bash
+        env:
+          SOURCE_TAG: ${{ github.event.workflow_run.head_branch }}
+        run: '[[ "$SOURCE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+      # The tag's checkout only supplies the lockfile hash; the code that runs comes from the default branch.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          path: .ci
+          persist-credentials: false
+      - uses: ./.ci/.github/actions/swift-cache
+        with:
+          mode: ${{ matrix.mode }}
+          operation: promote
+          source-sha: ${{ github.event.workflow_run.head_sha }}
+          source-run-id: ${{ github.event.workflow_run.id }}
+      - name: Remove the promoted artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ARTIFACT_NAME: swift-cache-${{ matrix.mode }}
+          SOURCE_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          ids="$(gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN/artifacts?name=$ARTIFACT_NAME" --jq '.artifacts[].id')"
+          while IFS= read -r id; do
+            test -n "$id" || continue
+            gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$id"
+          done <<< "$ids"
