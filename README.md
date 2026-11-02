@@ -53,7 +53,7 @@ Tokloom is a native menu bar monitor for developers using Codex or Claude Code. 
 
 <sub>These are renders of the current app UI with synthetic data, not real account/project information or performance benchmarks. Some action buttons are disabled in the sample state. Click an image to view it at full size.</sub>
 
-Download the DMG from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases), open it, and drag **Tokloom.app** to **Applications**. Release assets are DMG files; GitHub may wrap Actions artifacts in a separate ZIP for download.
+Download the DMG from [Releases](https://github.com/codexstatusbar/codexstatusbar/releases), open it, and drag **Tokloom.app** to **Applications**. Release assets are DMG files; GitHub may wrap Actions artifacts in a separate ZIP for download. After that the app can update itself; see [Updates](#updates).
 
 ## Build and run
 
@@ -141,11 +141,11 @@ Clearing collected metadata also clears chart history. Original Codex logs remai
 
 ## Settings
 
-**Settings** provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, metadata retention/deletion, and quit. Login startup changes only when the user toggles it. **Log connection**, below the diagnostics, holds the Codex home selection and copying, an immediate check, the Claude Code home with whether a Claude Code login was found, and collection diagnostics when there are any.
+**Settings** provides language, display unit, what the menu bar shows (speed: combined, by provider, both or hidden; remaining usage: Codex, Claude, both or hidden; the 5-hour window, the weekly window or both; optionally the time until reset), hide-idle behavior, start at login, updates, metadata retention/deletion, and quit. Login startup changes only when the user toggles it. **Log connection**, below the diagnostics, holds the Codex home selection and copying, an immediate check, the Claude Code home with whether a Claude Code login was found, and collection diagnostics when there are any.
 
 Paths have individual copy buttons.
 
-On macOS 26+, supported buttons use native Glass styling. Older systems use bordered controls; Reduce Transparency uses an opaque system background. Right-click the menu bar item to open or quit the app.
+On macOS 26+, supported buttons use native Glass styling. Older systems use bordered controls; Reduce Transparency uses an opaque system background. Right-click the menu bar item to open or quit the app, or to reach an available update.
 
 ### Removed: Codex hooks
 
@@ -172,6 +172,22 @@ The overview shows one column per provider, and the menu bar can list the same n
 - **Claude** — Claude Code does not log its limits, so Tokloom asks Anthropic's usage endpoint (`api.anthropic.com/api/oauth/usage`) with the OAuth token Claude Code already stored in the macOS Keychain (`Claude Code-credentials`). The token is read through `/usr/bin/security`, sent only to that endpoint, and never saved or logged. macOS may ask once to allow keychain access. Without a Claude Code login, or with an expired token, nothing is shown.
 - Windows are named by their length from the data: `5h` for the session and weekly for 10080 minutes. A window the provider does not report is left out and its slot stays empty so the weekly bar keeps its place.
 - **Credits** — once the windows run out, the plan spends credits, and the overview shows what is left under the provider's bars. Codex's balance comes from `rate_limits.credits` in the same log report (the newest report decides, even after its windows have reset; unlimited accounts say so). Claude's comes from `spend` (a prepaid balance, or the spend cap minus what was used) or, in older responses, `extra_usage`, and only when usage credits are enabled on the account: an account without them shows no credits line.
+
+## Updates
+
+Tokloom looks for new releases on its own and installs one only when you press **Update** in **Settings → Updates** and confirm. When a newer version exists, the popover footer shows it, the right-click menu gains an entry, and Settings shows the current and new versions with a link to the release notes.
+
+**What goes over the network.** The check is one unauthenticated `GET` to `api.github.com/repos/codexstatusbar/codexstatusbar/releases/latest`; like any request, it shows GitHub your IP address and the app's version in the `User-Agent`. Nothing about your sessions or usage is sent. Automatic checks are on by default and run at launch and about every 6 hours; after waking from sleep, one follows within a minute if that period has passed. A launch within 5 minutes of the last check skips it, so repeated restarts do not use up GitHub's limit of 60 unauthenticated calls an hour per address; a conditional request saves the download but, measured, still counts against that limit. Failed automatic checks stay quiet and retry after 30 minutes. Turn off **Check for updates automatically** to stop all automatic calls; **Check for updates** still asks on demand. The last check's time, ETag and response are kept in the app's preferences.
+
+**What an install does.** It downloads `Tokloom-macos-arm64.dmg` and its `.sha256` file over HTTPS to a private temporary folder, accepting only this repository's release assets on `github.com` and GitHub's asset hosts, at every redirect, with a size limit. It verifies the checksum, mounts the image read-only and hidden, copies the app beside the installed one, and checks that copy's bundle identifier, version and `codesign --verify --strict`. Only then does Tokloom quit. A small shell helper waits for that process to exit, renames the old app aside, moves the new one in, opens it and deletes the old one. If any step fails, the current app stays or is put back, and the next launch says so. A failed install changes nothing you need to repair.
+
+Tokloom will not replace itself when it runs from the disk image, from a temporary location macOS chose (App Translocation), from a folder you cannot write to, or as a development or unversioned build (`0.0.0`). It points you to the releases page instead. Other running copies are left alone.
+
+**What this does and does not protect against.** The checksum and the HTTPS connection show that the file arrived intact from this repository's GitHub release. They do not prove who built it: the checksum comes from the same release as the image, and the app is ad-hoc signed and not notarized, so `codesign` only shows that the bundle was not altered after it was signed. Anyone able to publish a release in this repository could publish an update that passes every check.
+
+The updater neither adds nor removes `com.apple.quarantine`. An app that downloads a file itself does not get that attribute (measured with `URLSession`: the file carries only `com.apple.provenance`), so a version installed this way does not show the Gatekeeper prompt that a DMG downloaded in a browser does. If you want Gatekeeper to look at each version, turn automatic checks off and install from the releases page.
+
+Replacing the app the way a manual install does also changes its code signature, so macOS may ask again to allow keychain access for Claude usage limits.
 
 ## Control socket
 
@@ -202,14 +218,17 @@ A success is `{"id":1,"ok":true,"result":…}` and a failure is `{"id":1,"ok":fa
 | `state` | Every app value except chart points (speed, usage limits, credits, sessions, diagnostics, settings, current page) |
 | `sessions`, `session` (`id`) | Sessions, including subagents and hidden ones; `listed` says whether a row is on the list |
 | `history` (optional `id` or `provider`) | Chart points of the last hour; `time` is Unix seconds |
-| `settings`, `settings.set` | Read or change `language`, `rateUnit`, `menuSpeed`, `menuUsage`, `menuWindows`, `menuShowsReset`, `hideIdle`, `hideUnattached`, `startAtLogin`, `retentionDays`. One bad value changes nothing |
+| `settings`, `settings.set` | Read or change `language`, `rateUnit`, `menuSpeed`, `menuUsage`, `menuWindows`, `menuShowsReset`, `hideIdle`, `hideUnattached`, `startAtLogin`, `retentionDays`, `autoCheckUpdates`. One bad value changes nothing |
 | `home.set` (`path`) | Switch the Codex home |
 | `refresh` | Check now and wait for the result |
 | `metadata.clear` (`confirm: true`) | Delete Tokloom metadata; original logs are kept |
+| `update.status`, `update.check` | Show update state, or ask GitHub now and wait for the answer |
+| `update.install` (`confirm: true`) | Install the offered release and restart Tokloom; a failure leaves the app as it was |
+| `update.notes.open` | Open the release notes in the browser |
 | `popover.open`, `popover.close`, `page.show` (`page` or `id`) | Open or close the popover and move between pages |
 | `quit` | Quit Tokloom; Codex and Claude sessions keep running |
 
-`refresh`, `home.set`, `metadata.clear` and a `retentionDays` change reply once they finish. They return `busy` while another operation runs and `timeout` after 30 seconds, in which case the operation keeps going. The first read of large logs can take a while.
+`refresh`, `home.set`, `metadata.clear`, `update.check`, `update.install` and a `retentionDays` change reply once they finish. They return `busy` while another operation runs and `timeout` after 30 seconds, in which case the operation keeps going. The first read of large logs can take a while.
 
 ## Current scope
 
@@ -219,7 +238,7 @@ The bundle identifier, `CodexHub` storage paths, and internal module names are r
 
 | Module | Responsibility |
 | --- | --- |
-| `CodexHubCore` | Activity, cumulative usage, work/observation averages, and the control socket |
+| `CodexHubCore` | Activity, cumulative usage, work/observation averages, the control socket, and the update rules and install steps |
 | `CodexHubCollector` | Read-only log collection and SQLite checkpoints |
 | `CodexHubApp` | SwiftUI views, AppKit menu bar, preferences, and chart persistence |
 
@@ -229,7 +248,7 @@ Deletion and retention apply to Tokloom metadata only; original Codex logs are n
 
 ## Verification and documentation
 
-Completed checks include 112 Core/Collector tests, 135 synthetic UI/process checks (UI, P and CT labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
+Completed checks include 152 Core/Collector tests, 144 synthetic UI/process checks (UI, P and CT labels), and arm64 app builds. See the records below for dates and conditions. Synthetic renders and code tests do not prove every native interaction or server integration.
 
 The full PRD is not release-complete. Remaining verification includes TUI/approval/G0, VoiceOver, long-running operation, physical macOS 14 devices, and complete provider execution paths.
 

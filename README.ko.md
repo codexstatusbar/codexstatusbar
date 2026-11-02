@@ -53,7 +53,7 @@ Tokloom은 Codex 또는 Claude Code를 사용하는 개발자를 위한 네이�
 
 <sub>현재 앱 UI를 샘플 데이터로 렌더링한 예시입니다. 실제 계정·프로젝트 정보나 성능 벤치마크가 아니며, 일부 동작 버튼은 샘플 상태에서 비활성화돼 있습니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
-[Releases](https://github.com/codexstatusbar/codexstatusbar/releases)에서 DMG를 받아 연 다음 **Tokloom.app**을 **Applications**로 드래그하세요. 릴리스 파일은 DMG이며, Actions 아티팩트 다운로드는 GitHub가 별도 ZIP으로 감쌀 수 있습니다.
+[Releases](https://github.com/codexstatusbar/codexstatusbar/releases)에서 DMG를 받아 연 다음 **Tokloom.app**을 **Applications**로 드래그하세요. 릴리스 파일은 DMG이며, Actions 아티팩트 다운로드는 GitHub가 별도 ZIP으로 감쌀 수 있습니다. 설치한 뒤에는 앱이 직접 업데이트할 수 있습니다. [업데이트](#업데이트)를 참고하세요.
 
 ## 빌드와 실행
 
@@ -143,11 +143,11 @@ Codex는 Codex 자체 추적 로그(`logs_2.sqlite`, 읽기 전용)에 기록된
 
 ## 설정
 
-**설정**에는 언어, 표시 단위, 상태바 표시 항목(속도: 통합·제공자별·둘 다·숨김, 남은 사용량: Codex·Claude·둘 다·숨김, 5시간·주간·둘 다, 선택적으로 리셋까지 남은 시간), 대기 세션 숨기기, 로그인 시 실행, 메타데이터 보관 기간과 삭제, 앱 종료가 있습니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다. 수집 진단 아래의 **로그 연결**에는 Codex 홈 선택·복사, 즉시 확인, Claude Code 홈과 Claude Code 로그인 확인 여부, 있을 때의 수집 진단가 있습니다.
+**설정**에는 언어, 표시 단위, 상태바 표시 항목(속도: 통합·제공자별·둘 다·숨김, 남은 사용량: Codex·Claude·둘 다·숨김, 5시간·주간·둘 다, 선택적으로 리셋까지 남은 시간), 대기 세션 숨기기, 로그인 시 실행, 업데이트, 메타데이터 보관 기간과 삭제, 앱 종료가 있습니다. 로그인 시 실행은 사용자가 토글할 때만 변경합니다. 수집 진단 아래의 **로그 연결**에는 Codex 홈 선택·복사, 즉시 확인, Claude Code 홈과 Claude Code 로그인 확인 여부, 있을 때의 수집 진단가 있습니다.
 
 경로는 각각의 복사 버튼으로 복사합니다.
 
-macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 사용합니다. 이전 macOS에서는 기본 테두리 버튼을 사용하며, ‘투명도 줄이기’를 켜면 불투명 시스템 배경을 사용합니다. 메뉴바 우클릭 메뉴에서 앱 열기·종료를 선택할 수 있습니다.
+macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 사용합니다. 이전 macOS에서는 기본 테두리 버튼을 사용하며, ‘투명도 줄이기’를 켜면 불투명 시스템 배경을 사용합니다. 메뉴바 우클릭 메뉴에서 앱 열기·종료를 선택할 수 있고, 새 버전이 있으면 업데이트 항목도 나타납니다.
 
 ### 제거됨: Codex 훅
 
@@ -174,6 +174,22 @@ macOS 26 이상에서는 지원되는 버튼에 네이티브 Glass 스타일을 
 - **Claude** — Claude Code는 한도를 로그에 남기지 않으므로, Claude Code가 macOS 키체인(`Claude Code-credentials`)에 저장한 OAuth 토큰으로 Anthropic 사용량 엔드포인트(`api.anthropic.com/api/oauth/usage`)를 조회합니다. 토큰은 `/usr/bin/security`로 읽어 해당 엔드포인트에만 보내며 저장하거나 기록하지 않습니다. macOS가 키체인 접근 허용을 한 번 물을 수 있습니다. Claude Code 로그인이 없거나 토큰이 만료되었으면 표시하지 않습니다.
 - 창 이름은 데이터의 길이를 따릅니다. 세션은 `5h`, 주간은 10080분입니다. 제공자가 보고하지 않는 창은 빼고, 해당 칸은 비워 두어 주간 막대 위치가 유지됩니다.
 - **크레딧** — 창을 모두 쓰면 요금제가 크레딧을 소비하며, 개요의 제공자 막대 아래에 남은 양을 표시합니다. Codex 잔액은 같은 로그 보고의 `rate_limits.credits`에서 읽고(창이 이미 리셋된 뒤에도 가장 최근 보고가 기준이며, 무제한 계정은 무제한으로 표시), Claude는 사용량 응답의 `spend`(선불 잔액, 또는 지출 한도에서 사용한 양을 뺀 값)나 옛 응답의 `extra_usage`에서 읽습니다. Claude는 계정에 사용량 크레딧이 켜져 있을 때만 값이 있고, 켜져 있지 않으면 크레딧 줄을 표시하지 않습니다.
+
+## 업데이트
+
+Tokloom은 새 릴리스를 스스로 확인하지만, 설치는 **설정 → 업데이트 관리**에서 **업데이트**를 누르고 확인했을 때만 진행합니다. 새 버전이 있으면 팝오버 하단에 표시되고, 우클릭 메뉴에 항목이 생기며, 설정에서 현재 버전과 새 버전, 릴리스 노트 링크를 볼 수 있습니다.
+
+**네트워크로 나가는 것.** 확인은 `api.github.com/repos/codexstatusbar/codexstatusbar/releases/latest`에 보내는 인증 없는 `GET` 한 번입니다. 다른 요청과 마찬가지로 GitHub는 IP 주소와 `User-Agent`의 앱 버전을 알 수 있습니다. 세션이나 사용량 정보는 보내지 않습니다. 자동 확인은 기본으로 켜져 있고 앱을 실행할 때와 약 6시간마다 동작합니다. 잠자기에서 깨어난 뒤 그 주기가 지났으면 1분 안에 다시 확인합니다. 마지막 확인 후 5분이 지나지 않았을 때의 실행은 확인을 건너뛰므로, 재실행을 반복해도 주소당 시간당 60회인 GitHub의 비인증 호출 한도를 소모하지 않습니다. 실측 결과 조건부 요청은 내려받는 양만 줄일 뿐 한도에는 그대로 계산됩니다. 자동 확인이 실패하면 표시 없이 30분 뒤 다시 시도합니다. **업데이트 자동 확인**을 끄면 자동 호출이 모두 멈추고, **업데이트 확인**을 눌렀을 때만 조회합니다. 마지막 확인 시각과 ETag, 응답은 앱 설정에 저장합니다.
+
+**설치 절차.** `Tokloom-macos-arm64.dmg`와 `.sha256` 파일을 HTTPS로 전용 임시 폴더에 내려받습니다. 이때 모든 리다이렉트에서 `github.com`의 이 저장소 릴리스 자산과 GitHub 자산 호스트만 허용하고 크기 상한을 적용합니다. 체크섬을 확인한 뒤 이미지를 읽기 전용으로 숨겨서 마운트하고, 앱을 설치된 앱 옆으로 복사해 그 복사본의 번들 ID, 버전, `codesign --verify --strict`를 확인합니다. 여기까지 통과해야 Tokloom이 종료합니다. 그다음 작은 셸 헬퍼가 프로세스 종료를 기다려 기존 앱을 옆으로 옮기고, 새 앱을 넣어 연 뒤, 기존 앱을 지웁니다. 어느 단계에서든 실패하면 현재 앱이 그대로 남거나 되돌려지고, 다음 실행 때 그 사실을 알려 줍니다. 설치에 실패해도 사용자가 고칠 것은 없습니다.
+
+디스크 이미지 위에서 실행 중이거나, macOS가 정한 임시 위치(App Translocation)에서 실행 중이거나, 쓸 수 없는 폴더에 있거나, 개발 빌드 또는 버전 없는 빌드(`0.0.0`)이면 교체하지 않고 릴리스 페이지를 안내합니다. 실행 중인 다른 Tokloom은 건드리지 않습니다.
+
+**보호하는 것과 보호하지 못하는 것.** 체크섬과 HTTPS 연결은 파일이 이 저장소의 GitHub 릴리스에서 손상 없이 왔음을 보여 줍니다. 누가 빌드했는지는 증명하지 못합니다. 체크섬은 이미지와 같은 릴리스에서 오고, 앱은 ad-hoc 서명이며 공증되지 않았으므로 `codesign`은 서명 뒤에 번들이 바뀌지 않았다는 것만 보여 줍니다. 이 저장소에 릴리스를 게시할 수 있는 사람이라면 모든 검사를 통과하는 업데이트를 게시할 수 있습니다.
+
+업데이터는 `com.apple.quarantine`을 추가하지도 제거하지도 않습니다. 앱이 직접 내려받은 파일에는 이 속성이 붙지 않습니다(`URLSession`으로 실측, 파일에는 `com.apple.provenance`만 붙음). 따라서 이 방식으로 설치한 버전에는 브라우저로 받은 DMG에서 나타나는 Gatekeeper 확인이 나타나지 않습니다. 버전마다 Gatekeeper 검사를 거치고 싶다면 자동 확인을 끄고 릴리스 페이지에서 설치하세요.
+
+수동 설치와 마찬가지로 앱을 교체하면 코드 서명이 바뀌므로, Claude 사용 한도를 위한 키체인 접근을 macOS가 다시 물을 수 있습니다.
 
 ## 제어 소켓
 
@@ -204,14 +220,17 @@ echo '{"command":"settings.set","args":{"hideIdle":true,"rateUnit":"minute"}}' |
 | `state` | 차트 점을 뺀 앱의 모든 값(속도, 사용 한도, 크레딧, 세션, 진단, 설정, 현재 페이지) |
 | `sessions`, `session` (`id`) | 서브에이전트와 숨겨진 세션을 포함한 세션 정보. `listed`는 목록 표시 여부 |
 | `history` (`id` 또는 `provider`, 선택) | 최근 1시간 차트 점. `time`은 Unix 시각(초) |
-| `settings`, `settings.set` | 설정 조회·변경. `language`, `rateUnit`, `menuSpeed`, `menuUsage`, `menuWindows`, `menuShowsReset`, `hideIdle`, `hideUnattached`, `startAtLogin`, `retentionDays`. 값 하나가 잘못되면 아무것도 바뀌지 않습니다 |
+| `settings`, `settings.set` | 설정 조회·변경. `language`, `rateUnit`, `menuSpeed`, `menuUsage`, `menuWindows`, `menuShowsReset`, `hideIdle`, `hideUnattached`, `startAtLogin`, `retentionDays`, `autoCheckUpdates`. 값 하나가 잘못되면 아무것도 바뀌지 않습니다 |
 | `home.set` (`path`) | Codex 경로 변경 |
 | `refresh` | 지금 확인하고 끝날 때까지 대기 |
 | `metadata.clear` (`confirm: true`) | Tokloom 메타데이터 삭제. 원본 로그는 유지 |
+| `update.status`, `update.check` | 업데이트 상태 조회, 또는 지금 GitHub에 확인하고 응답까지 대기 |
+| `update.install` (`confirm: true`) | 새 릴리스를 설치하고 Tokloom을 다시 시작. 실패하면 앱은 그대로 유지 |
+| `update.notes.open` | 브라우저에서 릴리스 노트 열기 |
 | `popover.open`, `popover.close`, `page.show` (`page` 또는 `id`) | 팝오버 열기·닫기, 페이지 이동 |
 | `quit` | Tokloom 종료. Codex·Claude 세션은 계속 실행 |
 
-`refresh`, `home.set`, `metadata.clear`, `retentionDays` 변경은 끝날 때까지 응답을 기다리며, 다른 작업이 진행 중이면 `busy`, 30초가 넘으면 `timeout`을 돌려줍니다. `timeout`이어도 작업은 계속 진행됩니다. 큰 로그를 처음 읽는 동안에는 시간이 걸릴 수 있습니다.
+`refresh`, `home.set`, `metadata.clear`, `update.check`, `update.install`, `retentionDays` 변경은 끝날 때까지 응답을 기다리며, 다른 작업이 진행 중이면 `busy`, 30초가 넘으면 `timeout`을 돌려줍니다. `timeout`이어도 작업은 계속 진행됩니다. 큰 로그를 처음 읽는 동안에는 시간이 걸릴 수 있습니다.
 
 ## 현재 범위
 
@@ -221,7 +240,7 @@ echo '{"command":"settings.set","args":{"hideIdle":true,"rateUnit":"minute"}}' |
 
 | 모듈 | 역할 |
 | --- | --- |
-| `CodexHubCore` | 상태·누적 사용량·작업/관측 구간 평균, 제어 소켓 |
+| `CodexHubCore` | 상태·누적 사용량·작업/관측 구간 평균, 제어 소켓, 업데이트 규칙과 설치 절차 |
 | `CodexHubCollector` | 읽기 전용 로그/관리형 메타데이터 수집과 SQLite 체크포인트 |
 | `CodexHubApp` | SwiftUI 화면, AppKit 메뉴바, 사용자 설정과 차트 저장 |
 
@@ -231,7 +250,7 @@ echo '{"command":"settings.set","args":{"hideIdle":true,"rateUnit":"minute"}}' |
 
 ## 검증 상태와 문서
 
-최근 완료한 범위는 Core/Collector 테스트 112개, UI·P·CT 항목의 합성 UI/프로세스 검증 135개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
+최근 완료한 범위는 Core/Collector 테스트 152개, UI·P·CT 항목의 합성 UI/프로세스 검증 144개, arm64 앱 빌드입니다. 검증 시점과 조건은 아래 기록을 참고하세요. 합성 렌더링과 코드 테스트가 실제 메뉴바 조작이나 서버 연동 전체 검증을 대신하지는 않습니다.
 
 전체 PRD의 출시 완료 상태는 아닙니다. TUI·승인·G0, VoiceOver, 장시간 실행, macOS 14 실기기와 전체 provider 실행 경로는 검증이 남아 있습니다.
 

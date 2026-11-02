@@ -543,3 +543,35 @@ child's Details page, including the empty-chart state. Accessibility uses the
 same explicit Details/session label, and the chart does not intercept pointer
 hits. The auxiliary section's bottom separator is also omitted; other section
 separators remain unchanged. No measurement or hierarchy logic changed.
+
+## In-app updates
+
+Settings gains an Updates section, the footer a version button and the right-click
+menu an entry while a newer release exists. Figma UI-08 (7:440) gained the same
+section and footer value from cloned tokenized nodes and `Hub / Button` instances.
+Its older Local only labels were left alone; the app shows neither.
+
+Measured 2026-11-02 against release 0.0.34, and each one shaped the code:
+- Assets redirect to `release-assets.githubusercontent.com`, not `objects.`, so
+  both hosts are allowed.
+- An ETag only matches with the same Accept header. An unauthenticated 304 still
+  spent one of the 60 hourly calls (58 to 57), so the launch check has a 5-minute
+  floor from the saved time; the ETag saves only the body.
+- A `URLSession` download carries `com.apple.provenance` and no quarantine. A
+  fake image without quarantine gave a copy without it; a quarantined image gave a
+  `ditto` copy with it. The updater adds and removes nothing.
+
+U01–U32 in Tests/CodexHubCoreTests/UpdateTests.swift cover versions, response and
+URL rules, checksums, the install gate including real unwritable folders, the check
+schedule, staging with real `codesign`, `ditto` and `hdiutil`, and the helper script
+run on fake apps: swap, waiting for its pid, a pid that will not exit, failed
+replacement, failed open, the only copy surviving, hostile paths. CT11 and UI127
+cover the socket commands and that every failure message is translated.
+
+One probe compiled the real installer with a probe-only bundle identifier: it staged
+a fake app, called `handOver` and exited at once. The helper outlived it, swapped
+the bundles and launched the new one through the real `/usr/bin/open`.
+
+Not verified: a real round trip between two releases. No Tokloom binary was run, and
+the download path (`AppUpdater`, `UpdateTransfer`) was not exercised end to end. That
+waits for the first release containing this code.
