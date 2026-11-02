@@ -26,7 +26,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/swift-cache
+      - id: swift-cache
+        uses: ./.github/actions/swift-cache
         with:
           mode: ${{ matrix.mode }}
       - name: Populate cache
@@ -39,3 +40,9 @@ jobs:
             release) ./scripts/build-app.sh release ;;
             verify) ./scripts/capture-fixtures.sh .build/ui-evidence ;;
           esac
+      - name: Save cache
+        if: steps.swift-cache.outputs.exact-hit != 'true'
+        uses: ./.github/actions/swift-cache
+        with:
+          mode: ${{ matrix.mode }}
+          operation: save

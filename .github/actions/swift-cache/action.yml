@@ -1,9 +1,12 @@
 name: Swift build cache
-description: Cache compiler outputs and dependencies by toolchain, lockfile and build mode.
+description: Restore or save compiler outputs and dependencies by toolchain, lockfile, build mode and source commit.
 inputs:
   mode:
     description: debug, release or verify
     required: true
+  operation:
+    description: restore or save
+    default: restore
 outputs:
   exact-hit:
     description: True only for this exact toolchain, mode, lockfile and source commit.
@@ -11,29 +14,43 @@ outputs:
 runs:
   using: composite
   steps:
-    - id: toolchain
+    - id: spec
       shell: bash
       env:
         CACHE_MODE: ${{ inputs.mode }}
+        LOCK_HASH: ${{ hashFiles('Package.swift', 'Package.resolved') }}
+        SOURCE_SHA: ${{ github.sha }}
       run: |
         case "$CACHE_MODE" in debug|release|verify) ;; *) exit 2 ;; esac
         identity="$({ swiftc --version 2>&1; xcrun --show-sdk-version; xcrun --show-sdk-path; sw_vers -productVersion; pwd -P; } | shasum -a 256 | cut -d ' ' -f 1)"
-        printf 'identity=%s\n' "$identity" >> "$GITHUB_OUTPUT"
+        prefix="swift-v1-$RUNNER_OS-$RUNNER_ARCH-$identity-$CACHE_MODE-$LOCK_HASH-"
+        # actions/cache versions a cache by this exact text, so every save and restore reads it from here.
+        cat >> "$GITHUB_OUTPUT" <<EOF
+        prefix=$prefix
+        key=$prefix$SOURCE_SHA
+        paths<<PATHS
+        .build/checkouts
+        .build/repositories
+        .build/artifacts
+        .build/prebuilts
+        .build/workspace-state.json
+        .build/build.db
+        .build/.buildSystem_$CACHE_MODE
+        .build/$CACHE_MODE.yaml
+        .build/arm64-apple-macosx/$CACHE_MODE
+        .build/fixture-cache
+        ~/Library/Caches/org.swift.swiftpm
+        PATHS
+        EOF
     - id: cache
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      if: inputs.operation == 'restore'
+      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
-        path: |
-          .build/checkouts
-          .build/repositories
-          .build/artifacts
-          .build/prebuilts
-          .build/workspace-state.json
-          .build/build.db
-          .build/.buildSystem_${{ inputs.mode }}
-          .build/${{ inputs.mode }}.yaml
-          .build/arm64-apple-macosx/${{ inputs.mode }}
-          .build/fixture-cache
-          ~/Library/Caches/org.swift.swiftpm
-        key: swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ inputs.mode }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ github.sha }}
-        restore-keys: |
-          swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ inputs.mode }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+        path: ${{ steps.spec.outputs.paths }}
+        key: ${{ steps.spec.outputs.key }}
+        restore-keys: ${{ steps.spec.outputs.prefix }}
+    - if: inputs.operation == 'save'
+      uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: ${{ steps.spec.outputs.paths }}
+        key: ${{ steps.spec.outputs.key }}
