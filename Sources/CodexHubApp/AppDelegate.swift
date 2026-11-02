@@ -20,7 +20,6 @@ import CodexHubCollector
     private var chartSaves = ChartSaveSchedule()
     private var processScans = ProcessScanSchedule()
     private var knownProcesses: [pid_t] = []
-    private var terminating = false
     private let defaults = UserDefaults.standard
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -376,26 +375,13 @@ import CodexHubCollector
         (notification.object as? NSPopover)?.contentViewController = nil
     }
 
-    /// Chart points wait for the next scheduled save, so write them before leaving. A collector stuck in a slow
-    /// read must not keep the app from quitting.
+    /// Chart points wait for the next scheduled save, so write them before leaving. Quit can arrive inside a main
+    /// actor task, where `.terminateLater` would wait for main actor work that can never run, so this answers at once.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard (try? chartArchive()) != nil else { return .terminateNow }
-        terminating = true
-        Task {
-            await saveChartHistory()
-            finishTerminating(sender)
+        if let collector, let data = try? chartArchive()?.data {
+            waitForExitSave { try? await collector.saveChartHistory(data) }
         }
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            finishTerminating(sender)
-        }
-        return .terminateLater
-    }
-
-    private func finishTerminating(_ sender: NSApplication) {
-        guard terminating else { return }
-        terminating = false
-        sender.reply(toApplicationShouldTerminate: true)
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {

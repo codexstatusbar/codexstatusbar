@@ -608,7 +608,7 @@ import CodexHubCollector
         for message in UpdateError.allCases.map(\.message) + UpdateInstallBlock.allCases.map(\.message) {
             precondition(AppLanguage.korean.text(message) != message, "UI127 update message is translated: \(message)")
         }
-        print("PASS UI01–UI127, P01–P06, PB40–PB53 and CT01–CT11; fixture PNGs: \(output)")
+        print("PASS UI01–UI127, P01–P06, PB40–PB55 and CT01–CT11; fixture PNGs: \(output)")
     }
     static var fixtureRelease: UpdateRelease {
         let base = "https://github.com/codexstatusbar/codexstatusbar/releases"
@@ -789,6 +789,14 @@ import CodexHubCollector
         var saves = ChartSaveSchedule(), checks = 0
         for second in 0...300 where saves.isDue(at: Double(second)) { saves.checked(at: Double(second)); checks += 1 }
         precondition(checks == 11, "PB50 the chart archive is looked at twice a minute, not every second")
+
+        // This runs on the blocked main actor, as `applicationShouldTerminate` does when quit comes from a task.
+        final class Saved: @unchecked Sendable { var done = false }
+        let saved = Saved()
+        precondition(waitForExitSave { saved.done = true } && saved.done, "PB54 a save that needs nothing from the main actor finishes before quitting")
+        let start = ContinuousClock.now
+        precondition(!waitForExitSave(limit: 0.2) { await MainActor.run {} }, "PB55 a save stuck behind the blocked main actor is given up on")
+        precondition(ContinuousClock.now - start < .seconds(1), "PB55 giving up keeps to the limit")
 
         var scans = ProcessScanSchedule()
         let walks = (0...8).filter { scans.isDue(at: Double($0), logs: ["a", "b"]) }

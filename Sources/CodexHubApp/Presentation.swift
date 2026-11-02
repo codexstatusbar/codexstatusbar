@@ -116,6 +116,18 @@ struct ChartSaveSchedule {
     mutating func checked(at time: Double) { last = time }
 }
 
+/// Blocks the caller, the main actor included, until `save` ends or `limit` seconds pass, and says which came first.
+/// `save` runs off the main actor and must not need it, or it only ends after this has given up.
+@discardableResult
+func waitForExitSave(limit: Double = 2, _ save: @escaping @Sendable () async -> Void) -> Bool {
+    let done = DispatchSemaphore(value: 0)
+    Task.detached(priority: .userInitiated) {
+        await save()
+        done.signal()
+    }
+    return done.wait(timeout: .now() + limit) == .success
+}
+
 /// When the whole process table is walked. Known processes are looked at on every refresh, so an exit shows at once;
 /// a new rollout means a process just started writing, so it brings the walk forward.
 struct ProcessScanSchedule {
