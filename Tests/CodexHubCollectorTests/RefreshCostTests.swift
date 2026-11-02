@@ -45,7 +45,7 @@ private func codexHome(in root: URL) throws -> URL {
     let home = root.appendingPathComponent("codex")
     let line = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"ID\",\"cwd\":\"/project\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"output_tokens\":10}}}}\n"
     for index in 0..<977 {
-        let folder = "sessions/2026/\(index % 12)/\(index % 112)"
+        let folder = "sessions/2026/\(index % 112 / 9)/\(index % 112)"
         let modified = Date(timeIntervalSinceNow: index < 130 ? -3_600 : -30 * 86_400)
         try write(line.replacingOccurrences(of: "ID", with: "session-\(index)"), to: home.appendingPathComponent("\(folder)/rollout-\(index).jsonl"), modified: modified)
     }
