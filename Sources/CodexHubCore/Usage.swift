@@ -51,7 +51,7 @@ public enum UsageObservation: Equatable, Sendable {
     case baseline, delta(Int), secondarySource, wrongEpoch, regression, suspended
 }
 
-public struct UsageCounter: Sendable {
+public struct UsageCounter: Sendable, Equatable {
     public private(set) var source: UsageSource
     public private(set) var epoch: String
     public private(set) var baseline: TokenUsage?

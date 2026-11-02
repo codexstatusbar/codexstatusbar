@@ -3,7 +3,7 @@ import Observation
 import CodexHubCore
 import CodexHubCollector
 
-struct SessionPresentation: Identifiable {
+struct SessionPresentation: Identifiable, Equatable {
     let monitor: ThreadMonitor
     var cwd: String?
     var model: String?
@@ -172,6 +172,17 @@ enum MenuWindows: String, CaseIterable {
     var language = AppLanguage.system
     var saveLanguage: ((AppLanguage) -> Void)?
     func text(_ value: String) -> String { language.text(value) }
+    /// Hands a refresh to the views. Every assignment redraws whatever watches it, the menu bar included, so an unchanged
+    /// list stays. So does a frame that only moved in time, unless something can show the time: the open popover's charts,
+    /// the menu bar's reset countdown, or a rate still running out.
+    func publish(_ rows: [SessionPresentation], frame next: ReportedFrame) {
+        let unchanged = rows == sessions
+        if !unchanged { sessions = rows }
+        reconcileDetailPage()
+        if unchanged, !menuShowsReset, popoverOpen?() != true, let frame, frame.reportsSame(as: next),
+           !rows.contains(where: { (try? $0.monitor.workAverageRate(at: frame.time)) != nil }) { return }
+        frame = next
+    }
     var page = HubPage.overview
     /// How long a detail page waits for its session to come back before the overview replaces it.
     static let detailGraceSeconds: TimeInterval = 5

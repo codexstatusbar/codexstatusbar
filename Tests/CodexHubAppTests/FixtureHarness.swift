@@ -744,6 +744,48 @@ import CodexHubCollector
         precondition(result(#"{"command":"settings.set","args":{"autoCheckUpdates":false}}"#)["autoCheckUpdates"] as? Bool == false && automatic == false, "CT11 automatic checks can be turned off")
     }
     @MainActor static func verifyPublishing() throws {
+        let key = ThreadKey(homeID: "fixture-home", runID: nil, threadID: "publish")
+        var monitor = ThreadMonitor(key: key, source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
+        try monitor.setConnectivity(.connected, at: 0)
+        try monitor.startTurn("turn", at: 1)
+        try monitor.observeUsage(TokenUsage(outputTokens: 100), turnID: "turn", source: .rolloutLog, epoch: "fixture", at: 5, rateInterval: .excludingTools(4))
+        try monitor.finishTurn("turn", outcome: .completed, at: 6)
+        let rows = [SessionPresentation(monitor: monitor, cwd: "/a", rootObserved: true)]
+        func frame(_ time: Double) throws -> ReportedFrame { try ReportedFrame(monitors: [monitor], verifiedIndependentThreads: [key], at: time) }
+        let model = HubPresentation()
+        var redraws = 0
+        func publish(_ time: Double, _ rows: [SessionPresentation]) throws {
+            nonisolated(unsafe) var changed = false
+            withObservationTracking { _ = model.menuTitle } onChange: { changed = true }
+            model.publish(rows, frame: try frame(time))
+            if changed { redraws += 1 }
+        }
+        try publish(7, rows)
+        precondition(redraws == 1 && model.summary == "25", "PB40 the first refresh reaches the menu bar")
+        try publish(8, rows)
+        precondition(model.frame?.time == 8 && redraws == 2, "PB41 a rate that can still run out keeps the frame moving")
+        try publish(16, rows)
+        precondition(model.frame?.time == 16 && model.summary == "대기 중", "PB42 the rate runs out on time")
+        redraws = 0
+        for time in 17...19 { try publish(Double(time), rows) }
+        precondition(model.frame?.time == 16, "PB43 an idle refresh leaves the frame alone")
+        precondition(redraws == 0, "PB44 an idle refresh does not redraw the menu bar")
+        model.menuShowsReset = true
+        try publish(20, rows)
+        precondition(model.frame?.time == 20, "PB45 the reset countdown keeps the menu bar current")
+        model.menuShowsReset = false
+        model.popoverOpen = { true }
+        try publish(21, rows)
+        precondition(model.frame?.time == 21, "PB46 the open popover's charts keep moving")
+        model.popoverOpen = { false }
+        try publish(22, rows)
+        precondition(model.frame?.time == 21, "PB47 a closed popover needs no new frame")
+        precondition(model.frame?.moved(to: 30).time == 30 && model.frame?.moved(to: 3).time == 21, "PB48 moving a frame never turns its time back")
+        var changedRow = rows
+        changedRow[0].cwd = "/b"
+        try publish(23, changedRow)
+        precondition(model.sessions[0].cwd == "/b" && model.frame?.time == 23, "PB49 a changed row is published with its frame")
+
         var saves = ChartSaveSchedule(), checks = 0
         for second in 0...300 where saves.isDue(at: Double(second)) { saves.checked(at: Double(second)); checks += 1 }
         precondition(checks == 11, "PB50 the chart archive is looked at twice a minute, not every second")

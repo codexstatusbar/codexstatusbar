@@ -1,9 +1,22 @@
 public struct ReportedFrame: Sendable {
-    public let time: Double
+    public private(set) var time: Double
     public let tokensPerSecond: Double?
     public let eligibleRuns: Int
     public let measuredRuns: Int
     public let isPartial: Bool
+
+    /// Whether two frames report the same, whatever their times.
+    public func reportsSame(as other: ReportedFrame) -> Bool {
+        tokensPerSecond == other.tokensPerSecond && eligibleRuns == other.eligibleRuns
+            && measuredRuns == other.measuredRuns && isPartial == other.isPartial
+    }
+
+    /// The same report at a later time, for a frame whose readings are known not to depend on it.
+    public func moved(to later: Double) -> ReportedFrame {
+        var frame = self
+        frame.time = max(time, later)
+        return frame
+    }
 
     private struct RunKey: Hashable {
         let homeID: String

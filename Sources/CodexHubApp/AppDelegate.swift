@@ -60,6 +60,8 @@ import CodexHubCollector
         model.clearMetadata = { [weak self] in self?.clearMetadata() }
         model.updateRetention = { [weak self] days in self?.updateRetention(days) }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(woke), name: NSWorkspace.didWakeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(popoverOpening), name: NSPopover.willShowNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(popoverClosed), name: NSPopover.didCloseNotification, object: nil)
         let path = CodexConfig.defaultHome(saved: defaults.string(forKey: "codexHome"),
                                            running: (RunningCodexProcess.capture() ?? []).filter { !$0.isAppServer }.map(\.codexHome))
         connect(home: URL(fileURLWithPath: path))
@@ -246,17 +248,16 @@ import CodexHubCollector
         var seen: Set<ThreadKey> = []
         let allRows = (rows + claudeRows).filter { seen.insert($0.id).inserted }
         let represented = Set(rows.compactMap(\.process))
-        model.unattachedProcesses = running.filter { !represented.contains($0.identity) && !$0.isAppServer }.map(\.identity)
+        let unattached = running.filter { !represented.contains($0.identity) && !$0.isAppServer }.map(\.identity)
+        if model.unattachedProcesses != unattached { model.unattachedProcesses = unattached }
         let frame = try ReportedFrame(monitors: allRows.map(\.monitor), verifiedIndependentThreads: Set(allRows.filter { $0.contributes && ($0.measurement == .reported || $0.measurement == .warmingUp) }.map(\.id)), at: snapshot.observedAt)
         model.recordUsageHistory(allRows, at: snapshot.observedAt)
-        model.sessions = allRows
-        model.reconcileDetailPage()
-        model.frame = frame
+        model.publish(allRows, frame: frame)
         model.diagnostics = Dictionary(grouping: snapshot.diagnostics + (claude?.diagnostics ?? []), by: \.message).map { message, occurrences in
             occurrences.count == 1 ? message : "\(message) (\(occurrences.count) occurrences)"
         }.sorted()
         model.refreshedAt = Date()
-        model.error = nil
+        if model.error != nil { model.error = nil }
         let now = ProcessInfo.processInfo.systemUptime
         if chartSaves.isDue(at: now) {
             chartSaves.checked(at: now)
@@ -365,6 +366,16 @@ import CodexHubCollector
         }
     }
 
+    /// While it was closed the frame only kept its time if nothing could show it; the charts about to open do.
+    @objc private func popoverOpening(_ notification: Notification) {
+        model.frame = model.frame?.moved(to: ProcessInfo.processInfo.systemUptime)
+    }
+
+    /// A hosted view keeps following the model after its popover closes; the next opening builds a new one anyway.
+    @objc private func popoverClosed(_ notification: Notification) {
+        (notification.object as? NSPopover)?.contentViewController = nil
+    }
+
     /// Chart points wait for the next scheduled save, so write them before leaving. A collector stuck in a slow
     /// read must not keep the app from quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -394,5 +405,6 @@ import CodexHubCollector
         quotaPolling?.cancel()
         backgroundRefresh?.cancel()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
     }
 }

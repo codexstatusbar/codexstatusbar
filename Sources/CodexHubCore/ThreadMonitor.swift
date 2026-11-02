@@ -37,7 +37,7 @@ public enum Activity: String, Sendable { case idle, working, generating, toolRun
 public enum Measurement: String, Sendable { case warmingUp, estimated, reported, partial, unavailable }
 public enum TurnOutcome: String, Sendable { case completed, interrupted, failed }
 
-public struct TurnRecord: Sendable {
+public struct TurnRecord: Sendable, Equatable {
     public fileprivate(set) var startedAt: Double?
     public fileprivate(set) var endedAt: Double?
     public fileprivate(set) var outcome: TurnOutcome?
@@ -79,7 +79,7 @@ public enum UsageRateInterval: Sendable {
     case excludingTools(Double?)
 }
 
-public struct ThreadMonitor: Sendable {
+public struct ThreadMonitor: Sendable, Equatable {
     public let key: ThreadKey
     /// Recent live usage deltas with the tool-excluded generation time behind each; newest last.
     public private(set) var generations: [UsageGeneration] = []
@@ -98,7 +98,8 @@ public struct ThreadMonitor: Sendable {
     private var latestWorkAverage: Double?
     private var latestWorkAverageIsPartial = false
     private var needsBaseline = false
-    private var samples: [(time: Double, tokens: Int)] = []
+    private struct Sample: Sendable, Equatable { let time: Double; let tokens: Int }
+    private var samples: [Sample] = []
 
     public init(key: ThreadKey, source: UsageSource, epoch: String, verifiedEmptyThread: Bool = false) {
         self.key = key
@@ -285,7 +286,7 @@ public struct ThreadMonitor: Sendable {
             }
             if !historical && !needsBaseline && connectivity == .connected && activeTurnID == turnID {
                 hasCurrentReport = true
-                if delta > 0 { samples.append((time, delta)) }
+                if delta > 0 { samples.append(Sample(time: time, tokens: delta)) }
             }
             needsBaseline = false
         case .secondarySource, .wrongEpoch: break
