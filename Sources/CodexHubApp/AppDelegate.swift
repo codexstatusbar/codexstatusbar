@@ -18,6 +18,8 @@ import CodexHubCollector
     private var savedChartHistory: [ThreadKey: [UsageHistoryPoint]]?
     private var chartHomePath = ""
     private var chartSaves = ChartSaveSchedule()
+    private var processScans = ProcessScanSchedule()
+    private var knownProcesses: [pid_t] = []
     private var terminating = false
     private let defaults = UserDefaults.standard
 
@@ -109,6 +111,7 @@ import CodexHubCollector
         model.restoreUsageHistory([:])
         savedChartHistory = nil
         chartSaves = ChartSaveSchedule()
+        processScans = ProcessScanSchedule()
         model.historyError = nil
         model.unattachedProcesses = []
         model.frame = nil
@@ -201,11 +204,14 @@ import CodexHubCollector
     private func apply(_ snapshot: CollectorSnapshot) async throws {
         let current = generation
         let home = model.codexHome
+        let scan = processScans.isDue(at: snapshot.observedAt, logs: Set(snapshot.sessions.map(\.id)))
+        let known = knownProcesses
         let observed = await Task.detached(priority: .utility) {
-            (RunningCodexProcess.capture(), CodexConfig.configuredServiceTier(home: home))
+            (scan ? RunningCodexProcess.capture() : known.compactMap(RunningCodexProcess.inspect), CodexConfig.configuredServiceTier(home: home))
         }.value
         guard generation == current else { return }
         model.configuredServiceTier = observed.1
+        knownProcesses = observed.0?.map(\.identity.pid) ?? []
         guard let running = observed.0 else {
             model.sessions = []; model.unattachedProcesses = []; model.frame = nil
             model.reconcileDetailPage()

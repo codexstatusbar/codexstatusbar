@@ -748,6 +748,11 @@ import CodexHubCollector
         for second in 0...300 where saves.isDue(at: Double(second)) { saves.checked(at: Double(second)); checks += 1 }
         precondition(checks == 11, "PB50 the chart archive is looked at twice a minute, not every second")
 
+        var scans = ProcessScanSchedule()
+        let walks = (0...8).filter { scans.isDue(at: Double($0), logs: ["a", "b"]) }
+        precondition(walks == [0, 3, 6], "PB51 the process table is walked every three seconds")
+        precondition(scans.isDue(at: 9, logs: ["a", "b", "c"]) && !scans.isDue(at: 10, logs: ["a", "b", "c"]), "PB52 a new rollout brings the walk forward once")
+        precondition(!scans.isDue(at: 11, logs: ["a"]), "PB53 a log that left does not")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

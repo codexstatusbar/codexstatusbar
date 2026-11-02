@@ -116,6 +116,19 @@ struct ChartSaveSchedule {
     mutating func checked(at time: Double) { last = time }
 }
 
+/// When the whole process table is walked. Known processes are looked at on every refresh, so an exit shows at once;
+/// a new rollout means a process just started writing, so it brings the walk forward.
+struct ProcessScanSchedule {
+    static let interval: Double = 3
+    private var last: Double?
+    private var logs: Set<String> = []
+    mutating func isDue(at time: Double, logs current: Set<String>) -> Bool {
+        defer { logs = current }
+        guard current.isSubset(of: logs), let last, time - last < Self.interval else { self.last = time; return true }
+        return false
+    }
+}
+
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences }
 
 /// What the menu bar shows for speed; the per-provider rates split the combined one.
