@@ -42,6 +42,10 @@ struct HubView: View {
             Button(model.text("Cancel"), role: .cancel) {}
             Button(model.text("Clear metadata"), role: .destructive) { model.clearMetadata?() }
         } message: { Text(model.text("Deletes Tokloom metadata only. Original Codex logs and sessions are kept.")) }
+        .alert(model.text("Update and restart Tokloom?"), isPresented: $model.confirmUpdate) {
+            Button(model.text("Cancel"), role: .cancel) {}
+            Button(model.text("Update")) { model.installUpdate?() }
+        } message: { Text(model.text("Tokloom quits, replaces itself and opens again. Codex and Claude sessions keep running.")) }
     }
 
     private var header: some View {
@@ -77,6 +81,11 @@ struct HubView: View {
             Image(systemName: "arrow.clockwise").accessibilityHidden(true)
             Text(model.freshness).lineLimit(1)
             Spacer(minLength: 8)
+            if let offered = model.update.offered {
+                Button { model.page = .preferences } label: {
+                    Label(String(describing: offered.version), systemImage: "arrow.down.circle.fill").foregroundStyle(active)
+                }.buttonStyle(.plain).accessibilityLabel(model.updateOfferText(offered)).help(model.updateOfferText(offered))
+            }
             Button { model.page = .preferences } label: {
                 Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28).contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel(model.text("설정")).help(model.text("설정")).keyboardShortcut(",", modifiers: .command)
@@ -337,6 +346,7 @@ struct HubView: View {
                     Text(model.text(model.loginStatus)).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
+            updateSection
             if model.error != nil || !model.diagnostics.isEmpty {
                 settingsSection("Collection diagnostics", subtitle: "A collection error does not mean your Codex task failed. Check the original terminal for task status.") {
                     if let error = model.error { Text(model.text("Collection error") + ": " + model.text(error)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
@@ -373,6 +383,33 @@ struct HubView: View {
                     .buttonStyle(.bordered).tint(.red).disabled(model.quit == nil)
             }
         }.toggleStyle(.switch).controlSize(.regular)
+    }
+
+    private var updateSection: some View {
+        settingsSection("Updates", subtitle: "Tokloom asks GitHub for new releases. Nothing is installed until you press Update.") {
+            settingsRow("Current version") { Text(model.update.currentVersion ?? "—").monospacedDigit().foregroundStyle(.secondary) }
+            Divider()
+            settingsRow("Check for updates automatically", icon: "arrow.triangle.2.circlepath") {
+                Toggle(isOn: Binding(get: { model.update.autoCheck }, set: { model.setAutoUpdate?($0) })) {
+                    Label(model.text("Check for updates automatically"), systemImage: "arrow.triangle.2.circlepath")
+                }.disabled(model.setAutoUpdate == nil)
+            }
+            Text(model.updateSummary).font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if case .downloading(let fraction) = model.update.phase { ProgressView(value: fraction) }
+            if model.update.offered != nil, let block = model.update.block {
+                Text(model.text(block.message)).font(.system(size: 11)).foregroundStyle(attention).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                if model.update.offered != nil {
+                    Button(model.text("Update")) { model.confirmUpdate = true }.disabled(!model.update.canInstall || model.installUpdate == nil)
+                }
+                Button(model.text("Check for updates")) { model.checkForUpdate?() }
+                    .disabled(model.checkForUpdate == nil || model.update.phase == .checking || model.update.phase.isInstalling)
+                Button(model.text(model.update.offered == nil ? "Releases" : "Release notes")) { model.openReleasePage?() }.disabled(model.openReleasePage == nil)
+            }.buttonStyle(.bordered)
+            connectionNote("A checksum confirms the download is intact, not who published it: Tokloom is not notarized.")
+        }
     }
 
     private func settingsRow<Content: View>(_ label: String, icon: String? = nil, @ViewBuilder content: () -> Content) -> some View {

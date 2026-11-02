@@ -68,6 +68,15 @@ import CodexHubCollector
         try capture(model, "preferences-diagnostics", output, dark: false, height: 1300)
         model.error = nil
         model.diagnostics = []
+        model.update.currentVersion = "1.2.2"
+        model.update.release = fixtureRelease
+        model.update.phase = .available
+        model.checkForUpdate = {}; model.installUpdate = {}; model.setAutoUpdate = { _ in }; model.openReleasePage = {}
+        try capture(model, "preferences-update", output, dark: false, height: 1300)
+        model.update.phase = .downloading(0.4)
+        try capture(model, "preferences-updating", output, dark: true, height: 1300)
+        model.update = UpdateStatus()
+        model.checkForUpdate = nil; model.installUpdate = nil; model.setAutoUpdate = nil; model.openReleasePage = nil
         model.language = .korean
         model.page = .overview
         try set([a,b], verified: [a.key])
@@ -595,7 +604,16 @@ import CodexHubCollector
         hiddenModel.hideUnattached = true
         precondition(hiddenModel.visibleUnattached.isEmpty && hiddenModel.processCount == 0 && hiddenModel.summary == "실행 없음", "UI95 unidentified processes can be hidden")
         try verifyControl()
-        print("PASS UI01–UI126, P01–P06 and CT01–CT10; fixture PNGs: \(output)")
+        for message in UpdateError.allCases.map(\.message) + UpdateInstallBlock.allCases.map(\.message) {
+            precondition(AppLanguage.korean.text(message) != message, "UI127 update message is translated: \(message)")
+        }
+        print("PASS UI01–UI127, P01–P06 and CT01–CT11; fixture PNGs: \(output)")
+    }
+    static var fixtureRelease: UpdateRelease {
+        let base = "https://github.com/codexstatusbar/codexstatusbar/releases"
+        let asset = { (name: String) in #"{"name":"\#(name)","size":100,"state":"uploaded","browser_download_url":"\#(base)/download/1.2.3/\#(name)"}"# }
+        let body = #"{"tag_name":"1.2.3","draft":false,"prerelease":false,"html_url":"\#(base)/tag/1.2.3","assets":[\#(asset(UpdateRules.imageName)),\#(asset(UpdateRules.checksumName))]}"#
+        return try! UpdateRules.parseRelease(Data(body.utf8))!
     }
     /// Runs one socket line through the commands, pumping the main run loop so asynchronous commands can finish.
     @MainActor static func control(_ commands: ControlCommands, _ line: String) -> [String: Any] {
@@ -687,6 +705,42 @@ import CodexHubCollector
         precondition(result(#"{"command":"session","args":{"id":"s@bbbb2222"}}"#)["cwd"] as? String == "/b", "CT10 the row's own id selects it")
         precondition(result(#"{"command":"session","args":{"id":"s@aaaa1111"}}"#)["subagentIDs"] as? [String] == ["agent@aaaa1111"], "CT10 a subagent joins the transcript that ran it")
         precondition(result(#"{"command":"session","args":{"id":"agent@bbbb2222"}}"#)["parentID"] as? String == "s@bbbb2222", "CT10 a subagent names that transcript's row")
+        // Updates: installing is asked for explicitly, a copy that cannot replace itself says why, and failures are failures.
+        let install = #"{"command":"update.install","args":{"confirm":true}}"#
+        model.update = UpdateStatus()
+        model.update.currentVersion = "1.2.2"
+        precondition(Set(result(#"{"command":"update.status"}"#).keys) == Set(ControlCatalog.updateFields.keys), "CT11 updateFields documents exactly what update.status returns")
+        precondition(result(#"{"command":"update.status"}"#).keys.count == (result(#"{"command":"state"}"#)["update"] as? [String: Any])?.count, "CT11 state carries the same status")
+        precondition(result(#"{"command":"update.status"}"#)["autoCheck"] as? Bool == true, "CT11 automatic checks start on")
+        var installs = 0
+        model.installUpdate = { installs += 1; model.update.phase = .restarting }
+        precondition(code(control(commands, #"{"command":"update.install"}"#)) == "confirmation_required", "CT11 installing requires confirm")
+        precondition(code(control(commands, install)) == "unavailable" && installs == 0, "CT11 nothing to install is refused")
+        model.update.release = fixtureRelease
+        model.update.block = .notWritable
+        precondition(code(control(commands, install)) == "unavailable" && installs == 0, "CT11 a blocked copy never starts")
+        precondition(result(#"{"command":"update.status"}"#)["available"] as? Bool == true && result(#"{"command":"update.status"}"#)["canInstall"] as? Bool == false, "CT11 a blocked copy still shows the release")
+        precondition(result(#"{"command":"update.status"}"#)["installBlocked"] is String, "CT11 and says why")
+        model.update.block = nil
+        precondition(result(install)["phase"] as? String == "restarting" && installs == 1, "CT11 a confirmed install replies when the app is about to restart")
+        model.update.phase = .available
+        model.installUpdate = { model.update.phase = .failed(.checksumMismatch) }
+        precondition(code(control(commands, install)) == "failed", "CT11 a failed install is an error")
+        model.update.phase = .available
+        model.installUpdate = { model.update.phase = .downloading(0.5) }
+        precondition(code(control(commands, install)) == "timeout", "CT11 a long download times out and keeps going")
+        precondition(result(#"{"command":"update.status"}"#)["progress"] as? Double == 0.5, "CT11 progress is visible meanwhile")
+        precondition(code(control(commands, install)) == "unavailable", "CT11 one install at a time")
+        model.update.phase = .idle
+        model.checkForUpdate = { model.update.phase = .checking; Task { @MainActor in model.update.phase = .available } }
+        precondition(result(#"{"command":"update.check"}"#)["phase"] as? String == "available", "CT11 update.check waits for the answer")
+        var opened = 0
+        model.openReleasePage = { opened += 1 }
+        _ = result(#"{"command":"update.notes.open"}"#)
+        precondition(opened == 1, "CT11 the notes open through the same action as the button")
+        var automatic: Bool?
+        model.setAutoUpdate = { automatic = $0; model.update.autoCheck = $0 }
+        precondition(result(#"{"command":"settings.set","args":{"autoCheckUpdates":false}}"#)["autoCheckUpdates"] as? Bool == false && automatic == false, "CT11 automatic checks can be turned off")
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

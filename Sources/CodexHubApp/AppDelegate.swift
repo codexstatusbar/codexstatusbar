@@ -8,6 +8,7 @@ import CodexHubCollector
     private let model = HubPresentation()
     private var menu: NativeMenuController?
     private var control: ControlServer?
+    private var updater: AppUpdater?
     private var collector: LogCollector?
     private var claudeCollector: ClaudeCollector?
     private var polling: Task<Void, Never>?
@@ -59,6 +60,8 @@ import CodexHubCollector
                                            running: (RunningCodexProcess.capture() ?? []).filter { !$0.isAppServer }.map(\.codexHome))
         connect(home: URL(fileURLWithPath: path))
         startControl()
+        updater = AppUpdater(model: model, defaults: defaults)
+        updater?.start()
     }
 
     /// Another running Tokloom keeps the socket; this one then simply has none.
@@ -326,6 +329,7 @@ import CodexHubCollector
     }
 
     @objc private func woke(_ notification: Notification) {
+        updater?.woke()
         guard let collector else { return }
         let current = generation
         Task {
@@ -339,6 +343,7 @@ import CodexHubCollector
 
     func applicationWillTerminate(_ notification: Notification) {
         control?.stop()
+        updater?.stop()
         polling?.cancel()
         quotaPolling?.cancel()
         backgroundRefresh?.cancel()

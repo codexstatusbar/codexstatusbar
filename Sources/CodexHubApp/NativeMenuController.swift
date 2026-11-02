@@ -82,6 +82,11 @@ import ServiceManagement
         let open = NSMenuItem(title: model.text("Open"), action: #selector(openFromMenu), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
+        if let offered = model.update.offered {
+            let update = NSMenuItem(title: model.updateOfferText(offered), action: #selector(openUpdateFromMenu), keyEquivalent: "")
+            update.target = self
+            menu.addItem(update)
+        }
         let close = NSMenuItem(title: model.text("닫기"), action: #selector(quitFromMenu), keyEquivalent: "q")
         close.target = self
         close.toolTip = model.text("Quitting Tokloom stops monitoring, not your Codex sessions.")
@@ -91,6 +96,11 @@ import ServiceManagement
 
     @objc private func openFromMenu() {
         DispatchQueue.main.async { [weak self] in self?.showPopover() }
+    }
+
+    @objc private func openUpdateFromMenu() {
+        model.page = .preferences
+        openFromMenu()
     }
 
     @objc private func quitFromMenu() { model.quit?() }

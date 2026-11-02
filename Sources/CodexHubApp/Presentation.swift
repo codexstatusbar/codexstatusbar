@@ -194,6 +194,29 @@ enum MenuWindows: String, CaseIterable {
     var popoverOpen: (() -> Bool)?
     var connectHome: ((URL) -> Void)?
     var quit: (() -> Void)?
+    var update = UpdateStatus()
+    var confirmUpdate = false
+    var checkForUpdate: (() -> Void)?
+    var installUpdate: (() -> Void)?
+    var setAutoUpdate: ((Bool) -> Void)?
+    var openReleasePage: (() -> Void)?
+
+    /// One line about where updating stands, localized.
+    var updateSummary: String {
+        switch update.phase {
+        case .checking: return text("Checking for updates…")
+        case .downloading(let fraction): return text("Downloading update…") + " " + String(Int(fraction * 100)) + "%"
+        case .verifying: return text("Verifying the download…")
+        case .restarting: return text("Restarting to finish the update…")
+        case .failed(let failure): return text(failure.message)
+        case .idle, .upToDate, .available: break
+        }
+        if let offered = update.offered { return updateOfferText(offered) }
+        return text(update.phase == .upToDate ? "Tokloom is up to date." : "Not checked yet.")
+    }
+    func updateOfferText(_ release: UpdateRelease) -> String {
+        language.resolved == .korean ? "새 버전 \(release.version)이 있습니다." : "Version \(release.version) is available."
+    }
 
     private struct UsageAnchor {
         let time: Double

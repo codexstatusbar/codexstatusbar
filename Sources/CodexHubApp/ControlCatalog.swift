@@ -48,7 +48,8 @@ enum ControlCatalog {
         .init(name: "hideIdle", type: "boolean", summary: "Hide idle sessions from the list."),
         .init(name: "hideUnattached", type: "boolean", summary: "Hide processes that could not be matched to a session."),
         .init(name: "startAtLogin", type: "boolean", summary: "Start Tokloom at login. macOS may ask for approval."),
-        .init(name: "retentionDays", type: "integer", choices: retentionChoices.map(String.init), summary: "Days of Tokloom metadata to keep; shorter values delete older metadata.")
+        .init(name: "retentionDays", type: "integer", choices: retentionChoices.map(String.init), summary: "Days of Tokloom metadata to keep; shorter values delete older metadata."),
+        .init(name: "autoCheckUpdates", type: "boolean", summary: "Ask GitHub for new releases at launch and about every 6 hours. Installing always takes update.install or the Update button.")
     ]
 
     static let commands: [ControlCommand] = [
@@ -69,6 +70,11 @@ enum ControlCatalog {
         .init(name: "refresh", kind: "action", summary: "Check the connection now. Waits for the result; a failed check is ok=true with the reason in state.error.", returns: "state."),
         .init(name: "metadata.clear", kind: "destructive", summary: "Delete Tokloom's collected metadata and charts. Original Codex and Claude logs are kept. Waits for the result.",
               args: [.init(name: "confirm", type: "boolean", required: true, summary: "Must be true.")], returns: "state."),
+        .init(name: "update.status", kind: "read", summary: "Current and latest version, and how far an update has come.", returns: "The object described by updateFields."),
+        .init(name: "update.check", kind: "action", summary: "Ask GitHub for the latest release now. Waits for the result; a failed check is ok=true with the reason in error.", returns: "updateFields."),
+        .init(name: "update.install", kind: "destructive", summary: "Download, verify and install the offered release, then quit and restart Tokloom, which ends this socket. A failure leaves the current app as it was. Waits for the download; on timeout it keeps going, so watch update.status.",
+              args: [.init(name: "confirm", type: "boolean", required: true, summary: "Must be true.")], returns: "updateFields with phase restarting."),
+        .init(name: "update.notes.open", kind: "action", summary: "Open the offered release's notes, or the releases page, in the browser.", returns: "updateFields."),
         .init(name: "popover.open", kind: "action", summary: "Open the popover from the menu bar icon. macOS closes it when it loses focus; check popoverOpen.", returns: "state."),
         .init(name: "popover.close", kind: "action", summary: "Close the popover.", returns: "state."),
         .init(name: "page.show", kind: "action", summary: "Choose the popover's page, which works and is kept while it is closed; this does not open it. Pass page, or id for a session's detail page.",
@@ -111,7 +117,19 @@ enum ControlCatalog {
         "settings": "Same as the settings command.", "sessions": "Same as the sessions command.",
         "unattachedProcesses": "Running processes matched to no session: {pid, osStartTime}.",
         "hiddenUnattachedProcesses": "unattachedProcesses are hidden on screen.",
-        "page": "overview, preferences, or {detail: session id}.", "popoverOpen": "The popover is open."
+        "page": "overview, preferences, or {detail: session id}.", "popoverOpen": "The popover is open.",
+        "update": "Same as the update.status command."
+    ]
+
+    static let updateFields: [String: String] = [
+        "phase": "idle, checking, upToDate, available, downloading, verifying, restarting or failed.",
+        "currentVersion": "Version of this app, or null.", "latestVersion": "Latest release known, or null.",
+        "available": "A newer release is offered.", "canInstall": "update.install would start now.",
+        "progress": "Fraction of the download done, or null when not downloading.",
+        "error": "Why the last check or install failed, localized, or null.",
+        "installBlocked": "Why this copy cannot replace itself, localized, or null. The release page still works.",
+        "autoCheck": "Same as the autoCheckUpdates setting.", "lastCheck": "Unix seconds of the last answer from GitHub, or null.",
+        "releaseNotesURL": "Notes of the offered release, otherwise the releases page."
     ]
 
     static let sessionFields: [String: String] = [
@@ -143,7 +161,7 @@ enum ControlCatalog {
                       "success": #"{"id": ..., "ok": true, "result": ...}"#,
                       "failure": #"{"id": ..., "ok": false, "error": {"code": string, "message": string}}"#,
                       "limits": "Requests up to 64 KB, 8 connections at a time."],
-         "conventions": conventions, "errorCodes": errorCodes, "stateFields": stateFields, "sessionFields": sessionFields,
+         "conventions": conventions, "errorCodes": errorCodes, "stateFields": stateFields, "sessionFields": sessionFields, "updateFields": updateFields,
          "commands": commands.map { ["name": $0.name, "kind": $0.kind, "summary": $0.summary, "args": $0.args.map(\.json), "returns": $0.returns] }]
     }
 
@@ -177,7 +195,7 @@ enum ControlCatalog {
         func table(_ title: String, _ fields: [String: String]) -> [String] {
             ["## \(title)", ""] + fields.sorted { $0.key < $1.key }.map { "- `\($0.key)`: \($0.value)" } + [""]
         }
-        lines += table("stateFields", stateFields) + table("sessionFields", sessionFields) + table("Error codes", errorCodes)
+        lines += table("stateFields", stateFields) + table("sessionFields", sessionFields) + table("updateFields", updateFields) + table("Error codes", errorCodes)
         return lines.joined(separator: "\n")
     }
 }

@@ -57,6 +57,15 @@ import CodexHubCollector
             try await settled()
             return state
         case "metadata.clear": return try await clearMetadata(args)
+        case "update.status": return updateStatus
+        case "update.check":
+            try perform(model.checkForUpdate, "update.check", whileBusy: true)
+            try await settled { [model] in model.update.phase == .checking }
+            return updateStatus
+        case "update.install": return try await installUpdate(args)
+        case "update.notes.open":
+            try perform(model.openReleasePage, "update.notes.open", whileBusy: true)
+            return updateStatus
         case "popover.open":
             try perform(model.open, "popover.open", whileBusy: true)
             return state
@@ -120,6 +129,17 @@ import CodexHubCollector
         return state
     }
 
+    private func installUpdate(_ args: [String: Any]) async throws -> Any {
+        // The screen asks before quitting; a request has to say so itself.
+        guard args["confirm"].flatMap(Self.bool) == true else { throw Failure("confirmation_required", "Pass confirm=true to install the update and restart Tokloom.") }
+        if let block = model.update.block { throw Failure("unavailable", model.text(block.message)) }
+        guard model.update.canInstall else { throw Failure("unavailable", "No update can be installed now. See update.status.") }
+        try perform(model.installUpdate, "update.install", whileBusy: true)
+        try await settled { [model] in model.update.phase.isInstalling && model.update.phase != .restarting }
+        if case .failed(let failure) = model.update.phase { throw Failure("failed", model.text(failure.message)) }
+        return updateStatus
+    }
+
     private func setSettings(_ args: [String: Any]) async throws -> Any {
         guard !args.isEmpty else { throw Failure("invalid_argument", "Pass at least one setting.") }
         // Everything is checked first, so a bad value changes nothing.
@@ -172,6 +192,9 @@ import CodexHubCollector
         case "retentionDays":
             let days = try retention(value)
             return { [model] in model.updateRetention?(days) }
+        case "autoCheckUpdates":
+            let enabled = try flag(value, key)
+            return { [model] in model.setAutoUpdate?(enabled) }
         default:
             throw Failure("invalid_argument", "Unknown setting \(key).")
         }
@@ -239,7 +262,29 @@ import CodexHubCollector
         ["language": model.language.rawValue, "rateUnit": model.rateUnit.rawValue,
          "menuSpeed": model.menuSpeed.rawValue, "menuUsage": model.menuUsage.rawValue, "menuWindows": model.menuWindows.rawValue,
          "menuShowsReset": model.menuShowsReset, "hideIdle": model.hideIdle, "hideUnattached": model.hideUnattached,
-         "startAtLogin": model.startAtLogin, "loginStatus": model.text(model.loginStatus), "retentionDays": model.retentionDays]
+         "startAtLogin": model.startAtLogin, "loginStatus": model.text(model.loginStatus), "retentionDays": model.retentionDays,
+         "autoCheckUpdates": model.update.autoCheck]
+    }
+
+    private var updateStatus: [String: Any] {
+        let update = model.update
+        let phase: String
+        var progress: Double?, failure: String?
+        switch update.phase {
+        case .idle: phase = "idle"
+        case .checking: phase = "checking"
+        case .upToDate: phase = "upToDate"
+        case .available: phase = "available"
+        case .downloading(let done): phase = "downloading"; progress = done
+        case .verifying: phase = "verifying"
+        case .restarting: phase = "restarting"
+        case .failed(let error): phase = "failed"; failure = model.text(error.message)
+        }
+        return ["phase": phase, "currentVersion": Self.value(update.currentVersion), "latestVersion": Self.value(update.release.map { String(describing: $0.version) }),
+                "available": update.offered != nil, "canInstall": update.canInstall, "progress": Self.number(progress), "error": Self.value(failure),
+                "installBlocked": Self.value(update.block.map { model.text($0.message) }), "autoCheck": update.autoCheck,
+                "lastCheck": Self.number(update.lastCheck?.timeIntervalSince1970),
+                "releaseNotesURL": (update.offered?.notesURL ?? UpdateRules.releasesPageURL).absoluteString]
     }
 
     private var state: [String: Any] {
@@ -260,7 +305,7 @@ import CodexHubCollector
                 "quotas": model.quotas.map(json), "credits": model.credits.map(json), "settings": settings,
                 "sessions": model.sessions.map(json),
                 "unattachedProcesses": model.unattachedProcesses.map(json), "hiddenUnattachedProcesses": model.hideUnattached,
-                "page": pageName, "popoverOpen": model.popoverOpen?() ?? false]
+                "page": pageName, "popoverOpen": model.popoverOpen?() ?? false, "update": updateStatus]
     }
 
     private var pageName: Any {
