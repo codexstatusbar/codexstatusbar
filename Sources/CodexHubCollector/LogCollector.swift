@@ -105,6 +105,9 @@ public actor LogCollector {
     private var polling: Task<Void, Never>?
     private var lastFrame = 0.0
     private var recovering: Set<String>
+    /// By path, what a file looked like when a pass over it last found nothing to do.
+    private var settled: [String: FileStamp] = [:]
+    var settledFiles: Int { settled.count }
     private let maximumRead = 1_048_576
     private let maximumLine = 262_144
     private let maximumFile: Int64 = 268_435_456
@@ -197,38 +200,58 @@ public actor LogCollector {
         func diagnose(_ diagnostic: CollectorDiagnostic) {
             if nextDiagnostics.count < 100 { nextDiagnostics.append(diagnostic) }
         }
-        var inputs: [String] = []
+        var inputs: [(path: String, stamp: FileStamp)] = []
         do {
             let listing = try source.logPaths(subdirectory: "sessions")
             if listing.rejected { diagnose(CollectorDiagnostic(fileIdentity: nil, error: .unsafePath)) }
-            inputs = listing.paths
+            inputs = listing.files
         } catch {
             diagnose(CollectorDiagnostic(fileIdentity: nil, error: (error as? CollectorError) ?? .inaccessibleSource))
         }
+        let gap = lastFrame > 0 && now - lastFrame > 5
+        let oldest = wall - Double(policy.days) * 86400
         var seen: Set<String> = []
-        for relative in inputs {
+        var nextSettled: [String: FileStamp] = [:]
+        for (relative, listed) in inputs {
+            if settled[relative] == listed, !gap, !recovering.contains(listed.fileID) {
+                let id = listed.fileID
+                if min(wall, Double(listed.modifiedSeconds)) < oldest {
+                    seen.insert(id)
+                    nextSettled[relative] = listed
+                    nextStates.removeValue(forKey: id); nextMonitors.removeValue(forKey: id)
+                    continue
+                }
+                // A monitor set back by the last pass needs the pass that reconnects it.
+                if nextStates[id] != nil, (nextMonitors[id]?.connectivity ?? .connected) == .connected {
+                    seen.insert(id)
+                    nextSettled[relative] = listed
+                    continue
+                }
+            }
             var identity: String?
             do {
                 let fd = try source.openFile(relative)
                 defer { close(fd) }
                 var info = stat()
                 guard fstat(fd, &info) == 0 else { throw CollectorError.inaccessibleSource }
-                let id = "\(info.st_dev):\(info.st_ino)"
+                let stamp = FileStamp(info)
+                let id = stamp.fileID
                 identity = id
                 seen.insert(id)
                 // Rollouts can grow indefinitely; maximumRead and maximumLine bound each pass.
                 let modified = min(wall, Double(info.st_mtimespec.tv_sec))
-                guard modified >= wall - Double(policy.days) * 86400 else {
+                guard modified >= oldest else {
                     nextStates.removeValue(forKey: id); nextMonitors.removeValue(forKey: id)
+                    if stamp.isSettled(wall: wall) { nextSettled[relative] = stamp }
                     continue
                 }
                 let replacedIDs = nextStates.filter { $0.key != id && $0.value.path == relative }.map(\.key)
                 for replaced in replacedIDs { nextStates.removeValue(forKey: replaced); nextMonitors.removeValue(forKey: replaced) }
                 // A file that appears between two polls is starting now, unlike what the first scan or a long gap finds.
-                let appeared = nextStates[id] == nil && replacedIDs.isEmpty && lastFrame > 0 && now - lastFrame <= 5
+                let appeared = nextStates[id] == nil && replacedIDs.isEmpty && lastFrame > 0 && !gap
                 var state = nextStates[id] ?? FileState(path: relative, historicalUntil: info.st_size, updated: modified, hasGap: !replacedIDs.isEmpty)
                 var monitor = nextMonitors[id]
-                if recovering.contains(id) || monitor?.connectivity == .disconnected || (lastFrame > 0 && now - lastFrame > 5) {
+                if recovering.contains(id) || monitor?.connectivity == .disconnected || gap {
                     state.historicalUntil = info.st_size
                     state.hasGap = true
                     state.requestTiming = nil
@@ -352,6 +375,10 @@ public actor LogCollector {
                 if consumed > 0 { state.updated = modified }
                 nextStates[id] = state
                 if let monitor { nextMonitors[id] = monitor }
+                // Only a pass that consumed nothing has seen everything; a held oversized line reports on every pass.
+                if consumed == 0, state.discardingOversizedLine != true, FileStamp(after) == stamp, stamp.isSettled(wall: wall) {
+                    nextSettled[relative] = stamp
+                }
             } catch {
                 diagnose(CollectorDiagnostic(fileIdentity: identity, error: (error as? CollectorError) ?? .inaccessibleSource))
                 if let id = identity {
@@ -372,6 +399,7 @@ public actor LogCollector {
         }
         states = nextStates
         monitors = nextMonitors
+        settled = nextSettled
         recovering.removeAll()
         diagnostics = Array(nextDiagnostics.prefix(100))
         lastFrame = now

@@ -19,6 +19,31 @@ public enum CollectorError: Error, Equatable, Sendable {
     }
 }
 
+/// How a file looked, compared to tell that reading it again would find nothing new. The inode catches a replaced
+/// file and the change time a rewrite that restored its size and modification time.
+struct FileStamp: Equatable, Sendable {
+    private let device: Int32, inode: UInt64, size: Int64
+    private let modified: timespec, changed: timespec
+
+    init(_ info: stat) {
+        device = info.st_dev; inode = info.st_ino; size = info.st_size
+        modified = info.st_mtimespec; changed = info.st_ctimespec
+    }
+
+    var fileID: String { "\(device):\(inode)" }
+    var modifiedSeconds: Int { modified.tv_sec }
+
+    /// Timestamps are as coarse as two seconds on some volumes, so a write right after a read can leave the stamp
+    /// as it was; only a file quiet for longer than that can be trusted to change its stamp on the next write.
+    func isSettled(wall: Double) -> Bool { Double(max(modified.tv_sec, changed.tv_sec)) < wall - 2 }
+
+    static func == (a: Self, b: Self) -> Bool {
+        a.device == b.device && a.inode == b.inode && a.size == b.size
+            && a.modified.tv_sec == b.modified.tv_sec && a.modified.tv_nsec == b.modified.tv_nsec
+            && a.changed.tv_sec == b.changed.tv_sec && a.changed.tv_nsec == b.changed.tv_nsec
+    }
+}
+
 final class SafeDirectory: @unchecked Sendable {
     let fd: Int32
     let url: URL
@@ -68,16 +93,19 @@ final class SafeDirectory: @unchecked Sendable {
         return file
     }
 
-    func logPaths(subdirectory: String = "sessions") throws -> (paths: [String], rejected: Bool) {
+    /// Every log with its stamp. The walk re-checks each folder and entry on every call, so a stamp from here is
+    /// as current as opening the file and can decide that it need not be opened.
+    func logPaths(subdirectory: String = "sessions") throws -> (files: [(path: String, stamp: FileStamp)], rejected: Bool) {
         let sessions = subdirectory.isEmpty ? dup(fd) : openat(fd, subdirectory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard sessions >= 0 else { throw CollectorError.inaccessibleSource }
         defer { close(sessions) }
-        var paths: [String] = []
+        var files: [(path: String, stamp: FileStamp)] = []
         var rejected = false
         var entries = 0
+        let user = getuid()
         func walk(_ parent: Int32, prefix: String, depth: Int) throws {
             var owner = stat()
-            guard fstat(parent, &owner) == 0, owner.st_uid == getuid(), !requirePrivate || owner.st_mode & 0o077 == 0 else { throw CollectorError.unsafePath }
+            guard fstat(parent, &owner) == 0, owner.st_uid == user, !requirePrivate || owner.st_mode & 0o077 == 0 else { throw CollectorError.unsafePath }
             guard depth <= 16, let directory = fdopendir(dup(parent)) else { throw CollectorError.oversizedRecord }
             defer { closedir(directory) }
             while let entry = readdir(directory) {
@@ -89,18 +117,18 @@ final class SafeDirectory: @unchecked Sendable {
                 if name == "." || name == ".." { continue }
                 var info = stat()
                 guard fstatat(parent, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { rejected = true; continue }
-                if info.st_uid != getuid() || info.st_mode & S_IFMT == S_IFLNK || (requirePrivate && info.st_mode & 0o077 != 0) { rejected = true; continue }
+                if info.st_uid != user || info.st_mode & S_IFMT == S_IFLNK || (requirePrivate && info.st_mode & 0o077 != 0) { rejected = true; continue }
                 let path = prefix.isEmpty ? name : prefix + "/" + name
                 if info.st_mode & S_IFMT == S_IFDIR {
                     let child = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
                     guard child >= 0 else { rejected = true; continue }
                     defer { close(child) }
                     do { try walk(child, prefix: path, depth: depth + 1) } catch { rejected = true }
-                } else if name.hasSuffix(".jsonl") { paths.append(path) }
+                } else if name.hasSuffix(".jsonl") { files.append((path, FileStamp(info))) }
             }
         }
         try walk(sessions, prefix: subdirectory, depth: 0)
-        return (paths.sorted(), rejected)
+        return (files.sorted { $0.path < $1.path }, rejected)
     }
 
     func validateMetadataFiles() throws {

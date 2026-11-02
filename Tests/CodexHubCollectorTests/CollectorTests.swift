@@ -41,6 +41,108 @@ private final class Sandbox {
     }
 }
 private let meta = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-a\",\"cwd\":\"/project\"}}\n"
+
+private final class LockedDouble: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Double
+    init(_ value: Double) { stored = value }
+    var value: Double {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
+}
+
+private extension Sandbox {
+    /// Its clock runs ahead of the files', so a file settles without the test waiting. A file only counts as settled
+    /// after a pass that consumed nothing, which is the second one.
+    func settledCollector() throws -> LogCollector {
+        try LogCollector(codexHome: home, metadataDirectory: metadata, monotonic: { 100 }, wallTime: { Date().timeIntervalSince1970 + 10 })
+    }
+    func settle(_ collector: LogCollector) async throws {
+        _ = try await collector.refresh()
+        _ = try await collector.refresh()
+        #expect(await collector.settledFiles == 1)
+    }
+    func modified(_ date: Date) throws { try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: log.path) }
+    func modificationDate() throws -> Date { try FileManager.default.attributesOfItem(atPath: log.path)[.modificationDate] as! Date }
+}
+
+@Test func S260ASettledFileIsReadAgainTheMomentItGrows() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.settledCollector(); try await s.settle(c)
+    try s.append(start("live") + usage(200))
+    let grown = try await c.refresh()
+    #expect(grown.sessions[0].monitor.counter.baseline?.outputTokens == 200)
+    #expect(await c.settledFiles == 0)
+}
+
+@Test func S261ARewriteThatRestoresSizeAndModificationTimeIsStillNoticed() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.settledCollector(); try await s.settle(c)
+    let date = try s.modificationDate()
+    try s.write(meta + usage(200))
+    try s.modified(date)
+    let rewritten = try await c.refresh()
+    #expect(rewritten.sessions[0].hasGap)
+    #expect(rewritten.sessions[0].monitor.counter.baseline?.outputTokens == 200)
+}
+
+@Test func S262AReplacedFileOfTheSameShapeIsTreatedAsNew() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.settledCollector(); try await s.settle(c)
+    let date = try s.modificationDate()
+    let replacement = s.root.appendingPathComponent("replacement")
+    try Data((meta + usage(200)).utf8).write(to: replacement)
+    try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: replacement.path)
+    _ = try FileManager.default.replaceItemAt(s.log, withItemAt: replacement)
+    let replaced = try await c.refresh()
+    #expect(replaced.sessions.count == 1)
+    #expect(replaced.sessions[0].monitor.counter.baseline?.outputTokens == 200)
+}
+
+@Test func S263ASettledFileStillExpiresAndAResumedOneComesBack() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let clock = LockedDouble(Date().timeIntervalSince1970 + 10)
+    let c = try LogCollector(codexHome: s.home, metadataDirectory: s.metadata, monotonic: { 100 }, wallTime: { clock.value })
+    try await s.settle(c)
+    clock.value += 8 * 86400
+    #expect(try await c.refresh().sessions.isEmpty)
+    #expect(await c.settledFiles == 1)      // an expired file is not opened again either
+    #expect(try await c.refresh().sessions.isEmpty)
+    try s.append(usage(200))
+    try s.modified(Date(timeIntervalSince1970: clock.value))
+    let resumed = try await c.refresh()
+    #expect(resumed.sessions.count == 1)
+    #expect(resumed.sessions[0].monitor.counter.baseline?.outputTokens == 200)
+}
+
+@Test func S264AnObservationGapStillReachesASettledFile() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let time = LockedDouble(100)
+    let c = try LogCollector(codexHome: s.home, metadataDirectory: s.metadata, monotonic: { time.value }, wallTime: { Date().timeIntervalSince1970 + 10 })
+    try await s.settle(c)
+    time.value += 6
+    #expect(try await c.refresh().sessions[0].hasGap)
+}
+
+@Test func S265ASettledFileThatLeavesAndComesBackReconnects() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    let c = try s.settledCollector(); try await s.settle(c)
+    let aside = s.root.appendingPathComponent("aside")
+    try FileManager.default.moveItem(at: s.log, to: aside)
+    #expect(try await c.refresh().sessions.first?.monitor.connectivity == .disconnected)
+    #expect(await c.settledFiles == 0)
+    try FileManager.default.moveItem(at: aside, to: s.log)
+    #expect(try await c.refresh().sessions.first?.monitor.connectivity == .connected)
+}
+
+@Test func S266AHeldOversizedLineKeepsReportingOnASettledFile() async throws {
+    let s = try Sandbox(); try s.write(meta + usage(100))
+    try s.append(String(repeating: "x", count: 300_000))
+    let c = try s.settledCollector()
+    for _ in 0..<3 { #expect(try await c.refresh().diagnostics.contains { $0.error == .oversizedRecord }) }
+    #expect(await c.settledFiles == 0)
+}
 private func start(_ id: String) -> String { "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"\(id)\"}}\n" }
 private func complete(_ id: String) -> String { "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"\(id)\",\"last_agent_message\":\"PRIVATE_SENTINEL\"}}\n" }
 private func usage(_ n: Int) -> String { "{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"output_tokens\":\(n)},\"last_token_usage\":{\"output_tokens\":999999}}}}\n" }
