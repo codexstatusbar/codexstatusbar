@@ -107,6 +107,15 @@ struct UsageHistoryPoint: Identifiable, Equatable {
     var id: Double { time }
 }
 
+/// How often the chart archive is looked at. Quitting and changing home write what is left, so all a crash can
+/// lose is this much of the chart.
+struct ChartSaveSchedule {
+    static let interval: Double = 30
+    private var last: Double?
+    func isDue(at time: Double) -> Bool { last.map { time - $0 >= Self.interval } ?? true }
+    mutating func checked(at time: Double) { last = time }
+}
+
 enum HubPage: Hashable { case overview, detail(ThreadKey), preferences }
 
 /// What the menu bar shows for speed; the per-provider rates split the combined one.

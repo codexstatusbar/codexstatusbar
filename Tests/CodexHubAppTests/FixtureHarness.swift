@@ -11,6 +11,7 @@ import CodexHubCollector
         let output = CommandLine.arguments.dropFirst().first ?? "/tmp/codex-hub-ui"
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         try verifyRunningProcesses()
+        try verifyPublishing()
         let model = HubPresentation()
         model.language = .korean
         var a = ThreadMonitor(key: .init(homeID: "fixture-home", runID: nil, threadID: "fixture-a"), source: .rolloutLog, epoch: "fixture", verifiedEmptyThread: true)
@@ -607,7 +608,7 @@ import CodexHubCollector
         for message in UpdateError.allCases.map(\.message) + UpdateInstallBlock.allCases.map(\.message) {
             precondition(AppLanguage.korean.text(message) != message, "UI127 update message is translated: \(message)")
         }
-        print("PASS UI01–UI127, P01–P06 and CT01–CT11; fixture PNGs: \(output)")
+        print("PASS UI01–UI127, P01–P06, PB40–PB53 and CT01–CT11; fixture PNGs: \(output)")
     }
     static var fixtureRelease: UpdateRelease {
         let base = "https://github.com/codexstatusbar/codexstatusbar/releases"
@@ -741,6 +742,12 @@ import CodexHubCollector
         var automatic: Bool?
         model.setAutoUpdate = { automatic = $0; model.update.autoCheck = $0 }
         precondition(result(#"{"command":"settings.set","args":{"autoCheckUpdates":false}}"#)["autoCheckUpdates"] as? Bool == false && automatic == false, "CT11 automatic checks can be turned off")
+    }
+    @MainActor static func verifyPublishing() throws {
+        var saves = ChartSaveSchedule(), checks = 0
+        for second in 0...300 where saves.isDue(at: Double(second)) { saves.checked(at: Double(second)); checks += 1 }
+        precondition(checks == 11, "PB50 the chart archive is looked at twice a minute, not every second")
+
     }
     @MainActor static func verifyRunningProcesses() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

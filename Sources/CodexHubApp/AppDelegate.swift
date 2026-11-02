@@ -17,6 +17,8 @@ import CodexHubCollector
     private var generation = 0
     private var savedChartHistory: [ThreadKey: [UsageHistoryPoint]]?
     private var chartHomePath = ""
+    private var chartSaves = ChartSaveSchedule()
+    private var terminating = false
     private let defaults = UserDefaults.standard
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -99,12 +101,14 @@ import CodexHubCollector
         generation += 1
         let current = generation
         var previous = collector
+        let unsavedChart = try? chartArchive()?.data
         collector = nil
         claudeCollector = ClaudeCollector(claudeHome: ClaudeCollector.defaultHome())
         model.canManageMetadata = false
         model.sessions = []
         model.restoreUsageHistory([:])
         savedChartHistory = nil
+        chartSaves = ChartSaveSchedule()
         model.historyError = nil
         model.unattachedProcesses = []
         model.frame = nil
@@ -127,6 +131,7 @@ import CodexHubCollector
         model.checkingConnection = true
         polling = Task { [weak self] in
             guard let self else { return }
+            if let unsavedChart { try? await previous?.saveChartHistory(unsavedChart) }
             await previous?.shutdown()
             previous = nil
             do {
@@ -246,19 +251,32 @@ import CodexHubCollector
         }.sorted()
         model.refreshedAt = Date()
         model.error = nil
+        let now = ProcessInfo.processInfo.systemUptime
+        if chartSaves.isDue(at: now) {
+            chartSaves.checked(at: now)
+            await saveChartHistory()
+        }
+    }
+
+    /// The archive to write and what it holds, or nil when the saved one is current.
+    private func chartArchive() throws -> (data: Data, history: [ThreadKey: [UsageHistoryPoint]])? {
+        guard collector != nil else { return nil }
         // The archive is scoped to the Codex home and also carries Claude rows, which use their own claude: home.
-        let persisted = model.usageHistory.filter { UsageHistoryArchive.isPersisted($0.key, home: chartHomePath) }
-        if savedChartHistory != persisted, let collector {
-            let history = persisted
-            do {
-                let data = try UsageHistoryArchive.encode(history, home: chartHomePath, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970)
-                try await collector.saveChartHistory(data)
-                guard generation == current else { return }
-                savedChartHistory = history
-                model.historyError = nil
-            } catch {
-                if generation == current { model.historyError = "관측 차트를 저장하지 못했습니다. 현재 관측은 계속됩니다." }
-            }
+        let history = model.usageHistory.filter { UsageHistoryArchive.isPersisted($0.key, home: chartHomePath) }
+        guard savedChartHistory != history else { return nil }
+        return (try UsageHistoryArchive.encode(history, home: chartHomePath, monotonic: ProcessInfo.processInfo.systemUptime, wall: Date().timeIntervalSince1970), history)
+    }
+
+    private func saveChartHistory() async {
+        let current = generation
+        do {
+            guard let collector, let archive = try chartArchive() else { return }
+            try await collector.saveChartHistory(archive.data)
+            guard generation == current else { return }
+            savedChartHistory = archive.history
+            model.historyError = nil
+        } catch {
+            if generation == current { model.historyError = "관측 차트를 저장하지 못했습니다. 현재 관측은 계속됩니다." }
         }
     }
 
@@ -339,6 +357,28 @@ import CodexHubCollector
                 refresh()
             } catch { if generation == current { collectionFailed(error) } }
         }
+    }
+
+    /// Chart points wait for the next scheduled save, so write them before leaving. A collector stuck in a slow
+    /// read must not keep the app from quitting.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard (try? chartArchive()) != nil else { return .terminateNow }
+        terminating = true
+        Task {
+            await saveChartHistory()
+            finishTerminating(sender)
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            finishTerminating(sender)
+        }
+        return .terminateLater
+    }
+
+    private func finishTerminating(_ sender: NSApplication) {
+        guard terminating else { return }
+        terminating = false
+        sender.reply(toApplicationShouldTerminate: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
