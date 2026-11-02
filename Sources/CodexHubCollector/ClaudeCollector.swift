@@ -89,6 +89,10 @@ public actor ClaudeCollector {
         /// Input of the latest request (input + cache reads + cache writes), like Claude Code's own context gauge.
         var contextTokens: Int?
         var updated: Double
+        /// What the transcript looked like when everything in it had been read, once it has been quiet long enough to trust.
+        var settled: FileStamp?
+        /// The subagent's meta file and the `finished` it held.
+        var meta: (stamp: FileStamp, finished: Bool?)?
 
         init(id: String, path: String, fileID: String, process: ProcessIdentity, root: Bool, parent: String? = nil, epoch: String, monitor: ThreadMonitor, updated: Double) {
             self.epoch = epoch; self.id = id; self.path = path; self.fileID = fileID; self.process = process
@@ -101,6 +105,7 @@ public actor ClaudeCollector {
     private let processStart: @Sendable (Int32) -> (identity: ProcessIdentity, seconds: Double)?
     private let iso = ISO8601DateFormatter()
     private var tracked: [String: Tracked] = [:]
+    var settledFiles: Int { tracked.values.filter { $0.settled != nil }.count }
     /// Transcripts the bounded scan found, by session and working directory, so a live session is not scanned for every refresh.
     private var scanned: [String: String] = [:]
     private var lastFrame = 0.0
@@ -435,27 +440,43 @@ public actor ClaudeCollector {
     /// like a Codex auxiliary session: its tokens and speed are not added to the parent's.
     private func trackSubagents(_ directory: SafeDirectory, parent: Tracked, entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> [(tracked: Tracked, listed: Bool)] {
         let folder = String(parent.path.dropLast(".jsonl".count)) + "/subagents"
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent(folder).path)) ?? [])
-            .filter { $0.hasPrefix("agent-") && $0.hasSuffix(".jsonl") && !$0.contains("/") }.sorted().prefix(maximumSubagents)
+        guard let listing = try? directory.openDirectory(folder) else { return [] }
+        defer { close(listing) }
+        let names = directory.names(in: listing)
+            .filter { $0.hasPrefix("agent-") && $0.hasSuffix(".jsonl") }.sorted().prefix(maximumSubagents)
         return names.compactMap { name in
             let agent = String(name.dropFirst("agent-".count).dropLast(".jsonl".count))
             guard !agent.isEmpty else { return nil }
-            return trackSubagent(directory, folder: folder, name: name, agent: agent, parent: parent, entry: entry, now: now, wall: wall, gap: gap, parentWatched: parentWatched)
+            return trackSubagent(directory, folder: folder, listing: listing, name: name, agent: agent, parent: parent, entry: entry, now: now, wall: wall, gap: gap, parentWatched: parentWatched)
                 .map { (tracked: $0.tracked, listed: $0.listed) }
         }
     }
 
-    private func trackSubagent(_ directory: SafeDirectory, folder: String, name: String, agent: String, parent: Tracked,
+    private func trackSubagent(_ directory: SafeDirectory, folder: String, listing: Int32, name: String, agent: String, parent: Tracked,
                                entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> (tracked: Tracked, listed: Bool)? {
         let key = parent.id + "/" + agent
-        guard let fd = try? directory.openFile(folder + "/" + name) else { tracked.removeValue(forKey: key); return nil }
-        defer { close(fd) }
-        var info = stat()
-        guard fstat(fd, &info) == 0 else { return nil }
+        guard var info = directory.fileInfo(name, in: listing) else { tracked.removeValue(forKey: key); return nil }
+        let t: Tracked
+        if let known = tracked[key], !gap, known.settled == FileStamp(info) {
+            t = known
+            t.historicalPass = false
+        } else {
+            guard let fd = try? directory.openFile(folder + "/" + name) else { tracked.removeValue(forKey: key); return nil }
+            defer { close(fd) }
+            guard fstat(fd, &info) == 0, let read = readSubagent(fd, info: info, key: key, folder: folder, name: name, agent: agent, parent: parent,
+                                                                 entry: entry, now: now, wall: wall, gap: gap, parentWatched: parentWatched) else { return nil }
+            t = read
+        }
         let modified = Double(info.st_mtimespec.tv_sec)
-        let finished = subagentFinished(directory, folder: folder, name: name, modified: modified, wall: wall)
+        let finished = subagentFinished(t, directory, folder: folder, listing: listing, name: name, modified: modified, wall: wall)
         // A finished subagent untouched for a while leaves the list but stays tracked: its tokens still belong to the session.
         let listed = !(finished && modified < wall - subagentWindow)
+        guard (try? apply(t, status: finished ? "idle" : "busy", now: now)) != nil else { tracked.removeValue(forKey: key); return nil }
+        return (t, listed)
+    }
+
+    private func readSubagent(_ fd: Int32, info: stat, key: String, folder: String, name: String, agent: String, parent: Tracked,
+                              entry: Entry, now: Double, wall: Double, gap: Bool, parentWatched: Bool) -> Tracked? {
         let fileID = "\(info.st_dev):\(info.st_ino)", size = Int64(info.st_size)
         var session = tracked[key]
         if let current = session, current.fileID != fileID || size < current.offset { session = nil }
@@ -482,20 +503,26 @@ public actor ClaudeCollector {
         let before = t.offset
         pump(t, fd: fd, size: size)
         if t.offset != before { t.updated = wall }
-        guard (try? apply(t, status: finished ? "idle" : "busy", now: now)) != nil else { tracked.removeValue(forKey: key); return nil }
-        return (t, listed)
+        let stamp = FileStamp(info)
+        t.settled = t.offset == size && stamp.isSettled(wall: wall) ? stamp : nil
+        return t
     }
 
     /// The meta file says it outright; without one, a transcript that stopped growing counts as finished.
-    private func subagentFinished(_ directory: SafeDirectory, folder: String, name: String, modified: Double, wall: Double) -> Bool {
-        let meta = folder + "/" + String(name.dropLast(".jsonl".count)) + ".meta.json"
-        if let fd = try? directory.openFile(meta) {
+    private func subagentFinished(_ t: Tracked, _ directory: SafeDirectory, folder: String, listing: Int32, name: String, modified: Double, wall: Double) -> Bool {
+        let stopped = wall - modified > 120
+        let meta = String(name.dropLast(".jsonl".count)) + ".meta.json"
+        guard let info = directory.fileInfo(meta, in: listing) else { t.meta = nil; return stopped }
+        let stamp = FileStamp(info)
+        if let known = t.meta, known.stamp == stamp { return known.finished ?? stopped }
+        var finished: Bool?
+        if let fd = try? directory.openFile(folder + "/" + meta) {
             defer { close(fd) }
             if let data = readChunk(fd, at: 0, limit: 16_384),
-               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let finished = object["finished"] as? Bool { return finished }
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { finished = object["finished"] as? Bool }
         }
-        return wall - modified > 120
+        t.meta = stamp.isSettled(wall: wall) ? (stamp, finished) : nil
+        return finished ?? stopped
     }
 
     private func snapshot(_ t: Tracked, subagentUsage: TokenUsage? = nil) -> SessionSnapshot {

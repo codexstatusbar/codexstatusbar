@@ -68,29 +68,69 @@ final class SafeDirectory: @unchecked Sendable {
 
     // Read-only source logs may be hardlinked; writable private metadata must have one link.
     func openFile(_ relative: String) throws -> Int32 {
-        let parts = relative.split(separator: "/", omittingEmptySubsequences: false)
-        guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { throw CollectorError.unsafePath }
-        var parent = dup(fd)
-        guard parent >= 0 else { throw CollectorError.inaccessibleSource }
+        let parts = try components(relative)
+        let parent = try openFolder(parts.dropLast())
         defer { close(parent) }
-        for part in parts.dropLast() {
-            let next = openat(parent, String(part), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-            guard next >= 0 else { throw CollectorError.unsafePath }
-            var info = stat()
-            guard fstat(next, &info) == 0, info.st_uid == getuid(), !requirePrivate || info.st_mode & 0o077 == 0 else { close(next); throw CollectorError.unsafePath }
-            close(parent)
-            parent = next
-        }
         let file = openat(parent, String(parts.last!), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
         guard file >= 0 else { throw CollectorError.unsafePath }
         var info = stat()
-        guard fstat(file, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-              info.st_uid == getuid(),
-              !requirePrivate || (info.st_nlink == 1 && info.st_mode & 0o077 == 0) else {
+        guard fstat(file, &info) == 0, isSafeFile(info) else {
             close(file)
             throw CollectorError.unsafePath
         }
         return file
+    }
+
+    /// A folder below the root, every step checked like the way to a file `openFile` opens. The caller closes it.
+    func openDirectory(_ relative: String) throws -> Int32 { try openFolder(components(relative)[...]) }
+
+    /// The names in an open folder, which keeps its descriptor unmoved.
+    func names(in folder: Int32) -> [String] {
+        guard let directory = fdopendir(dup(folder)) else { return [] }
+        defer { closedir(directory) }
+        var names: [String] = []
+        while let entry = readdir(directory) {
+            let name = Self.name(of: entry)
+            if name != "." && name != ".." { names.append(name) }
+        }
+        return names
+    }
+
+    /// What `openFile` would find at a name in a folder, without opening it; nil when it would refuse the file.
+    func fileInfo(_ name: String, in folder: Int32) -> stat? {
+        var info = stat()
+        return fstatat(folder, name, &info, AT_SYMLINK_NOFOLLOW) == 0 && isSafeFile(info) ? info : nil
+    }
+
+    private func components(_ relative: String) throws -> [Substring] {
+        let parts = relative.split(separator: "/", omittingEmptySubsequences: false)
+        guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { throw CollectorError.unsafePath }
+        return parts
+    }
+
+    private func openFolder(_ parts: ArraySlice<Substring>) throws -> Int32 {
+        var parent = dup(fd)
+        guard parent >= 0 else { throw CollectorError.inaccessibleSource }
+        for part in parts {
+            let next = openat(parent, String(part), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            close(parent)
+            guard next >= 0 else { throw CollectorError.unsafePath }
+            var info = stat()
+            guard fstat(next, &info) == 0, info.st_uid == getuid(), !requirePrivate || info.st_mode & 0o077 == 0 else { close(next); throw CollectorError.unsafePath }
+            parent = next
+        }
+        return parent
+    }
+
+    private func isSafeFile(_ info: stat) -> Bool {
+        info.st_mode & S_IFMT == S_IFREG && info.st_uid == getuid()
+            && (!requirePrivate || (info.st_nlink == 1 && info.st_mode & 0o077 == 0))
+    }
+
+    private static func name(of entry: UnsafeMutablePointer<dirent>) -> String {
+        withUnsafePointer(to: &entry.pointee.d_name) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXNAMLEN) + 1) { String(cString: $0) }
+        }
     }
 
     /// Every log with its stamp. The walk re-checks each folder and entry on every call, so a stamp from here is
@@ -111,9 +151,7 @@ final class SafeDirectory: @unchecked Sendable {
             while let entry = readdir(directory) {
                 entries += 1
                 guard entries <= 20_000 else { throw CollectorError.oversizedRecord }
-                let name = withUnsafePointer(to: &entry.pointee.d_name) {
-                    $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXNAMLEN) + 1) { String(cString: $0) }
-                }
+                let name = Self.name(of: entry)
                 if name == "." || name == ".." { continue }
                 var info = stat()
                 guard fstatat(parent, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { rejected = true; continue }

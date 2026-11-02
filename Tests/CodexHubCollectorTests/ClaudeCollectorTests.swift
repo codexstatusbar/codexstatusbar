@@ -507,3 +507,61 @@ private func row(_ snapshot: CollectorSnapshot, in folder: String) -> SessionSna
     let back = try #require(row(await collector.refresh(at: 102, wall: base), in: "y"))
     #expect(back.monitor.key == shared.monitor.key && back.monitor.counter.baseline?.outputTokens == 70)
 }
+
+/// Ahead of the files' own clock, so what the tests just wrote counts as quiet.
+private var settledWall: Double { Date().timeIntervalSince1970 + 10 }
+
+private func settledSubagent(_ s: ClaudeSandbox, finished: Bool) async throws -> ClaudeCollector {
+    try s.write(s.assistant("m1", 0, output: 1))
+    try s.writeSubagent(s.subRecord("assistant", "sub-1", 1, output: 10), finished: finished)
+    let collector = s.collector()
+    await collector.refresh(at: 100, wall: settledWall)
+    #expect(await collector.settledFiles == 1)
+    return collector
+}
+
+@Test func K23ASettledSubagentIsReadAgainTheMomentItGrows() async throws {
+    let s = try ClaudeSandbox()
+    let collector = try await settledSubagent(s, finished: true)
+    let handle = try FileHandle(forWritingTo: s.subagents.appendingPathComponent("agent-a1.jsonl"))
+    try handle.seekToEnd(); try handle.write(contentsOf: Data(s.subRecord("assistant", "sub-2", 2, output: 15).utf8)); try handle.close()
+    let grown = await collector.refresh(at: 101, wall: settledWall)
+    #expect(child(of: grown)?.monitor.counter.baseline?.outputTokens == 25)
+}
+
+@Test func K24ASettledSubagentFollowsItsMetaFileAtOnce() async throws {
+    let s = try ClaudeSandbox()
+    let collector = try await settledSubagent(s, finished: false)
+    await collector.refresh(at: 101, wall: settledWall)
+    #expect(child(of: await collector.refresh(at: 102, wall: settledWall))?.monitor.activity == .working)
+    let meta = s.subagents.appendingPathComponent("agent-a1.meta.json")
+    try Data("{\"agentType\":\"Explore\",\"finished\":true}".utf8).write(to: meta)
+    #expect(child(of: await collector.refresh(at: 103, wall: settledWall))?.monitor.activity == .idle)
+}
+
+@Test func K25AReplacedSubagentTranscriptIsReadFromTheStart() async throws {
+    let s = try ClaudeSandbox()
+    let collector = try await settledSubagent(s, finished: true)
+    let file = s.subagents.appendingPathComponent("agent-a1.jsonl")
+    let replacement = s.root.appendingPathComponent("replacement")
+    try Data(s.subRecord("assistant", "sub-9", 1, output: 90).utf8).write(to: replacement)
+    _ = try FileManager.default.replaceItemAt(file, withItemAt: replacement)
+    #expect(child(of: await collector.refresh(at: 101, wall: settledWall))?.monitor.counter.baseline?.outputTokens == 90)
+}
+
+@Test func K26AnObservationGapStillReachesASettledSubagent() async throws {
+    let s = try ClaudeSandbox()
+    let collector = try await settledSubagent(s, finished: true)
+    #expect(child(of: await collector.refresh(at: 110, wall: settledWall))?.hasGap == true)
+}
+
+@Test func K27ASubagentTranscriptReplacedByASymlinkIsDropped() async throws {
+    let s = try ClaudeSandbox()
+    let collector = try await settledSubagent(s, finished: true)
+    let file = s.subagents.appendingPathComponent("agent-a1.jsonl")
+    let moved = s.root.appendingPathComponent("moved")
+    try FileManager.default.moveItem(at: file, to: moved)
+    try FileManager.default.createSymbolicLink(at: file, withDestinationURL: moved)
+    #expect(child(of: await collector.refresh(at: 101, wall: settledWall)) == nil)
+    #expect(await collector.settledFiles == 0)
+}
